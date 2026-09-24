@@ -91,17 +91,66 @@ class ToolPanelHost extends StatelessWidget {
             ),
             child: panel == null
                 ? const SizedBox(width: double.infinity, key: ValueKey('none'))
-                : ConstrainedBox(
+                : Column(
                     key: ValueKey(ui.panel),
-                    constraints: BoxConstraints(maxHeight: maxHeight),
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: panel,
-                    ),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PanelHeader(onClose: () => ui.panel = null),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxHeight),
+                        child: SingleChildScrollView(child: panel),
+                      ),
+                    ],
                   ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Grab handle + close button on top of every panel. Tap the handle,
+/// swipe it down or tap ✕ to close the panel.
+class _PanelHeader extends StatelessWidget {
+  const _PanelHeader({required this.onClose});
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onClose,
+      onVerticalDragEnd: (d) {
+        if ((d.primaryVelocity ?? 0) > 150) onClose();
+      },
+      child: SizedBox(
+        width: double.infinity,
+        height: 34,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            PositionedDirectional(
+              end: 8,
+              child: IconButton(
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                visualDensity: VisualDensity.compact,
+                iconSize: 20,
+                onPressed: onClose,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

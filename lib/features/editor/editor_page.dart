@@ -387,6 +387,14 @@ class _EditorPageState extends State<EditorPage> {
     };
   }
 
+  /// Tapping the canvas closes the settings-like panels (grid, snap),
+  /// except while grid lines are being edited.
+  void _onCanvasTap() {
+    final p = _ui.panel;
+    if (_ui.mode == ToolMode.grid) return;
+    if (p == ToolPanel.grid || p == ToolPanel.snap) _ui.panel = null;
+  }
+
   void _deleteKey() {
     if (_ui.mode == ToolMode.grid) {
       _deleteSelectedGuide();
@@ -419,6 +427,8 @@ class _EditorPageState extends State<EditorPage> {
                 builder: (context, _) => Stack(
                   children: [
                     SafeArea(
+                      // The phone bar paints behind the status bar itself.
+                      top: wide,
                       child: Column(
                         children: [
                           EditorTopBar(
@@ -456,7 +466,21 @@ class _EditorPageState extends State<EditorPage> {
     exportImage: () => unawaited(showExportSheet(context, _editor)),
     resizeCanvas: () => unawaited(_resizeCanvas()),
     exportProject: () => unawaited(_exportProject()),
+    editLayer: _editSelected,
   );
+
+  void _editSelected() {
+    switch (_editor.selectedLayer) {
+      case final TextLayer t:
+        unawaited(_editText(t));
+      case final RasterLayer r:
+        unawaited(_replaceImage(r));
+      case ShapeLayer():
+        _ui.panel = ToolPanel.shapeStyle;
+      case GroupLayer() || null:
+        _ui.showLayers = true;
+    }
+  }
 
   Widget _canvasView() {
     final s = _services.settings;
@@ -474,6 +498,7 @@ class _EditorPageState extends State<EditorPage> {
         ),
         showRulers: s.showRulers,
         controller: _canvas,
+        onTap: _onCanvasTap,
       ),
     );
   }

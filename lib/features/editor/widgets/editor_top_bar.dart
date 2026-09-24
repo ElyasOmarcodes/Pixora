@@ -17,7 +17,12 @@ class TopBarActions {
     required this.exportImage,
     required this.resizeCanvas,
     required this.exportProject,
+    required this.editLayer,
   });
+
+  /// Edits the selected layer (text → text sheet, image → replace,
+  /// shape → style panel).
+  final VoidCallback editLayer;
 
   final VoidCallback back;
   final VoidCallback rename;
@@ -29,7 +34,7 @@ class TopBarActions {
   final VoidCallback exportProject;
 }
 
-enum _More { gridSettings, snapSettings, canvasSize, exportProject }
+enum _More { rulers, gridSettings, snapSettings, canvasSize, exportProject }
 
 /// The editor's top bar.
 ///
@@ -133,37 +138,7 @@ class EditorTopBar extends StatelessWidget {
             ),
           );
         }
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              height: 54,
-              child: Row(
-                children: [
-                  _back(context),
-                  Expanded(child: title),
-                  ...trailing,
-                ],
-              ),
-            ),
-            // Every tool fits on screen: buttons share the width evenly.
-            SizedBox(
-              height: 48,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Row(
-                  children: [
-                    for (final t in tools)
-                      t is _Divider
-                          ? t
-                          : Expanded(flex: t is _ZoomChip ? 2 : 1, child: t),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-          ],
-        );
+        return _CompactBar(bar: this, l: l);
       },
     );
   }
@@ -246,21 +221,31 @@ class EditorTopBar extends StatelessWidget {
     ];
   }
 
-  Widget _moreMenu(AppLocalizations l, {bool compact = false}) =>
+  Widget _moreMenu(AppLocalizations l, {bool compact = false, Color? color}) =>
       PopupMenuButton<_More>(
         tooltip: l.more,
-        padding: compact ? EdgeInsets.zero : const EdgeInsets.all(8),
-        icon: const Icon(Icons.more_vert_rounded),
+        icon: Icon(
+          Icons.more_vert_rounded,
+          color: color,
+          size: compact ? 26 : null,
+        ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(PixTokens.radiusM),
         ),
         onSelected: (a) => switch (a) {
+          _More.rulers => settings.showRulers = !settings.showRulers,
           _More.gridSettings => _openPanel(ToolPanel.grid),
           _More.snapSettings => _openPanel(ToolPanel.snap),
           _More.canvasSize => actions.resizeCanvas(),
           _More.exportProject => actions.exportProject(),
         },
         itemBuilder: (_) => [
+          if (compact)
+            CheckedPopupMenuItem(
+              value: _More.rulers,
+              checked: settings.showRulers,
+              child: Text(l.rulers),
+            ),
           PopupMenuItem(
             value: _More.gridSettings,
             child: ListTile(
@@ -467,8 +452,11 @@ class _Divider extends StatelessWidget {
 
 /// Shows the zoom level; tap for presets.
 class _ZoomChip extends StatelessWidget {
-  const _ZoomChip({required this.canvas});
+  const _ZoomChip({required this.canvas, this.color});
   final CanvasViewController canvas;
+
+  /// Text colour on a coloured bar (null = theme colours).
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -493,18 +481,357 @@ class _ZoomChip extends StatelessWidget {
       ],
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+          color:
+              color?.withValues(alpha: 0.18) ??
+              theme.colorScheme.onSurface.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(
-          '${(canvas.zoom * 100).round()}%',
-          textDirection: TextDirection.ltr,
-          style: theme.textTheme.labelLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-            fontFeatures: const [FontFeature.tabularFigures()],
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '${(canvas.zoom * 100).round()}%',
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Phone top bar in the spirit of PixelLab — a bold coloured bar with two
+/// rows of big, evenly spaced icons — but softer: gradient, rounded bottom
+/// corners, translucent pills for active tools, and a context pill that
+/// shows the project name or quick actions for the selected layer.
+class _CompactBar extends StatelessWidget {
+  const _CompactBar({required this.bar, required this.l});
+  final EditorTopBar bar;
+  final AppLocalizations l;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final bg = dark ? scheme.primaryContainer : scheme.primary;
+    final fg = dark ? scheme.onPrimaryContainer : scheme.onPrimary;
+    final hsl = HSLColor.fromColor(bg);
+    final bg2 = hsl
+        .withHue((hsl.hue + 12) % 360)
+        .withLightness((hsl.lightness * 0.85).clamp(0.0, 1.0))
+        .toColor();
+    final editor = bar.editor;
+    final ui = bar.ui;
+    final settings = bar.settings;
+    final top = MediaQuery.paddingOf(context).top;
+
+    Widget cell(Widget child, {int flex = 1}) => Expanded(
+      flex: flex,
+      child: Center(child: child),
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: dark || fg.computeLuminance() > 0.5
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: AlignmentDirectional.topStart,
+            end: AlignmentDirectional.bottomEnd,
+            colors: [bg, bg2],
+          ),
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(24),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: bg.withValues(alpha: 0.28),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: IconTheme.merge(
+          data: IconThemeData(color: fg, size: 26),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(6, top + 2, 6, 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 52,
+                  child: Row(
+                    children: [
+                      cell(
+                        _BarIcon(
+                          icon: Icons.arrow_back_rounded,
+                          matchDirection: true,
+                          tooltip: MaterialLocalizations.of(context)
+                              .backButtonTooltip,
+                          fg: fg,
+                          onTap: bar.actions.back,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.undo_rounded,
+                          tooltip: l.undo,
+                          fg: fg,
+                          onTap: editor.canUndo ? editor.undo : null,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.redo_rounded,
+                          tooltip: l.redo,
+                          fg: fg,
+                          onTap: editor.canRedo ? editor.redo : null,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.save_rounded,
+                          tooltip: bar.saved ? l.allSaved : l.unsavedChanges,
+                          fg: fg,
+                          dot: !bar.saved,
+                          onTap: bar.actions.save,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.share_rounded,
+                          tooltip: l.export,
+                          fg: fg,
+                          onTap: bar.actions.exportImage,
+                        ),
+                      ),
+                      cell(bar._moreMenu(l, compact: true, color: fg)),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  height: 52,
+                  child: Row(
+                    children: [
+                      cell(_ContextPill(bar: bar, fg: fg, bg: bg), flex: 2),
+                      cell(
+                        _BarIcon(
+                          icon: ui.mode == ToolMode.hand
+                              ? Icons.pan_tool_rounded
+                              : Icons.near_me_rounded,
+                          tooltip: ui.mode == ToolMode.hand
+                              ? l.handTool
+                              : l.moveTool,
+                          fg: fg,
+                          active: ui.mode == ToolMode.hand,
+                          onTap: () => ui.mode = ui.mode == ToolMode.hand
+                              ? ToolMode.move
+                              : ToolMode.hand,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.grid_on_rounded,
+                          tooltip: '${l.grid} · ${l.longPressSettings}',
+                          fg: fg,
+                          active: editor.document.guides.grid.visible,
+                          dot: ui.mode == ToolMode.grid,
+                          onTap: bar._toggleGrid,
+                          onLongPress: () => bar._openPanel(ToolPanel.grid),
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.join_inner_rounded,
+                          tooltip: '${l.snapping} · ${l.longPressSettings}',
+                          fg: fg,
+                          active: settings.snapping,
+                          onTap: () => settings.snapping = !settings.snapping,
+                          onLongPress: () => bar._openPanel(ToolPanel.snap),
+                        ),
+                      ),
+                      cell(_ZoomChip(canvas: bar.canvas, color: fg)),
+                      cell(
+                        _BarIcon(
+                          icon: Icons.layers_rounded,
+                          tooltip: l.layers,
+                          fg: fg,
+                          active: ui.showLayers,
+                          onTap: () => ui.showLayers = !ui.showLayers,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Project name when nothing is selected (tap to rename); quick edit and
+/// delete buttons when a layer is selected — like PixelLab.
+class _ContextPill extends StatelessWidget {
+  const _ContextPill({required this.bar, required this.fg, required this.bg});
+  final EditorTopBar bar;
+  final Color fg;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final editor = bar.editor;
+    final hasSel = editor.selectedId != null;
+    Widget round(IconData icon, String tip, VoidCallback onTap) => Tooltip(
+      message: tip,
+      child: Material(
+        color: fg,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(icon, size: 21, color: bg),
+          ),
+        ),
+      ),
+    );
+
+    return AnimatedSwitcher(
+      duration: PixTokens.fast,
+      child: Container(
+        key: ValueKey(hasSel),
+        height: 46,
+        constraints: const BoxConstraints(minWidth: 100),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(23),
+        ),
+        child: hasSel
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  round(Icons.edit_rounded, l.edit, bar.actions.editLayer),
+                  const SizedBox(width: 6),
+                  round(Icons.delete_rounded, l.delete, editor.deleteSelected),
+                ],
+              )
+            : InkWell(
+                borderRadius: BorderRadius.circular(23),
+                onTap: bar.actions.rename,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Center(
+                    widthFactor: 1,
+                    child: Text(
+                      editor.document.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: fg,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _BarIcon extends StatelessWidget {
+  const _BarIcon({
+    required this.icon,
+    required this.tooltip,
+    required this.fg,
+    required this.onTap,
+    this.onLongPress,
+    this.active = false,
+    this.dot = false,
+    this.matchDirection = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color fg;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool active;
+  final bool dot;
+  final bool matchDirection;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final color = enabled ? fg : fg.withValues(alpha: 0.4);
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    Widget glyph = Icon(icon, color: color);
+    if (matchDirection && rtl) {
+      glyph = Transform.flip(flipX: true, child: glyph);
+    }
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        onLongPress: onLongPress == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onLongPress!();
+              },
+        child: AnimatedContainer(
+          duration: PixTokens.fast,
+          width: 50,
+          height: 44,
+          decoration: BoxDecoration(
+            color: active ? fg.withValues(alpha: 0.22) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              glyph,
+              if (dot)
+                PositionedDirectional(
+                  top: 8,
+                  end: 10,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF5A5F),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: fg, width: 1.5),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

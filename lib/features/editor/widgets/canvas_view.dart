@@ -37,7 +37,11 @@ class CanvasView extends StatefulWidget {
     required this.snap,
     this.showRulers = false,
     this.controller,
+    this.onTap,
   });
+
+  /// Called after every single tap on the canvas (after the tool).
+  final VoidCallback? onTap;
 
   final EditorController editor;
   final EditorTool tool;
@@ -197,6 +201,7 @@ class _CanvasViewState extends State<CanvasView>
       return;
     }
     widget.tool.onTap(_ctx, d.localPosition);
+    widget.onTap?.call();
   }
 
   void _onScaleStart(ScaleStartDetails d) {
