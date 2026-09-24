@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../editor/editor_controller.dart';
+import '../../editor/tools/draw_tool.dart';
 import '../../editor/tools/mask_tool.dart';
 import '../../editor/tools/pen_tool.dart';
 
@@ -29,6 +30,7 @@ enum ToolPanel {
   textBackground,
   spacing,
   pen,
+  brush,
   line,
   iconStyle,
   glow,
@@ -52,6 +54,9 @@ enum ToolMode {
 
   /// Draw / edit bezier paths.
   pen,
+
+  /// Freehand brush on a drawing layer.
+  draw,
 }
 
 /// Editor UI state that is not part of the document (and therefore not
@@ -66,6 +71,9 @@ class EditorUiState extends ChangeNotifier {
 
   /// Pen editing state (vector paths and bezier masks).
   final PenState penState = PenState();
+
+  /// Freehand brush settings (drawing layers).
+  final BrushSettings brushSettings = BrushSettings();
 
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;
@@ -85,7 +93,11 @@ class EditorUiState extends ChangeNotifier {
       _mode = ToolMode.mask;
     } else if (p == ToolPanel.pen) {
       _mode = ToolMode.pen;
-    } else if (_mode == ToolMode.mask || _mode == ToolMode.pen) {
+    } else if (p == ToolPanel.brush) {
+      _mode = ToolMode.draw;
+    } else if (_mode == ToolMode.mask ||
+        _mode == ToolMode.pen ||
+        _mode == ToolMode.draw) {
       _mode = ToolMode.move;
       maskBrush.clearPen();
     }
@@ -96,6 +108,7 @@ class EditorUiState extends ChangeNotifier {
   void dispose() {
     maskBrush.dispose();
     penState.dispose();
+    brushSettings.dispose();
     super.dispose();
   }
 

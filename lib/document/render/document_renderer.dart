@@ -11,6 +11,7 @@ import '../model/document.dart';
 import '../model/layer.dart';
 import '../model/layer_transform.dart';
 import '../model/mask.dart';
+import 'brush_paint.dart';
 import 'color_matrix.dart';
 import 'layer_cache.dart';
 import 'shape_paths.dart';
@@ -35,6 +36,7 @@ Rect layerLocalRect(Layer layer) {
     ShapeLayer l => centred(l.width, l.height),
     IconLayer l => centred(l.width, l.height),
     PathLayer l => pathLayerRect(l),
+    DrawingLayer l => drawingRect(l),
     GroupLayer g => unionBounds(g.children),
   };
 }
@@ -544,32 +546,123 @@ class DocumentRenderer {
     }
     canvas.saveLayer(bounds, Paint());
     _paintContent(canvas, layer, hidden);
-    canvas.saveLayer(bounds, Paint()..blendMode = BlendMode.dstIn);
-    final area = bounds ?? layerLocalRect(layer).inflate(4000);
-    canvas.drawRect(area, Paint()..color = const Color(0xFFFFFFFF));
-    for (final s in props.mask) {
-      paintMaskStroke(canvas, s);
+    final maskPaint = Paint()..blendMode = BlendMode.dstIn;
+    // Density: alpha' = d·alpha + (1 − d) — a weaker mask.
+    final d = props.maskDensity;
+    if (d < 1) {
+      maskPaint.colorFilter = ColorFilter.matrix([
+        1, 0, 0, 0, 0, //
+        0, 1, 0, 0, 0, //
+        0, 0, 1, 0, 0, //
+        0, 0, 0, d, (1 - d) * 255, //
+      ]);
     }
+    final f = props.maskFeather;
+    if (f > 0) {
+      maskPaint.imageFilter = ui.ImageFilter.blur(
+        sigmaX: f / 2,
+        sigmaY: f / 2,
+        tileMode: TileMode.decal,
+      );
+    }
+    // A feathered mask spills outside the layer box while blurring.
+    canvas.saveLayer(f > 0 ? null : bounds, maskPaint);
+    final area = (bounds ?? layerLocalRect(layer).inflate(4000)).inflate(
+      f * 3 + 2,
+    );
+    paintMask(canvas, props.mask, area);
     canvas
       ..restore()
       ..restore();
   }
 
-  /// Draws one mask stroke inside a mask layer (hide = erase, show = paint).
-  static void paintMaskStroke(Canvas canvas, MaskStroke s) {
-    if (s.points.isEmpty && s.contour == null) return;
-    final paint = Paint()
-      ..isAntiAlias = true
-      ..color = const Color(0xFFFFFFFF)
-      ..blendMode = s.mode == MaskMode.hide
-          ? BlendMode.dstOut
-          : BlendMode.srcOver;
-    if (s.softness > 0) {
-      paint.maskFilter = MaskFilter.blur(
-        BlurStyle.normal,
-        math.max(0.5, s.width * s.softness * 0.35),
-      );
+  /// Draws a mask as alpha (opaque = visible) over [area]: starts white
+  /// (reveal all) and applies every stroke in order.
+  static void paintMask(Canvas canvas, List<MaskStroke> mask, Rect area) {
+    canvas.drawRect(area, Paint()..color = const Color(0xFFFFFFFF));
+    for (final s in mask) {
+      paintMaskStroke(canvas, s, area);
     }
+  }
+
+  /// Draws one mask stroke inside a mask layer. Photoshop semantics: the
+  /// stroke replaces the mask with its grey [MaskStroke.value] by its
+  /// coverage × opacity — `new = old·(1 − c) + grey·c` — done as an erase
+  /// (dstOut) followed by an additive (plus) pass over the same shape.
+  static void paintMaskStroke(Canvas canvas, MaskStroke s, [Rect? area]) {
+    final whole = area ?? const Rect.fromLTWH(-1e5, -1e5, 2e5, 2e5);
+    final v = s.value.clamp(0.0, 1.0), a = s.opacity.clamp(0.0, 1.0);
+    if (a <= 0) return;
+
+    // Whole-mask fill and gradients.
+    if (s.shape == MaskShape.fill ||
+        s.shape == MaskShape.linear ||
+        s.shape == MaskShape.radial) {
+      canvas.drawRect(
+        whole,
+        Paint()
+          ..blendMode = BlendMode.dstOut
+          ..color = Color.fromRGBO(255, 255, 255, a),
+      );
+      final add = Paint()..blendMode = BlendMode.plus;
+      if (s.shape == MaskShape.fill || s.points.length < 2) {
+        if (v * a <= 0) return;
+        add.color = Color.fromRGBO(255, 255, 255, v * a);
+      } else {
+        final c0 = Color.fromRGBO(255, 255, 255, v * a);
+        final c1 = Color.fromRGBO(255, 255, 255, (1 - v) * a);
+        final p0 = s.points[0], p1 = s.points[1];
+        add.shader = s.shape == MaskShape.linear
+            ? ui.Gradient.linear(p0, p1, [c0, c1])
+            : ui.Gradient.radial(p0, math.max(0.5, (p1 - p0).distance), [
+                c0,
+                c1,
+              ]);
+      }
+      canvas.drawRect(whole, add);
+      return;
+    }
+
+    if (s.points.isEmpty && s.contour == null) return;
+    void draw(Paint paint) {
+      paint.isAntiAlias = true;
+      if (s.softness > 0) {
+        paint.maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          math.max(0.5, s.width * s.softness * 0.35),
+        );
+      }
+      _drawMaskGeometry(canvas, s, paint);
+    }
+
+    // Pure black/white at full strength: one pass is enough.
+    if (v == 0) {
+      draw(
+        Paint()
+          ..blendMode = BlendMode.dstOut
+          ..color = Color.fromRGBO(255, 255, 255, a),
+      );
+      return;
+    }
+    if (v == 1 && a == 1) {
+      draw(Paint()..color = const Color(0xFFFFFFFF));
+      return;
+    }
+    // Grey or partial opacity: erase by the coverage, then add the grey
+    // (both straight onto the mask, so they blend with what is there).
+    draw(
+      Paint()
+        ..blendMode = BlendMode.dstOut
+        ..color = Color.fromRGBO(255, 255, 255, a),
+    );
+    draw(
+      Paint()
+        ..blendMode = BlendMode.plus
+        ..color = Color.fromRGBO(255, 255, 255, v * a),
+    );
+  }
+
+  static void _drawMaskGeometry(Canvas canvas, MaskStroke s, Paint paint) {
     if (s.contour != null) {
       final c = s.contour!;
       if (c.nodes.length < 2) return;
@@ -649,6 +742,8 @@ class DocumentRenderer {
         }
       case PathLayer l:
         paintPathLayer(canvas, l);
+      case DrawingLayer l:
+        paintDrawing(canvas, l);
       case ShapeLayer l:
         final path = buildShapePath(l);
         final bounds = path.getBounds();

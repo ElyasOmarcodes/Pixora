@@ -120,11 +120,13 @@ class AddShapePanel extends StatelessWidget {
     required this.onAdded,
     required this.onIcons,
     required this.onPen,
+    required this.onBrush,
   });
   final EditorController editor;
   final VoidCallback onAdded;
   final VoidCallback onIcons;
   final VoidCallback onPen;
+  final VoidCallback onBrush;
 
   Future<void> _sheet(
     BuildContext context,
@@ -245,8 +247,8 @@ class AddShapePanel extends StatelessWidget {
             scale: 0.94,
             semanticLabel: label,
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
                 color: scheme.onSurface.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(PixTokens.radiusL),
@@ -254,8 +256,8 @@ class AddShapePanel extends StatelessWidget {
               child: Column(
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -271,7 +273,7 @@ class AddShapePanel extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelLarge?.copyWith(
+                    style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -298,6 +300,7 @@ class AddShapePanel extends StatelessWidget {
             () => _shapes(context),
           ),
           card(Icons.draw_rounded, l.pen, const Color(0xFF10B981), onPen),
+          card(Icons.brush_rounded, l.brush, const Color(0xFF8B5CF6), onBrush),
           card(
             Icons.north_east_rounded,
             l.vectors,

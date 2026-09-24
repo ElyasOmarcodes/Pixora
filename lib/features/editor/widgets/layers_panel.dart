@@ -15,6 +15,7 @@ import '../../../ui/layer_style.dart';
 import '../../../ui/widgets/checkerboard.dart';
 import '../editor_scope.dart';
 import 'layer_actions.dart';
+import 'mask_thumb.dart';
 
 /// One visible row of the layer tree.
 class _Row {
@@ -462,6 +463,8 @@ class _LayerRow extends StatelessWidget {
         commands.changeIcon(i);
       case PathLayer _:
         commands.openPanel(ToolPanel.pen);
+      case DrawingLayer _:
+        commands.openPanel(ToolPanel.brush);
       case GroupLayer g:
         editor.setExpanded(g.id, !g.expanded);
     }
@@ -535,6 +538,20 @@ class _LayerRow extends StatelessWidget {
             opacity: dim ? 0.4 : 1,
             child: _Thumb(layer: layer, editor: editor, color: kindColor),
           ),
+          // Photoshop-style mask thumbnail: tap to edit the mask.
+          if (p.hasMaskLayer) ...[
+            Icon(Icons.link_rounded, size: 14, color: scheme.onSurfaceVariant),
+            Tooltip(
+              message: l.layerMask,
+              child: GestureDetector(
+                onTap: () {
+                  editor.select(layer.id);
+                  commands.openPanel(ToolPanel.mask);
+                },
+                child: MaskThumb(layer: layer, size: 38),
+              ),
+            ),
+          ],
           const SizedBox(width: 10),
           Expanded(
             child: AnimatedOpacity(
@@ -1046,6 +1063,16 @@ class _ActionBar extends StatelessWidget {
                     ? () => e.toggleClip(primary.id)
                     : null,
                 active: primary?.props.clip ?? false,
+              ),
+              action(
+                Icons.vignette_rounded,
+                primary?.props.hasMaskLayer ?? false
+                    ? l.layerMask
+                    : l.addLayerMask,
+                primary != null && !multi
+                    ? () => commands.openPanel(ToolPanel.mask)
+                    : null,
+                active: primary?.props.hasMaskLayer ?? false,
               ),
               action(
                 Icons.copy_all_rounded,

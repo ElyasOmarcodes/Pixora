@@ -16,6 +16,14 @@ PixFill? _fillOf(Layer l) => switch (l) {
   ShapeLayer s => s.fill,
   IconLayer i => i.fill,
   PathLayer p => p.fill ?? PixFill.color(p.strokeColor),
+  DrawingLayer d => PixFill.color(
+    d.strokes
+        .lastWhere(
+          (s) => !s.eraser,
+          orElse: () => BrushStroke(points: const []),
+        )
+        .color,
+  ),
   RasterLayer _ || GroupLayer _ => null,
 };
 
@@ -26,6 +34,10 @@ Layer _withFill(Layer l, PixFill f) => switch (l) {
   // Open lines take the colour as their stroke.
   PathLayer p =>
     p.fill == null ? p.copyWith(strokeColor: f.primary) : p.copyWith(fill: f),
+  // Recolours every brush stroke of a drawing.
+  DrawingLayer d => d.copyWith(
+    strokes: [for (final s in d.strokes) s.recolored(f.primary)],
+  ),
   RasterLayer _ || GroupLayer _ => l,
 };
 
@@ -176,14 +188,14 @@ class StrokePanel extends StatelessWidget {
       ShapeLayer s => (s.strokeWidth, s.strokeColor),
       IconLayer i => (i.strokeWidth, i.strokeColor),
       PathLayer p => (p.strokeWidth, p.strokeColor),
-      RasterLayer _ || GroupLayer _ => (0.0, Colors.black),
+      RasterLayer _ || GroupLayer _ || DrawingLayer _ => (0.0, Colors.black),
     };
     Layer apply(Layer x, {double? w, Color? c}) => switch (x) {
       TextLayer t => t.copyWith(strokeWidth: w, strokeColor: c),
       ShapeLayer s => s.copyWith(strokeWidth: w, strokeColor: c),
       IconLayer i => i.copyWith(strokeWidth: w, strokeColor: c),
       PathLayer p => p.copyWith(strokeWidth: w, strokeColor: c),
-      RasterLayer _ || GroupLayer _ => x,
+      RasterLayer _ || GroupLayer _ || DrawingLayer _ => x,
     };
     final maxWidth = layer is TextLayer
         ? (layer as TextLayer).fontSize * 0.4

@@ -9,6 +9,7 @@ import 'canvas_panels.dart';
 import 'effect_panels.dart';
 import 'guides_panels.dart';
 import 'layout_panels.dart';
+import 'brush_panel.dart';
 import 'mask_panel.dart';
 import 'style_panels.dart';
 import 'text_panels.dart';
@@ -21,10 +22,12 @@ class PanelHooks {
   const PanelHooks({
     required this.addIcon,
     required this.startPen,
+    required this.startBrush,
     required this.maskPen,
   });
   final VoidCallback addIcon;
   final VoidCallback startPen;
+  final VoidCallback startBrush;
   final MaskPenTarget maskPen;
 }
 
@@ -58,6 +61,7 @@ class ToolPanelHost extends StatelessWidget {
               : ToolPanel.shapeStyle,
           onIcons: hooks.addIcon,
           onPen: hooks.startPen,
+          onBrush: hooks.startBrush,
         );
       case ToolPanel.background:
         return BackgroundPanel(editor: editor);
@@ -102,6 +106,10 @@ class ToolPanelHost extends StatelessWidget {
         state: ui.penState,
         onDone: () => ui.panel = ToolPanel.line,
       ),
+      ToolPanel.brush when layer is DrawingLayer => BrushPanel(
+        settings: ui.brushSettings,
+        onDone: () => ui.panel = null,
+      ),
       ToolPanel.line when layer is PathLayer => LinePanel(
         editor: editor,
         layer: layer,
@@ -113,9 +121,17 @@ class ToolPanelHost extends StatelessWidget {
       ToolPanel.glow => GlowPanel(editor: editor, layer: layer),
       ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
       ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),
-      ToolPanel.fill when layer is TextLayer || layer is ShapeLayer =>
+      ToolPanel.fill
+          when layer is TextLayer ||
+              layer is ShapeLayer ||
+              layer is IconLayer ||
+              layer is PathLayer ||
+              layer is DrawingLayer =>
         FillPanel(editor: editor, layer: layer),
-      ToolPanel.stroke when layer is TextLayer || layer is ShapeLayer =>
+      ToolPanel.stroke
+          when layer is TextLayer ||
+              layer is ShapeLayer ||
+              layer is IconLayer =>
         StrokePanel(editor: editor, layer: layer),
       ToolPanel.shadow => ShadowPanel(editor: editor, layer: layer),
       ToolPanel.adjust => AdjustPanel(editor: editor, layer: layer),

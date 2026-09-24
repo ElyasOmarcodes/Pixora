@@ -11,6 +11,7 @@ import '../../document/model/document.dart';
 import '../../document/model/layer.dart';
 import '../../document/model/text_span_style.dart';
 import '../../editor/editor_controller.dart';
+import '../../editor/tools/draw_tool.dart';
 import '../../editor/tools/editor_tool.dart';
 import '../../editor/tools/grid_tool.dart';
 import '../../editor/tools/mask_tool.dart';
@@ -67,8 +68,13 @@ class _EditorPageState extends State<EditorPage> {
   late final PanelHooks _hooks = PanelHooks(
     addIcon: () => unawaited(_addIcon()),
     startPen: _startPen,
+    startBrush: _startBrush,
     maskPen: _maskPen,
   );
+  late final DrawTool _drawTool = DrawTool(_ui.brushSettings);
+
+  /// The drawing layer the brush panel is painting into.
+  String? _drawingId;
 
   EditorTool get _tool => switch (_ui.mode) {
     ToolMode.move => _moveTool,
@@ -77,6 +83,7 @@ class _EditorPageState extends State<EditorPage> {
     ToolMode.mask =>
       _ui.maskBrush.kind == MaskToolKind.pen ? _penTool : _maskTool,
     ToolMode.pen => _penTool,
+    ToolMode.draw => _drawTool,
   };
 
   /// Points the pen at what it should edit: the selected vector layer in
@@ -85,6 +92,15 @@ class _EditorPageState extends State<EditorPage> {
   void _syncPen() {
     final pen = _ui.penState;
     final p = _ui.panel;
+    // Leaving the brush tidies the drawing (re-centred) or removes an
+    // empty one.
+    final sel = _editor.selectedLayer;
+    if (p == ToolPanel.brush && sel is DrawingLayer) {
+      if (_drawingId != sel.id) _finishDrawing();
+      _drawingId = sel.id;
+    } else if (_drawingId != null) {
+      _finishDrawing();
+    }
     if (p == ToolPanel.pen) {
       final l = _editor.selectedLayer;
       if (l is PathLayer) {
@@ -117,6 +133,25 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   (ToolMode, ToolPanel?, bool, MaskToolKind)? _uiKey;
+
+  void _finishDrawing() {
+    final id = _drawingId;
+    _drawingId = null;
+    if (id == null) return;
+    final l = _editor.document.layerById(id);
+    if (l is! DrawingLayer) return;
+    if (l.strokes.isEmpty) {
+      _editor.deleteLayers([l.id]);
+    } else {
+      _editor.normalizeDrawing(l.id);
+    }
+  }
+
+  void _startBrush() {
+    final l = AppLocalizations.of(context);
+    _editor.addDrawing(name: l.drawing);
+    _ui.panel = ToolPanel.brush;
+  }
 
   void _finishPen() {
     final t = _ui.penState.target;
@@ -761,6 +796,8 @@ class _EditorPageState extends State<EditorPage> {
         unawaited(_changeIcon(i));
       case PathLayer():
         _ui.panel = ToolPanel.pen;
+      case DrawingLayer():
+        _ui.panel = ToolPanel.brush;
       case GroupLayer() || null:
         _ui.showLayers = true;
     }

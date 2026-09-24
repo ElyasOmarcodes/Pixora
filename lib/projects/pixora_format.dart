@@ -153,6 +153,7 @@ abstract final class PixoraFormat {
     'yLines': 'y',
     'mask': 'stroke',
     'spans': 'span',
+    'strokes': 'stroke',
     'contours': 'contour',
   };
 

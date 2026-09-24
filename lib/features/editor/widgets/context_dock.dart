@@ -177,7 +177,6 @@ class ContextDock extends StatelessWidget {
         l.rotation,
         panel: ToolPanel.rotate,
       ),
-      DockItem(Icons.gradient_rounded, l.mask, panel: ToolPanel.mask),
     ];
     final effects = [
       DockItem(Icons.blur_on_rounded, l.shadow, panel: ToolPanel.shadow),
@@ -267,6 +266,15 @@ class ContextDock extends StatelessWidget {
         ...basics,
         div,
         DockItem(Icons.line_style_rounded, l.lineStyle, panel: ToolPanel.line),
+        DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
+        ...look,
+        div,
+        ...effects,
+      ],
+      DrawingLayer _ => [
+        DockItem(Icons.brush_rounded, l.draw, panel: ToolPanel.brush),
+        ...basics,
+        div,
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
         ...look,
         div,

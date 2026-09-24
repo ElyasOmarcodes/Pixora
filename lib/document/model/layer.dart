@@ -13,8 +13,9 @@ import 'text_span_style.dart';
 
 part 'layer_icon.dart';
 part 'layer_path.dart';
+part 'layer_drawing.dart';
 
-enum LayerKind { raster, text, shape, group, icon, path }
+enum LayerKind { raster, text, shape, group, icon, path, drawing }
 
 /// Properties every layer has, regardless of its kind.
 @immutable
@@ -31,6 +32,8 @@ class LayerProps {
     List<LayerEffect> effects = const [],
     List<MaskStroke> mask = const [],
     this.maskEnabled = true,
+    this.maskDensity = 1,
+    this.maskFeather = 0,
   }) : id = id ?? newId('ly'),
        effects = List.unmodifiable(effects),
        mask = List.unmodifiable(mask);
@@ -58,6 +61,15 @@ class LayerProps {
   /// Temporarily disable the mask without deleting it.
   final bool maskEnabled;
 
+  /// Photoshop's mask Density: 1 = the mask fully hides, 0 = no effect.
+  final double maskDensity;
+
+  /// Photoshop's mask Feather: blur of the whole mask, in layer pixels.
+  final double maskFeather;
+
+  /// Whether the layer has a mask at all (it may be disabled).
+  bool get hasMaskLayer => mask.isNotEmpty;
+
   bool get hasMask => mask.isNotEmpty && maskEnabled;
 
   LayerProps copyWith({
@@ -72,6 +84,8 @@ class LayerProps {
     List<LayerEffect>? effects,
     List<MaskStroke>? mask,
     bool? maskEnabled,
+    double? maskDensity,
+    double? maskFeather,
   }) => LayerProps(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -84,6 +98,8 @@ class LayerProps {
     effects: effects ?? this.effects,
     mask: mask ?? this.mask,
     maskEnabled: maskEnabled ?? this.maskEnabled,
+    maskDensity: maskDensity ?? this.maskDensity,
+    maskFeather: maskFeather ?? this.maskFeather,
   );
 
   Json toJson() => {
@@ -98,6 +114,8 @@ class LayerProps {
     if (effects.isNotEmpty) 'effects': [for (final e in effects) e.toJson()],
     if (mask.isNotEmpty) 'mask': [for (final s in mask) s.toJson()],
     if (!maskEnabled) 'maskEnabled': false,
+    if (maskDensity != 1) 'maskDensity': maskDensity,
+    if (maskFeather != 0) 'maskFeather': maskFeather,
   };
 
   static LayerProps fromJson(Json m) => LayerProps(
@@ -118,6 +136,8 @@ class LayerProps {
         if (s is Map) MaskStroke.fromJson(readMap(s)),
     ],
     maskEnabled: readBool(m['maskEnabled'], true),
+    maskDensity: readDouble(m['maskDensity'], 1).clamp(0.0, 1.0),
+    maskFeather: readDouble(m['maskFeather']).clamp(0.0, 1000.0),
   );
 
   @override
@@ -132,6 +152,8 @@ class LayerProps {
       other.transform == transform &&
       other.clip == clip &&
       other.maskEnabled == maskEnabled &&
+      other.maskDensity == maskDensity &&
+      other.maskFeather == maskFeather &&
       listEquals(other.effects, effects) &&
       listEquals(other.mask, mask);
 
@@ -146,6 +168,8 @@ class LayerProps {
     transform,
     clip,
     maskEnabled,
+    maskDensity,
+    maskFeather,
     Object.hashAll(effects),
     Object.hashAll(mask),
   );
@@ -198,6 +222,7 @@ sealed class Layer {
       'group' => GroupLayer.fromJson(props, m),
       'icon' => IconLayer.fromJson(props, m),
       'path' => PathLayer.fromJson(props, m),
+      'drawing' => DrawingLayer.fromJson(props, m),
       _ => null,
     };
   }

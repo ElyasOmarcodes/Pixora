@@ -123,6 +123,11 @@ List<QuickAction> quickActionsFor(
     destructive: true,
   );
   final blend = panel(Icons.opacity_rounded, l.blendMode, ToolPanel.opacity);
+  final mask = panel(
+    Icons.vignette_rounded,
+    layer.props.hasMaskLayer ? l.layerMask : l.addLayerMask,
+    ToolPanel.mask,
+  );
   final shadow = panel(Icons.blur_circular_rounded, l.shadow, ToolPanel.shadow);
   final adjust = panel(Icons.tune_rounded, l.adjust, ToolPanel.adjust);
 
@@ -139,6 +144,7 @@ List<QuickAction> quickActionsFor(
       rotate,
       flipH,
       clip,
+      mask,
       duplicate,
       toFront,
       toBack,
@@ -165,6 +171,7 @@ List<QuickAction> quickActionsFor(
         () => e.flipLayers(ids, horizontal: false),
       ),
       clip,
+      mask,
       duplicate,
       toFront,
       toBack,
@@ -181,6 +188,7 @@ List<QuickAction> quickActionsFor(
       rotate,
       flipH,
       clip,
+      mask,
       duplicate,
       toFront,
       toBack,
@@ -202,6 +210,7 @@ List<QuickAction> quickActionsFor(
       rotate,
       flipH,
       clip,
+      mask,
       duplicate,
       toFront,
       toBack,
@@ -218,6 +227,24 @@ List<QuickAction> quickActionsFor(
       rotate,
       flipH,
       clip,
+      mask,
+      duplicate,
+      toFront,
+      toBack,
+      rename,
+      rasterize,
+      delete,
+    ],
+    DrawingLayer _ => [
+      panel(Icons.brush_rounded, l.draw, ToolPanel.brush),
+      panel(Icons.palette_rounded, l.color, ToolPanel.fill),
+      shadow,
+      blend,
+      center,
+      rotate,
+      flipH,
+      clip,
+      mask,
       duplicate,
       toFront,
       toBack,
@@ -231,6 +258,7 @@ List<QuickAction> quickActionsFor(
       blend,
       shadow,
       adjust,
+      mask,
       center,
       rotate,
       flipH,

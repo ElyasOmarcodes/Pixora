@@ -18,6 +18,7 @@ import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
 import '../document/render/document_renderer.dart';
 import '../document/render/layer_cache.dart';
+import '../document/render/brush_paint.dart';
 import '../document/render/vector_paths.dart';
 import 'history.dart';
 
@@ -133,6 +134,16 @@ class EditorController extends ChangeNotifier {
   void preview(DocOp op) {
     _previewBase ??= HistoryEntry(_document, _selection, '');
     _document = op(_document);
+    _changed(committed: false);
+  }
+
+  /// Like [preview], but [op] always starts from the document as it was
+  /// before the preview began — for gestures that rebuild their whole
+  /// result every frame (a growing brush stroke), so earlier frames don't
+  /// pile up.
+  void previewFromStart(DocOp op) {
+    _previewBase ??= HistoryEntry(_document, _selection, '');
+    _document = op(_previewBase!.document);
     _changed(committed: false);
   }
 
@@ -657,6 +668,54 @@ class EditorController extends ChangeNotifier {
     return layer;
   }
 
+  /// Adds an empty drawing layer at the canvas centre and selects it.
+  DrawingLayer addDrawing({String name = 'Drawing'}) {
+    final layer = DrawingLayer(
+      LayerProps(
+        name: _nextName(name),
+        transform: LayerTransform(
+          x: _document.center.dx,
+          y: _document.center.dy,
+        ),
+      ),
+    );
+    apply('add_drawing', (d) => _insertAtCursor(d, layer), select: layer.id);
+    return layer;
+  }
+
+  /// Adds a brush stroke to a drawing layer ([live] = while drawing).
+  void addBrushStroke(String id, BrushStroke stroke, {bool live = false}) {
+    DrawingLayer op(Layer l) {
+      final d = l as DrawingLayer;
+      return d.copyWith(strokes: [...d.strokes, stroke]);
+    }
+
+    live
+        ? previewFromStart((d) => d.updateLayer(id, op))
+        : updateLayer(id, op, label: 'draw');
+  }
+
+  /// Re-centres a drawing on its origin without moving it on the canvas.
+  void normalizeDrawing(String id) {
+    final l = _document.layerById(id);
+    if (l is! DrawingLayer || l.strokes.isEmpty) return;
+    final c = drawingRect(l).center;
+    if (c.distance < 0.01) return;
+    final t = l.props.transform;
+    final shift = t.toDocument(c) - t.toDocument(Offset.zero);
+    _silent(
+      (d) => d.updateLayer(
+        id,
+        (x) => (x as DrawingLayer).copyWith(
+          props: x.props.copyWith(
+            transform: t.copyWith(x: t.x + shift.dx, y: t.y + shift.dy),
+          ),
+          strokes: [for (final s in x.strokes) s.mapped((p) => p - c, 1)],
+        ),
+      ),
+    );
+  }
+
   /// Re-centres a path layer's nodes on its origin without moving it on
   /// the canvas (keeps handles and rotation centred after editing).
   void normalizePath(String id) {
@@ -684,43 +743,80 @@ class EditorController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- mask
 
+  /// A full-strength fill hides everything painted before it, so those
+  /// strokes are dropped (keeps masks small after "Hide all" etc.).
+  static List<MaskStroke> _pack(List<MaskStroke> mask) {
+    for (var i = mask.length - 1; i > 0; i--) {
+      final s = mask[i];
+      if (s.shape == MaskShape.fill && s.opacity >= 1) {
+        return mask.sublist(i);
+      }
+    }
+    return mask;
+  }
+
   void addMaskStrokes(String id, List<MaskStroke> strokes) => updateProps(
     id,
-    (p) => p.copyWith(mask: [...p.mask, ...strokes], maskEnabled: true),
+    (p) => p.copyWith(mask: _pack([...p.mask, ...strokes]), maskEnabled: true),
     label: 'mask',
   );
 
-  void addMaskStroke(String id, MaskStroke stroke, {bool live = false}) =>
-      updateProps(
-        id,
-        (p) => p.copyWith(mask: [...p.mask, stroke], maskEnabled: true),
-        live: live,
-        label: 'mask',
-      );
+  void addMaskStroke(String id, MaskStroke stroke, {bool live = false}) {
+    Layer op(Layer l) => l.update(
+      (p) => p.copyWith(
+        mask: live ? [...p.mask, stroke] : _pack([...p.mask, stroke]),
+        maskEnabled: true,
+      ),
+    );
+    live
+        ? previewFromStart((d) => d.updateLayer(id, op))
+        : updateLayer(id, op, label: 'mask');
+  }
+
+  /// Photoshop's "Add layer mask": Reveal all (white) or Hide all (black).
+  void addLayerMask(String id, {bool hideAll = false}) => updateProps(
+    id,
+    (p) => p.copyWith(
+      mask: [
+        MaskStroke(
+          mode: hideAll ? MaskMode.hide : MaskMode.show,
+          shape: MaskShape.fill,
+          points: const [],
+        ),
+      ],
+      maskEnabled: true,
+      maskDensity: 1,
+      maskFeather: 0,
+    ),
+    label: 'mask_add',
+  );
+
+  /// Fills the whole mask with a grey (0 = hide all, 1 = reveal all).
+  void fillMask(String id, double level) => addMaskStroke(
+    id,
+    MaskStroke(
+      mode: level < 0.5 ? MaskMode.hide : MaskMode.show,
+      shape: MaskShape.fill,
+      points: const [],
+      level: level == 0 || level == 1 ? null : level,
+    ),
+  );
 
   /// Swaps hidden and visible areas.
   void invertMask(String id) {
     final l = _document.layerById(id);
     if (l == null) return;
-    final r = layerLocalRect(l).inflate(100000);
     updateProps(
       id,
       (p) => p.copyWith(
         mask: [
+          // The mask starts white; inverted it starts black.
           MaskStroke(
             mode: MaskMode.hide,
-            shape: MaskShape.area,
-            points: [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+            shape: MaskShape.fill,
+            points: const [],
           ),
-          for (final s in p.mask)
-            MaskStroke(
-              mode: s.mode == MaskMode.hide ? MaskMode.show : MaskMode.hide,
-              shape: s.shape,
-              points: s.points,
-              width: s.width,
-              softness: s.softness,
-              contour: s.contour,
-            ),
+          for (final s in p.mask) s.inverted(),
         ],
         maskEnabled: true,
       ),
@@ -728,14 +824,34 @@ class EditorController extends ChangeNotifier {
     );
   }
 
+  /// Deletes the layer mask.
   void clearMask(String id) => updateProps(
     id,
-    (p) => p.copyWith(mask: const [], maskEnabled: true),
+    (p) => p.copyWith(
+      mask: const [],
+      maskEnabled: true,
+      maskDensity: 1,
+      maskFeather: 0,
+    ),
     label: 'mask_clear',
   );
 
   void setMaskEnabled(String id, bool on) =>
       updateProps(id, (p) => p.copyWith(maskEnabled: on), label: 'mask_toggle');
+
+  void setMaskDensity(String id, double v, {bool live = false}) => updateProps(
+    id,
+    (p) => p.copyWith(maskDensity: v.clamp(0.0, 1.0)),
+    live: live,
+    label: 'mask_density',
+  );
+
+  void setMaskFeather(String id, double v, {bool live = false}) => updateProps(
+    id,
+    (p) => p.copyWith(maskFeather: math.max(0, v)),
+    live: live,
+    label: 'mask_feather',
+  );
 
   Rect boundsOf(List<String> ids) =>
       unionBounds([for (final id in ids) ?_document.layerById(id)]);
