@@ -38,6 +38,15 @@ class WebPlatformServices extends PlatformServices {
   Future<PickedFile?> pickProjectFile() => _pick(FileType.any);
 
   @override
+  Future<List<PickedFile>> pickFontFiles() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['ttf', 'otf'],
+    );
+    return [for (final f in files) PickedFile(f.name, await f.readAsBytes())];
+  }
+
+  @override
   Future<ExportResult> exportImage(
     Uint8List bytes,
     String fileName,

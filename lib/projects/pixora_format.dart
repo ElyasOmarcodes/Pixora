@@ -151,6 +151,7 @@ abstract final class PixoraFormat {
     'horizontal': 'y',
     'xLines': 'x',
     'yLines': 'y',
+    'mask': 'stroke',
   };
 
   /// Keys written as child text elements instead of attributes (free text

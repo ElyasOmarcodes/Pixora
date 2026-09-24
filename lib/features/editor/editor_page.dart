@@ -11,6 +11,10 @@ import '../../document/model/layer.dart';
 import '../../editor/editor_controller.dart';
 import '../../editor/tools/editor_tool.dart';
 import '../../editor/tools/grid_tool.dart';
+import '../../editor/tools/mask_tool.dart';
+import '../../core/fonts/font_catalog.dart';
+import 'dialogs/font_picker.dart';
+import 'dialogs/text_dialog.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
 import '../../projects/pixora_format.dart';
@@ -27,7 +31,6 @@ import 'widgets/editor_top_bar.dart';
 import 'widgets/export_sheet.dart';
 import 'widgets/layer_actions.dart';
 import 'widgets/layers_panel.dart';
-import 'widgets/text_input_sheet.dart';
 
 class EditorPage extends StatefulWidget {
   const EditorPage({super.key, required this.project});
@@ -50,11 +53,13 @@ class _EditorPageState extends State<EditorPage> {
   );
   final HandTool _handTool = HandTool();
   final GridTool _gridTool = GridTool();
+  late final MaskTool _maskTool = MaskTool(_ui.maskBrush);
 
   EditorTool get _tool => switch (_ui.mode) {
     ToolMode.move => _moveTool,
     ToolMode.hand => _handTool,
     ToolMode.grid => _gridTool,
+    ToolMode.mask => _maskTool,
   };
 
   Timer? _saveTimer;
@@ -151,20 +156,50 @@ class _EditorPageState extends State<EditorPage> {
         : Colors.white;
   }
 
+  /// Font for new text: the last one used, else the default.
+  String get _lastFont {
+    final fonts = _services.fonts;
+    return fonts.recent.where(fonts.isAvailable).firstOrNull ??
+        FontCatalog.defaultFamily;
+  }
+
   Future<void> _addText() async {
     final l = AppLocalizations.of(context);
-    final text = await showTextInputSheet(context);
-    if (text == null || text.trim().isEmpty) return;
-    _editor.addText(text, name: l.text, color: _contrastingTextColor());
+    final r = await showTextDialog(context, fontFamily: _lastFont);
+    if (r == null || r.text.trim().isEmpty) return;
+    _editor.addText(
+      r.text,
+      name: l.text,
+      color: _contrastingTextColor(),
+      fontFamily: r.fontFamily,
+    );
   }
 
   Future<void> _editText(TextLayer layer) async {
-    final text = await showTextInputSheet(context, initial: layer.text);
-    if (text == null || text.trim().isEmpty) return;
+    final r = await showTextDialog(
+      context,
+      initial: layer.text,
+      fontFamily: layer.fontFamily,
+    );
+    if (r == null || r.text.trim().isEmpty) return;
     _editor.updateLayer(
       layer.id,
-      (l) => (l as TextLayer).copyWith(text: text),
+      (l) => (l as TextLayer).copyWith(text: r.text, fontFamily: r.fontFamily),
       label: 'text',
+    );
+  }
+
+  Future<void> _pickFont(TextLayer layer) async {
+    final f = await showFontPicker(
+      context,
+      current: layer.fontFamily,
+      sample: layer.text,
+    );
+    if (f == null) return;
+    _editor.updateLayer(
+      layer.id,
+      (l) => (l as TextLayer).copyWith(fontFamily: f),
+      label: 'font',
     );
   }
 
@@ -294,6 +329,7 @@ class _EditorPageState extends State<EditorPage> {
       _ui.panel = p;
     },
     editText: _editText,
+    pickFont: _pickFont,
     replaceImage: _replaceImage,
     runAsync: (job) => runWithProgress(context, job),
   );
@@ -510,6 +546,7 @@ class _EditorPageState extends State<EditorPage> {
     onAddText: _addText,
     onAddImage: _addImage,
     onEditText: _editText,
+    onPickFont: _pickFont,
     onResizeCanvas: _resizeCanvas,
     commands: _commands,
   );

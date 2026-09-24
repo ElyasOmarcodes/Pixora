@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 
 import '../editor_controller.dart';
 
@@ -113,6 +114,9 @@ abstract class EditorTool {
 
   /// Mouse hover (desktop) — used for cursors and hover highlights.
   MouseCursor cursorAt(ToolContext ctx, Offset screen) => MouseCursor.defer;
+
+  /// Extra state the overlay depends on (repaints when it changes).
+  Listenable? get repaint => null;
 
   /// Draws handles, guides, brush previews… in screen space.
   void paintOverlay(Canvas canvas, Size size, ToolContext ctx) {}

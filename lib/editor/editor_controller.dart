@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart' show Alignment;
 
 import '../document/assets/asset_store.dart';
 import '../document/effects/effect_registry.dart';
@@ -14,6 +15,7 @@ import '../document/model/blend.dart';
 import '../document/model/layer.dart';
 import '../document/model/layer_geometry.dart';
 import '../document/model/layer_transform.dart';
+import '../document/model/mask.dart';
 import '../document/render/document_renderer.dart';
 import 'history.dart';
 
@@ -248,7 +250,12 @@ class EditorController extends ChangeNotifier {
     );
   }
 
-  TextLayer addText(String text, {String name = 'Text', Color? color}) {
+  TextLayer addText(
+    String text, {
+    String name = 'Text',
+    Color? color,
+    String? fontFamily,
+  }) {
     final layer = TextLayer(
       LayerProps(
         name: _nextName(name),
@@ -258,6 +265,7 @@ class EditorController extends ChangeNotifier {
         ),
       ),
       text: text,
+      fontFamily: fontFamily ?? 'Vazirmatn',
       fontSize: (_unit * 0.09).roundToDouble(),
       fill: color == null ? null : PixFill.color(color),
     );
@@ -519,6 +527,100 @@ class EditorController extends ChangeNotifier {
     if (ids.isEmpty) return;
     transformLayers(ids, Similarity(translate: Offset(dx, dy)), label: 'nudge');
   }
+
+  List<String> get _movableSelection => [
+    for (final id in topLevelSelection)
+      if (!_document.isEffectivelyLocked(id)) id,
+  ];
+
+  /// Live (previewed) move of the selection by [total] from where it was
+  /// when the gesture started; call [commit] at the end.
+  void nudgeSelectionLive(Offset total) {
+    final ids = _movableSelection;
+    if (ids.isEmpty) return;
+    transformLayers(ids, Similarity(translate: total), live: true);
+  }
+
+  /// Places the selection on the canvas at [a] (e.g. topLeft, center,
+  /// bottomRight), flush with the edges.
+  void placeOnCanvas(List<String> ids, Alignment a) {
+    if (ids.isEmpty) return;
+    final b = boundsOf(ids);
+    final f = _document.bounds;
+    final target = Offset(
+      f.left + (a.x + 1) / 2 * (f.width - b.width),
+      f.top + (a.y + 1) / 2 * (f.height - b.height),
+    );
+    transformLayers(
+      ids,
+      Similarity(translate: target - b.topLeft),
+      label: 'place',
+    );
+  }
+
+  /// Scales the selection to fit inside ([cover] = false) or fill the
+  /// canvas, centred.
+  void fitToCanvas(List<String> ids, {bool cover = false}) {
+    if (ids.isEmpty) return;
+    final b = boundsOf(ids);
+    if (b.isEmpty) return;
+    final f = _document.bounds;
+    final sx = f.width / b.width, sy = f.height / b.height;
+    final k = cover ? math.max(sx, sy) : math.min(sx, sy);
+    transformLayers(
+      ids,
+      Similarity(pivot: b.center, scale: k, translate: f.center - b.center),
+      label: cover ? 'fill_canvas' : 'fit_canvas',
+    );
+  }
+
+  // ---------------------------------------------------------------- mask
+
+  void addMaskStroke(String id, MaskStroke stroke, {bool live = false}) =>
+      updateProps(
+        id,
+        (p) => p.copyWith(mask: [...p.mask, stroke], maskEnabled: true),
+        live: live,
+        label: 'mask',
+      );
+
+  /// Swaps hidden and visible areas.
+  void invertMask(String id) {
+    final l = _document.layerById(id);
+    if (l == null) return;
+    final r = layerLocalRect(l).inflate(100000);
+    updateProps(
+      id,
+      (p) => p.copyWith(
+        mask: [
+          MaskStroke(
+            mode: MaskMode.hide,
+            shape: MaskShape.area,
+            points: [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+          ),
+          for (final s in p.mask)
+            MaskStroke(
+              mode: s.mode == MaskMode.hide ? MaskMode.show : MaskMode.hide,
+              shape: s.shape,
+              points: s.points,
+              width: s.width,
+              softness: s.softness,
+            ),
+        ],
+        maskEnabled: true,
+      ),
+      label: 'mask_invert',
+    );
+  }
+
+  void clearMask(String id) => updateProps(
+    id,
+    (p) => p.copyWith(mask: const [], maskEnabled: true),
+    label: 'mask_clear',
+  );
+
+  void setMaskEnabled(String id, bool on) =>
+      updateProps(id, (p) => p.copyWith(maskEnabled: on), label: 'mask_toggle');
 
   Rect boundsOf(List<String> ids) =>
       unionBounds([for (final id in ids) ?_document.layerById(id)]);

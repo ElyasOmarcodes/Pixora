@@ -567,7 +567,9 @@ class _OverlayPainter extends CustomPainter {
     required ValueNotifier<int> tick,
     required this.scale,
     required this.offset,
-  }) : super(repaint: Listenable.merge([editor, tick, pendingGuide]));
+  }) : super(
+         repaint: Listenable.merge([editor, tick, pendingGuide, tool.repaint]),
+       );
 
   final EditorController editor;
   final EditorTool tool;

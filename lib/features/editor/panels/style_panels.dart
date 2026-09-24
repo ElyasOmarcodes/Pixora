@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../../document/effects/effect_registry.dart';
 import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
@@ -114,116 +113,6 @@ class StrokePanel extends StatelessWidget {
                     label: 'stroke',
                   );
           },
-        ),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
-}
-
-/// Drop shadow and glow layer styles.
-class ShadowPanel extends StatefulWidget {
-  const ShadowPanel({super.key, required this.editor, required this.layer});
-  final EditorController editor;
-  final Layer layer;
-
-  @override
-  State<ShadowPanel> createState() => _ShadowPanelState();
-}
-
-class _ShadowPanelState extends State<ShadowPanel> {
-  String _type = 'shadow';
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final editor = widget.editor;
-    final id = widget.layer.id;
-    final def = EffectRegistry.instance[_type]!;
-    final effect = editor.effectOf(id, _type);
-    final enabled = effect != null;
-
-    double valueOf(String key) =>
-        effect?.number(key, def.param(key)!.defaultNumber) ??
-        def.param(key)!.defaultNumber;
-
-    Widget slider(String key, String label) {
-      final p = def.param(key)!;
-      return PixSlider(
-        label: label,
-        value: valueOf(key),
-        min: p.min,
-        max: p.max,
-        defaultValue: p.defaultNumber,
-        format: p.max <= 1 ? (v) => '${(v * 100).round()}%' : null,
-        onChanged: (v) => editor.setEffectParam(id, _type, key, v, live: true),
-        onChangeEnd: (_) => editor.commit('effect'),
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            children: [
-              SegmentedButton<String>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(value: 'shadow', label: Text(l.shadow)),
-                  ButtonSegment(value: 'glow', label: Text(l.glow)),
-                ],
-                selected: {_type},
-                onSelectionChanged: (s) => setState(() => _type = s.first),
-              ),
-              const Spacer(),
-              Switch.adaptive(
-                value: enabled,
-                onChanged: (on) => on
-                    ? editor.updateProps(
-                        id,
-                        (p) =>
-                            p.copyWith(effects: [...p.effects, def.create()]),
-                        label: 'effect',
-                      )
-                    : editor.removeEffectType(id, _type),
-              ),
-            ],
-          ),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          child: !enabled
-              ? const SizedBox(width: double.infinity)
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_type == 'shadow') ...[
-                      slider('dx', l.offsetX),
-                      slider('dy', l.offsetY),
-                    ],
-                    slider('blur', l.blur),
-                    slider('opacity', l.intensity),
-                    ColorStrip(
-                      value: effect.color(
-                        'color',
-                        def.param('color')!.defaultColor!,
-                      ),
-                      onChanged: (c, {required live}) {
-                        if (c == null) return;
-                        editor.setEffectParam(
-                          id,
-                          _type,
-                          'color',
-                          c.toARGB32(),
-                          live: live,
-                        );
-                      },
-                    ),
-                  ],
-                ),
         ),
         const SizedBox(height: 8),
       ],

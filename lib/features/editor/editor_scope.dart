@@ -1,12 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../../editor/editor_controller.dart';
+import '../../editor/tools/mask_tool.dart';
 
 /// Which contextual tool panel is open.
 enum ToolPanel {
   addShape,
   background,
-  font,
   fill,
   stroke,
   shadow,
@@ -17,6 +17,18 @@ enum ToolPanel {
   shapeStyle,
   grid,
   snap,
+  move,
+  position,
+  size,
+  rotate,
+  mask,
+  textStyle,
+  curve,
+  textBackground,
+  spacing,
+  glow,
+  bevel,
+  extrude,
 }
 
 /// What pointer input on the canvas does.
@@ -29,6 +41,9 @@ enum ToolMode {
 
   /// Edit grid lines and guides (layers can't be picked).
   grid,
+
+  /// Paint the selected layer's mask.
+  mask,
 }
 
 /// Editor UI state that is not part of the document (and therefore not
@@ -37,6 +52,9 @@ class EditorUiState extends ChangeNotifier {
   ToolPanel? _panel;
   bool _showLayers = false;
   ToolMode _mode = ToolMode.move;
+
+  /// Mask brush settings (shared by the mask panel and canvas tool).
+  final MaskBrush maskBrush = MaskBrush();
 
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;
@@ -51,7 +69,20 @@ class EditorUiState extends ChangeNotifier {
   set panel(ToolPanel? p) {
     if (_panel == p) return;
     _panel = p;
+    // The mask panel drives the mask tool.
+    if (p == ToolPanel.mask) {
+      _mode = ToolMode.mask;
+    } else if (_mode == ToolMode.mask) {
+      _mode = ToolMode.move;
+      maskBrush.clearPen();
+    }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    maskBrush.dispose();
+    super.dispose();
   }
 
   void togglePanel(ToolPanel p) => panel = _panel == p ? null : p;

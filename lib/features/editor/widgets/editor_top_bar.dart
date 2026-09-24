@@ -34,7 +34,14 @@ class TopBarActions {
   final VoidCallback exportProject;
 }
 
-enum _More { rulers, gridSettings, snapSettings, canvasSize, exportProject }
+enum _More {
+  share,
+  rulers,
+  gridSettings,
+  snapSettings,
+  canvasSize,
+  exportProject,
+}
 
 /// The editor's top bar.
 ///
@@ -233,6 +240,7 @@ class EditorTopBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(PixTokens.radiusM),
         ),
         onSelected: (a) => switch (a) {
+          _More.share => actions.exportImage(),
           _More.rulers => settings.showRulers = !settings.showRulers,
           _More.gridSettings => _openPanel(ToolPanel.grid),
           _More.snapSettings => _openPanel(ToolPanel.snap),
@@ -240,6 +248,14 @@ class EditorTopBar extends StatelessWidget {
           _More.exportProject => actions.exportProject(),
         },
         itemBuilder: (_) => [
+          if (compact)
+            PopupMenuItem(
+              value: _More.share,
+              child: ListTile(
+                leading: const Icon(Icons.share_rounded),
+                title: Text(l.shareImage),
+              ),
+            ),
           if (compact)
             CheckedPopupMenuItem(
               value: _More.rulers,
@@ -599,19 +615,20 @@ class _CompactBar extends StatelessWidget {
                       ),
                       cell(
                         _BarIcon(
+                          icon: Icons.layers_rounded,
+                          tooltip: l.layers,
+                          fg: fg,
+                          active: ui.showLayers,
+                          onTap: () => ui.showLayers = !ui.showLayers,
+                        ),
+                      ),
+                      cell(
+                        _BarIcon(
                           icon: Icons.save_rounded,
                           tooltip: bar.saved ? l.allSaved : l.unsavedChanges,
                           fg: fg,
                           dot: !bar.saved,
                           onTap: bar.actions.save,
-                        ),
-                      ),
-                      cell(
-                        _BarIcon(
-                          icon: Icons.share_rounded,
-                          tooltip: l.export,
-                          fg: fg,
-                          onTap: bar.actions.exportImage,
                         ),
                       ),
                       cell(bar._moreMenu(l, compact: true, color: fg)),
@@ -660,15 +677,6 @@ class _CompactBar extends StatelessWidget {
                         ),
                       ),
                       cell(_ZoomChip(canvas: bar.canvas, color: fg)),
-                      cell(
-                        _BarIcon(
-                          icon: Icons.layers_rounded,
-                          tooltip: l.layers,
-                          fg: fg,
-                          active: ui.showLayers,
-                          onTap: () => ui.showLayers = !ui.showLayers,
-                        ),
-                      ),
                     ],
                   ),
                 ),

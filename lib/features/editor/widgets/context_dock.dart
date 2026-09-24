@@ -17,12 +17,26 @@ class DockItem {
     this.panel,
     this.onTap,
     this.destructive = false,
-  });
+    this.enabled = true,
+  }) : divider = false;
+
+  /// A thin separator between groups of related tools.
+  const DockItem.divider()
+    : icon = Icons.more_vert,
+      label = '',
+      panel = null,
+      onTap = null,
+      destructive = false,
+      enabled = true,
+      divider = true;
+
   final IconData icon;
   final String label;
   final ToolPanel? panel;
   final VoidCallback? onTap;
   final bool destructive;
+  final bool enabled;
+  final bool divider;
 }
 
 /// The contextual bottom toolbar.
@@ -38,6 +52,7 @@ class ContextDock extends StatelessWidget {
     required this.onAddText,
     required this.onAddImage,
     required this.onEditText,
+    required this.onPickFont,
     required this.onResizeCanvas,
     required this.commands,
     this.vertical = false,
@@ -50,6 +65,7 @@ class ContextDock extends StatelessWidget {
   final VoidCallback onAddText;
   final VoidCallback onAddImage;
   final void Function(TextLayer layer) onEditText;
+  final void Function(TextLayer layer) onPickFont;
   final VoidCallback onResizeCanvas;
   final bool vertical;
 
@@ -71,18 +87,13 @@ class ContextDock extends StatelessWidget {
         ),
       ];
     }
+    const div = DockItem.divider();
     if (editor.hasMultiSelection) {
       return [
         DockItem(
           Icons.create_new_folder_rounded,
           l.group,
           onTap: () => editor.groupSelected(name: l.group),
-        ),
-        DockItem(Icons.open_with_rounded, l.arrange, panel: ToolPanel.arrange),
-        DockItem(
-          Icons.call_merge_rounded,
-          l.merge,
-          onTap: () => commands.runAsync(editor.mergeSelected),
         ),
         DockItem(
           Icons.copy_all_rounded,
@@ -95,40 +106,146 @@ class ContextDock extends StatelessWidget {
           onTap: editor.deleteSelected,
           destructive: true,
         ),
+        div,
+        DockItem(Icons.open_with_rounded, l.move, panel: ToolPanel.move),
+        DockItem(
+          Icons.grid_view_rounded,
+          l.position,
+          panel: ToolPanel.position,
+        ),
+        DockItem(
+          Icons.photo_size_select_large_rounded,
+          l.size,
+          panel: ToolPanel.size,
+        ),
+        DockItem(
+          Icons.rotate_right_rounded,
+          l.rotation,
+          panel: ToolPanel.rotate,
+        ),
+        div,
+        DockItem(
+          Icons.call_merge_rounded,
+          l.merge,
+          onTap: () => commands.runAsync(editor.mergeSelected),
+        ),
         DockItem(Icons.deselect_rounded, l.deselect, onTap: editor.deselect),
       ];
     }
-    final common = [
-      DockItem(Icons.blur_circular_rounded, l.shadow, panel: ToolPanel.shadow),
-      DockItem(Icons.opacity_rounded, l.opacity, panel: ToolPanel.opacity),
-      DockItem(Icons.open_with_rounded, l.arrange, panel: ToolPanel.arrange),
-      DockItem(
-        Icons.copy_all_rounded,
-        l.duplicate,
-        onTap: () => editor.duplicateLayer(layer.id),
-      ),
+
+    final id = layer.id;
+    final index = editor.document.indexOf(id);
+    final top = editor.document.siblingsOf(id).length - 1;
+    // Shared by every layer type, in the same order everywhere.
+    final basics = [
       DockItem(
         Icons.delete_outline_rounded,
         l.delete,
-        onTap: () => editor.deleteLayer(layer.id),
+        onTap: () => editor.deleteLayer(id),
         destructive: true,
       ),
+      DockItem(
+        Icons.copy_all_rounded,
+        l.duplicate,
+        onTap: () => editor.duplicateLayer(id),
+      ),
+      div,
+      DockItem(
+        Icons.flip_to_front_rounded,
+        l.forward,
+        enabled: index < top,
+        onTap: () => editor.arrange(id, LayerArrange.forward),
+      ),
+      DockItem(
+        Icons.flip_to_back_rounded,
+        l.backward,
+        enabled: index > 0,
+        onTap: () => editor.arrange(id, LayerArrange.backward),
+      ),
+      DockItem(Icons.open_with_rounded, l.move, panel: ToolPanel.move),
+      DockItem(Icons.grid_view_rounded, l.position, panel: ToolPanel.position),
+      DockItem(
+        Icons.photo_size_select_large_rounded,
+        l.size,
+        panel: ToolPanel.size,
+      ),
+    ];
+    final look = [
+      DockItem(Icons.opacity_rounded, l.opacity, panel: ToolPanel.opacity),
+      DockItem(
+        Icons.threed_rotation_rounded,
+        l.rotation,
+        panel: ToolPanel.rotate,
+      ),
+      DockItem(Icons.gradient_rounded, l.mask, panel: ToolPanel.mask),
+    ];
+    final effects = [
+      DockItem(Icons.blur_on_rounded, l.shadow, panel: ToolPanel.shadow),
+      DockItem(Icons.flare_rounded, l.glow, panel: ToolPanel.glow),
+      DockItem(Icons.texture_rounded, l.bevel, panel: ToolPanel.bevel),
+      DockItem(Icons.view_in_ar_rounded, l.threeD, panel: ToolPanel.extrude),
     ];
     return switch (layer) {
       TextLayer t => [
         DockItem(Icons.edit_rounded, l.edit, onTap: () => onEditText(t)),
-        DockItem(Icons.font_download_rounded, l.font, panel: ToolPanel.font),
+        ...basics,
+        div,
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
+        ...look,
+        div,
+        DockItem(
+          Icons.font_download_rounded,
+          l.font,
+          onTap: () => onPickFont(t),
+        ),
+        DockItem(
+          Icons.text_format_rounded,
+          l.style,
+          panel: ToolPanel.textStyle,
+        ),
+        DockItem(Icons.looks_rounded, l.curve, panel: ToolPanel.curve),
+        DockItem(
+          Icons.format_shapes_rounded,
+          l.background,
+          panel: ToolPanel.textBackground,
+        ),
+        DockItem(
+          Icons.format_line_spacing_rounded,
+          l.spacing,
+          panel: ToolPanel.spacing,
+        ),
+        div,
         DockItem(Icons.border_color_rounded, l.stroke, panel: ToolPanel.stroke),
-        ...common,
-        DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
+        ...effects,
       ],
       ShapeLayer _ => [
         DockItem(Icons.category_rounded, l.shape, panel: ToolPanel.shapeStyle),
+        ...basics,
+        div,
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
+        ...look,
+        div,
         DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
-        ...common,
+        ...effects,
         DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
+      ],
+      RasterLayer r => [
+        DockItem(
+          Icons.find_replace_rounded,
+          l.replaceImage,
+          onTap: () => commands.replaceImage(r),
+        ),
+        ...basics,
+        div,
+        DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
+        DockItem(
+          Icons.auto_awesome_rounded,
+          l.filters,
+          panel: ToolPanel.filters,
+        ),
+        ...look,
+        div,
+        ...effects,
       ],
       GroupLayer g => [
         DockItem(
@@ -136,17 +253,12 @@ class ContextDock extends StatelessWidget {
           l.ungroup,
           onTap: () => editor.ungroup(g.id),
         ),
-        ...common,
+        ...basics,
+        div,
+        ...look,
+        div,
+        ...effects,
         DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
-      ],
-      RasterLayer _ => [
-        DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
-        DockItem(
-          Icons.auto_awesome_rounded,
-          l.filters,
-          panel: ToolPanel.filters,
-        ),
-        ...common,
       ],
     };
   }
@@ -166,17 +278,22 @@ class ContextDock extends StatelessWidget {
               : const EdgeInsets.symmetric(horizontal: 8),
           children: [
             for (final item in items)
-              _DockButton(
-                item: item,
-                selected: item.panel != null && ui.panel == item.panel,
-                onTap: () {
-                  if (item.panel != null) {
-                    ui.togglePanel(item.panel!);
-                  } else {
-                    item.onTap?.call();
-                  }
-                },
-              ),
+              if (item.divider)
+                _DockDivider(vertical: vertical)
+              else
+                _DockButton(
+                  item: item,
+                  selected: item.panel != null && ui.panel == item.panel,
+                  onTap: !item.enabled
+                      ? null
+                      : () {
+                          if (item.panel != null) {
+                            ui.togglePanel(item.panel!);
+                          } else {
+                            item.onTap?.call();
+                          }
+                        },
+                ),
           ],
         );
         return AnimatedSwitcher(
@@ -214,22 +331,26 @@ class _DockButton extends StatelessWidget {
   });
   final DockItem item;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final color = item.destructive
+    final color = onTap == null
+        ? scheme.onSurface.withValues(alpha: 0.3)
+        : item.destructive
         ? scheme.error
         : selected
         ? scheme.primary
         : scheme.onSurface.withValues(alpha: 0.78);
     return Pressable(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              onTap!();
+            },
       scale: 0.9,
       semanticLabel: item.label,
       child: Container(
@@ -265,5 +386,18 @@ class _DockButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _DockDivider extends StatelessWidget {
+  const _DockDivider({required this.vertical});
+  final bool vertical;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).dividerColor;
+    return vertical
+        ? Divider(height: 12, indent: 18, endIndent: 18, color: c)
+        : VerticalDivider(width: 12, indent: 18, endIndent: 26, color: c);
   }
 }

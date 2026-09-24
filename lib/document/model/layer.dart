@@ -8,6 +8,7 @@ import 'blend.dart';
 import 'effect.dart';
 import 'fill.dart';
 import 'layer_transform.dart';
+import 'mask.dart';
 
 enum LayerKind { raster, text, shape, group }
 
@@ -24,8 +25,11 @@ class LayerProps {
     this.transform = const LayerTransform(),
     this.clip = false,
     List<LayerEffect> effects = const [],
+    List<MaskStroke> mask = const [],
+    this.maskEnabled = true,
   }) : id = id ?? newId('ly'),
-       effects = List.unmodifiable(effects);
+       effects = List.unmodifiable(effects),
+       mask = List.unmodifiable(mask);
 
   final String id;
   final String name;
@@ -44,6 +48,14 @@ class LayerProps {
   /// Applied in order. See `EffectRegistry` for what each type does.
   final List<LayerEffect> effects;
 
+  /// Layer mask as vector strokes (empty = no mask).
+  final List<MaskStroke> mask;
+
+  /// Temporarily disable the mask without deleting it.
+  final bool maskEnabled;
+
+  bool get hasMask => mask.isNotEmpty && maskEnabled;
+
   LayerProps copyWith({
     String? id,
     String? name,
@@ -54,6 +66,8 @@ class LayerProps {
     LayerTransform? transform,
     bool? clip,
     List<LayerEffect>? effects,
+    List<MaskStroke>? mask,
+    bool? maskEnabled,
   }) => LayerProps(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -64,6 +78,8 @@ class LayerProps {
     transform: transform ?? this.transform,
     clip: clip ?? this.clip,
     effects: effects ?? this.effects,
+    mask: mask ?? this.mask,
+    maskEnabled: maskEnabled ?? this.maskEnabled,
   );
 
   Json toJson() => {
@@ -76,6 +92,8 @@ class LayerProps {
     if (clip) 'clip': true,
     'transform': transform.toJson(),
     if (effects.isNotEmpty) 'effects': [for (final e in effects) e.toJson()],
+    if (mask.isNotEmpty) 'mask': [for (final s in mask) s.toJson()],
+    if (!maskEnabled) 'maskEnabled': false,
   };
 
   static LayerProps fromJson(Json m) => LayerProps(
@@ -91,6 +109,11 @@ class LayerProps {
       for (final e in readList(m['effects']))
         if (e is Map) LayerEffect.fromJson(readMap(e)),
     ],
+    mask: [
+      for (final s in readList(m['mask']))
+        if (s is Map) MaskStroke.fromJson(readMap(s)),
+    ],
+    maskEnabled: readBool(m['maskEnabled'], true),
   );
 
   @override
@@ -104,7 +127,9 @@ class LayerProps {
       other.blendMode == blendMode &&
       other.transform == transform &&
       other.clip == clip &&
-      listEquals(other.effects, effects);
+      other.maskEnabled == maskEnabled &&
+      listEquals(other.effects, effects) &&
+      listEquals(other.mask, mask);
 
   @override
   int get hashCode => Object.hash(
@@ -116,7 +141,9 @@ class LayerProps {
     blendMode,
     transform,
     clip,
+    maskEnabled,
     Object.hashAll(effects),
+    Object.hashAll(mask),
   );
 }
 
@@ -223,7 +250,10 @@ final class RasterLayer extends Layer {
   int get hashCode => Object.hash(props, assetId, width, height);
 }
 
-enum PixTextAlign { start, center, end }
+enum PixTextAlign { start, center, end, justify }
+
+/// Letter case transform applied when the text is drawn.
+enum PixTextCase { none, upper, lower, title }
 
 @immutable
 final class TextLayer extends Layer {
@@ -242,6 +272,14 @@ final class TextLayer extends Layer {
     this.strokeColor = const Color(0xFF000000),
     this.underline = false,
     this.boxWidth,
+    this.strike = false,
+    this.textCase = PixTextCase.none,
+    this.wordSpacing = 0,
+    this.curve = 0,
+    this.background,
+    this.bgPadX = 0.3,
+    this.bgPadY = 0.15,
+    this.bgRadius = 0.2,
   }) : fill = fill ?? PixFill.white;
 
   final String text;
@@ -263,6 +301,36 @@ final class TextLayer extends Layer {
   /// the box grows in height as needed. `null` = one line per paragraph
   /// (the box hugs the text).
   final double? boxWidth;
+
+  /// Strike-through line.
+  final bool strike;
+  final PixTextCase textCase;
+
+  /// Extra space between words, layer px.
+  final double wordSpacing;
+
+  /// Bends the lines along an arc: the angle (degrees) the text spans.
+  /// Positive bends upward (∩), negative downward (∪), 0 = straight.
+  final double curve;
+
+  /// Box behind the text (null = none).
+  final PixFill? background;
+
+  /// Background padding and corner radius, as fractions of the font size.
+  final double bgPadX;
+  final double bgPadY;
+  final double bgRadius;
+
+  /// [text] with [textCase] applied.
+  String get displayText => switch (textCase) {
+    PixTextCase.none => text,
+    PixTextCase.upper => text.toUpperCase(),
+    PixTextCase.lower => text.toLowerCase(),
+    PixTextCase.title => text.replaceAllMapped(
+      RegExp(r'(^|\s)(\S)'),
+      (m) => '${m[1]}${m[2]!.toUpperCase()}',
+    ),
+  };
 
   @override
   LayerKind get kind => LayerKind.text;
@@ -286,6 +354,15 @@ final class TextLayer extends Layer {
     bool? underline,
     double? boxWidth,
     bool autoWidth = false,
+    bool? strike,
+    PixTextCase? textCase,
+    double? wordSpacing,
+    double? curve,
+    PixFill? background,
+    bool noBackground = false,
+    double? bgPadX,
+    double? bgPadY,
+    double? bgRadius,
   }) => TextLayer(
     props ?? this.props,
     text: text ?? this.text,
@@ -301,6 +378,14 @@ final class TextLayer extends Layer {
     strokeColor: strokeColor ?? this.strokeColor,
     underline: underline ?? this.underline,
     boxWidth: autoWidth ? null : (boxWidth ?? this.boxWidth),
+    strike: strike ?? this.strike,
+    textCase: textCase ?? this.textCase,
+    wordSpacing: wordSpacing ?? this.wordSpacing,
+    curve: curve ?? this.curve,
+    background: noBackground ? null : (background ?? this.background),
+    bgPadX: bgPadX ?? this.bgPadX,
+    bgPadY: bgPadY ?? this.bgPadY,
+    bgRadius: bgRadius ?? this.bgRadius,
   );
 
   @override
@@ -318,6 +403,16 @@ final class TextLayer extends Layer {
     if (strokeWidth > 0) 'strokeColor': writeColor(strokeColor),
     if (underline) 'underline': true,
     'boxWidth': ?boxWidth,
+    if (strike) 'strike': true,
+    if (textCase != PixTextCase.none) 'case': textCase.name,
+    if (wordSpacing != 0) 'wordSpacing': wordSpacing,
+    if (curve != 0) 'curve': curve,
+    if (background != null) ...{
+      'bg': background!.toJson(),
+      'bgPadX': bgPadX,
+      'bgPadY': bgPadY,
+      'bgRadius': bgRadius,
+    },
   };
 
   static TextLayer fromJson(LayerProps props, Json m) => TextLayer(
@@ -337,6 +432,14 @@ final class TextLayer extends Layer {
     boxWidth: m['boxWidth'] == null
         ? null
         : readDouble(m['boxWidth'], 100).clamp(4, 100000).toDouble(),
+    strike: readBool(m['strike']),
+    textCase: readEnum(PixTextCase.values, m['case'], PixTextCase.none),
+    wordSpacing: readDouble(m['wordSpacing']),
+    curve: readDouble(m['curve']).clamp(-360.0, 360.0),
+    background: m['bg'] == null ? null : PixFill.fromJson(m['bg']),
+    bgPadX: readDouble(m['bgPadX'], 0.3),
+    bgPadY: readDouble(m['bgPadY'], 0.15),
+    bgRadius: readDouble(m['bgRadius'], 0.2),
   );
 
   @override
@@ -355,7 +458,15 @@ final class TextLayer extends Layer {
       other.strokeWidth == strokeWidth &&
       other.strokeColor == strokeColor &&
       other.underline == underline &&
-      other.boxWidth == boxWidth;
+      other.boxWidth == boxWidth &&
+      other.strike == strike &&
+      other.textCase == textCase &&
+      other.wordSpacing == wordSpacing &&
+      other.curve == curve &&
+      other.background == background &&
+      other.bgPadX == bgPadX &&
+      other.bgPadY == bgPadY &&
+      other.bgRadius == bgRadius;
 
   @override
   int get hashCode => Object.hash(
@@ -373,6 +484,16 @@ final class TextLayer extends Layer {
     strokeColor,
     underline,
     boxWidth,
+    Object.hash(
+      strike,
+      textCase,
+      wordSpacing,
+      curve,
+      background,
+      bgPadX,
+      bgPadY,
+      bgRadius,
+    ),
   );
 }
 

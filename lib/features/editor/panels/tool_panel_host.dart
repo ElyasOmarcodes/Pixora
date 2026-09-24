@@ -6,10 +6,13 @@ import '../../../editor/editor_controller.dart';
 import '../editor_scope.dart';
 import 'adjust_panels.dart';
 import 'canvas_panels.dart';
+import 'effect_panels.dart';
 import 'guides_panels.dart';
 import 'layout_panels.dart';
+import 'mask_panel.dart';
 import 'style_panels.dart';
 import 'text_panels.dart';
+import 'transform_panels.dart';
 
 /// Shows the open [ToolPanel] with a soft size/fade transition. Panels that
 /// don't fit the current selection close themselves.
@@ -45,10 +48,30 @@ class ToolPanelHost extends StatelessWidget {
     }
     if (layer == null) return null;
     return switch (p) {
-      ToolPanel.font when layer is TextLayer => FontPanel(
+      ToolPanel.textStyle when layer is TextLayer => TextStylePanel(
         editor: editor,
         layer: layer,
       ),
+      ToolPanel.curve when layer is TextLayer => CurvePanel(
+        editor: editor,
+        layer: layer,
+      ),
+      ToolPanel.textBackground when layer is TextLayer => TextBackgroundPanel(
+        editor: editor,
+        layer: layer,
+      ),
+      ToolPanel.spacing when layer is TextLayer => SpacingPanel(
+        editor: editor,
+        layer: layer,
+      ),
+      ToolPanel.move => MovePanel(editor: editor, layer: layer),
+      ToolPanel.position => PositionPanel(editor: editor, layer: layer),
+      ToolPanel.size => SizePanel(editor: editor, layer: layer),
+      ToolPanel.rotate => RotatePanel(editor: editor, layer: layer),
+      ToolPanel.mask => MaskPanel(editor: editor, ui: ui, layer: layer),
+      ToolPanel.glow => GlowPanel(editor: editor, layer: layer),
+      ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
+      ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),
       ToolPanel.fill when layer is TextLayer || layer is ShapeLayer =>
         FillPanel(editor: editor, layer: layer),
       ToolPanel.stroke when layer is TextLayer || layer is ShapeLayer =>

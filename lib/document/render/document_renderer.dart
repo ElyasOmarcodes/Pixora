@@ -9,6 +9,7 @@ import '../effects/effect_registry.dart';
 import '../model/document.dart';
 import '../model/layer.dart';
 import '../model/layer_transform.dart';
+import '../model/mask.dart';
 import 'color_matrix.dart';
 import 'shape_paths.dart';
 import 'text_layout.dart';
@@ -173,6 +174,9 @@ class DocumentRenderer {
     List<double>? matrix;
     var blur = 0.0;
     final shadows = <ShadowSpec>[];
+    final inners = <ShadowSpec>[];
+    final bevels = <BevelSpec>[];
+    final extrudes = <ExtrudeSpec>[];
     for (final e in props.effects) {
       if (!e.enabled) continue;
       final def = _fx[e.type];
@@ -182,17 +186,26 @@ class DocumentRenderer {
         matrix = matrix == null ? m : ColorMatrix.concat(matrix, m);
       }
       blur += def.blurSigma?.call(e) ?? 0;
-      final s = def.shadow?.call(e);
-      if (s != null) shadows.add(s);
+      if (def.shadow?.call(e) case final s?) shadows.add(s);
+      if (def.inner?.call(e) case final s?) inners.add(s);
+      if (def.bevel?.call(e) case final b?) bevels.add(b);
+      if (def.extrude?.call(e) case final x?) extrudes.add(x);
     }
     if (matrix != null && ColorMatrix.isIdentity(matrix)) matrix = null;
 
     final isGroup = layer is GroupLayer;
     final local = layerLocalRect(layer);
     final t = props.transform;
+    final ms = _minScale(t);
     var margin = blur * 3;
     for (final s in shadows) {
-      margin = math.max(margin, s.blur * 3 + s.offset.distance / _minScale(t));
+      margin = math.max(margin, s.blur * 3 + s.offset.distance / ms);
+    }
+    for (final b in bevels) {
+      margin = math.max(margin, (b.depth + b.size + b.soften) * 2 / ms);
+    }
+    for (final x in extrudes) {
+      margin = math.max(margin, x.depth / ms + 4);
     }
     // Children of a group may carry their own effects, so a group's layer
     // is left unbounded rather than risk clipping them.
@@ -214,31 +227,57 @@ class DocumentRenderer {
       );
     }
 
-    for (final s in shadows) {
-      // Shadow offsets are specified in document space; undo the layer's
-      // rotation/scale so the shadow always falls the same way.
+    // The layer's shape (content with its mask) — what effects derive from.
+    void shape(Canvas c) => _paintMasked(c, layer, hidden, layerBounds);
+
+    // Effect offsets are in document space; undo rotation/scale so they
+    // always fall the same way.
+    Offset toLocal(Offset o) {
       final c = math.cos(-t.rotation), sn = math.sin(-t.rotation);
-      final o = s.offset;
-      final lo = Offset(
+      return Offset(
         (o.dx * c - o.dy * sn) / (t.scaleX == 0 ? 1 : t.scaleX),
         (o.dx * sn + o.dy * c) / (t.scaleY == 0 ? 1 : t.scaleY),
       );
+    }
+
+    void silhouette(Offset docOffset, double blurPx, Color color) {
+      final lo = toLocal(docOffset);
       canvas.saveLayer(
         layerBounds,
         Paint()
-          ..colorFilter = ColorFilter.mode(s.color, BlendMode.srcIn)
-          ..imageFilter = s.blur > 0
+          ..colorFilter = ColorFilter.mode(color, BlendMode.srcIn)
+          ..imageFilter = blurPx > 0
               ? ui.ImageFilter.blur(
-                  sigmaX: s.blur / 2,
-                  sigmaY: s.blur / 2,
+                  sigmaX: blurPx / 2,
+                  sigmaY: blurPx / 2,
                   tileMode: TileMode.decal,
                 )
               : null,
       );
       canvas.translate(lo.dx, lo.dy);
-      _paintContent(canvas, layer, hidden);
+      shape(canvas);
       canvas.restore();
     }
+
+    for (final s in shadows) {
+      silhouette(s.offset, s.blur, s.color);
+    }
+    for (final x in extrudes) {
+      _paintExtrude(canvas, x, layerBounds, toLocal, shape);
+    }
+    // Outer halves of bevels sit behind the content.
+    for (final b in bevels) {
+      if (b.style == BevelStyle.inner) continue;
+      final light = Offset(math.cos(b.angle), math.sin(b.angle));
+      final d = b.style == BevelStyle.outer ? b.depth : b.depth / 2;
+      final bl = b.size + b.soften;
+      silhouette(light * d, bl, b.highlight);
+      silhouette(-light * d, bl, b.shadow);
+    }
+
+    final hasInner =
+        inners.isNotEmpty || bevels.any((b) => b.style != BevelStyle.outer);
+    if (hasInner) canvas.saveLayer(layerBounds, Paint());
 
     if (matrix != null || blur > 0) {
       canvas.saveLayer(
@@ -253,14 +292,176 @@ class DocumentRenderer {
                 )
               : null,
       );
-      _paintContent(canvas, layer, hidden);
+      shape(canvas);
       canvas.restore();
     } else {
-      _paintContent(canvas, layer, hidden);
+      shape(canvas);
+    }
+
+    if (hasInner) {
+      void inner(Offset docOffset, double blurPx, Color color) => _paintInner(
+        canvas,
+        toLocal(docOffset),
+        blurPx,
+        color,
+        layerBounds ?? local.inflate(4000),
+        shape,
+      );
+      for (final s in inners) {
+        inner(s.offset, s.blur, s.color);
+      }
+      for (final b in bevels) {
+        if (b.style == BevelStyle.outer) continue;
+        final light = Offset(math.cos(b.angle), math.sin(b.angle));
+        final d = b.style == BevelStyle.inner ? b.depth : b.depth / 2;
+        final bl = b.size + b.soften;
+        // Pillow emboss lights the inner edge from the opposite side.
+        final dir = b.style == BevelStyle.pillow ? -light : light;
+        inner(-dir * d, bl, b.highlight);
+        inner(dir * d, bl, b.shadow);
+      }
+      canvas.restore();
     }
 
     if (needsGroup) canvas.restore();
     canvas.restore();
+  }
+
+  /// Inner shadow / glow: a blurred, offset inverse of the shape drawn only
+  /// where the shape already has pixels.
+  void _paintInner(
+    Canvas canvas,
+    Offset localOffset,
+    double blurPx,
+    Color color,
+    Rect area,
+    void Function(Canvas) shape,
+  ) {
+    canvas.saveLayer(area, Paint()..blendMode = BlendMode.srcATop);
+    canvas.saveLayer(
+      area,
+      Paint()
+        ..imageFilter = blurPx > 0
+            ? ui.ImageFilter.blur(
+                sigmaX: blurPx / 2,
+                sigmaY: blurPx / 2,
+                tileMode: TileMode.decal,
+              )
+            : null,
+    );
+    canvas.drawRect(area.inflate(blurPx * 2), Paint()..color = color);
+    canvas
+      ..save()
+      ..translate(localOffset.dx, localOffset.dy);
+    canvas.saveLayer(null, Paint()..blendMode = BlendMode.dstOut);
+    shape(canvas);
+    canvas
+      ..restore()
+      ..restore()
+      ..restore()
+      ..restore();
+  }
+
+  /// 3D extrusion: the shape repeated along the extrusion direction,
+  /// shaded in bands from the front colour to a darker back.
+  void _paintExtrude(
+    Canvas canvas,
+    ExtrudeSpec x,
+    Rect? bounds,
+    Offset Function(Offset) toLocal,
+    void Function(Canvas) shape,
+  ) {
+    final steps = x.depth.ceil().clamp(1, 160);
+    final dir = Offset(math.cos(x.angle), math.sin(x.angle));
+    const bands = 6;
+    final hsl = HSLColor.fromColor(x.color);
+    for (var band = bands - 1; band >= 0; band--) {
+      // band 0 = front, bands-1 = back.
+      final k = band / math.max(1, bands - 1);
+      final color = hsl
+          .withLightness(
+            (hsl.lightness * (1 - x.shade * 0.75 * k)).clamp(0.0, 1.0),
+          )
+          .toColor();
+      canvas.saveLayer(
+        bounds,
+        Paint()..colorFilter = ColorFilter.mode(color, BlendMode.srcIn),
+      );
+      final from = (steps * band / bands).floor() + 1;
+      final to = (steps * (band + 1) / bands).floor();
+      for (var i = to; i >= from; i--) {
+        final o = toLocal(dir * (x.depth * i / steps));
+        canvas
+          ..save()
+          ..translate(o.dx, o.dy);
+        shape(canvas);
+        canvas.restore();
+      }
+      canvas.restore();
+    }
+  }
+
+  /// Content with the layer mask applied (vector strokes, white = visible).
+  void _paintMasked(
+    Canvas canvas,
+    Layer layer,
+    Set<String> hidden,
+    Rect? bounds,
+  ) {
+    final props = layer.props;
+    if (!props.hasMask) {
+      _paintContent(canvas, layer, hidden);
+      return;
+    }
+    canvas.saveLayer(bounds, Paint());
+    _paintContent(canvas, layer, hidden);
+    canvas.saveLayer(bounds, Paint()..blendMode = BlendMode.dstIn);
+    final area = bounds ?? layerLocalRect(layer).inflate(4000);
+    canvas.drawRect(area, Paint()..color = const Color(0xFFFFFFFF));
+    for (final s in props.mask) {
+      paintMaskStroke(canvas, s);
+    }
+    canvas
+      ..restore()
+      ..restore();
+  }
+
+  /// Draws one mask stroke inside a mask layer (hide = erase, show = paint).
+  static void paintMaskStroke(Canvas canvas, MaskStroke s) {
+    if (s.points.isEmpty) return;
+    final paint = Paint()
+      ..isAntiAlias = true
+      ..color = const Color(0xFFFFFFFF)
+      ..blendMode = s.mode == MaskMode.hide
+          ? BlendMode.dstOut
+          : BlendMode.srcOver;
+    if (s.softness > 0) {
+      paint.maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        math.max(0.5, s.width * s.softness * 0.35),
+      );
+    }
+    if (s.shape == MaskShape.area) {
+      if (s.points.length < 3) return;
+      canvas.drawPath(Path()..addPolygon(s.points, true), paint);
+      return;
+    }
+    if (s.points.length == 1) {
+      canvas.drawCircle(s.points.first, s.width / 2, paint);
+      return;
+    }
+    final path = Path()..moveTo(s.points.first.dx, s.points.first.dy);
+    for (final p in s.points.skip(1)) {
+      path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(
+      path,
+      paint
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s.width
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   double _minScale(LayerTransform t) =>
@@ -290,11 +491,7 @@ class DocumentRenderer {
             ..isAntiAlias = true,
         );
       case TextLayer l:
-        final cache = TextLayoutCache.instance;
-        final fill = cache.fill(l);
-        final origin = Offset(-fill.width / 2, -fill.height / 2);
-        cache.stroke(l)?.paint(canvas, origin);
-        fill.paint(canvas, origin);
+        TextLayoutCache.instance.paint(canvas, l);
       case ShapeLayer l:
         final path = buildShapePath(l);
         final bounds = path.getBounds();
@@ -408,6 +605,12 @@ class DocumentRenderer {
         final s = def.shadow?.call(e);
         if (s != null) {
           spill = math.max(spill, s.blur * 1.5 + s.offset.distance);
+        }
+        if (def.extrude?.call(e) case final x?) {
+          spill = math.max(spill, x.depth + 2);
+        }
+        if (def.bevel?.call(e) case final b?) {
+          spill = math.max(spill, b.depth + b.size + b.soften);
         }
       }
       if (l is GroupLayer) spill = math.max(spill, _effectSpill(l.children));

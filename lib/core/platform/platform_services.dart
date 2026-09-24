@@ -74,6 +74,18 @@ abstract class PlatformServices {
   /// Lets the user pick a `.pixora` project file.
   Future<PickedFile?> pickProjectFile();
 
+  /// Lets the user pick font files (.ttf / .otf).
+  Future<List<PickedFile>> pickFontFiles();
+
+  /// Keeps an imported font so it is available next launch. The default
+  /// (web) keeps fonts for the current session only.
+  Future<void> saveUserFont(String fileName, Uint8List bytes) async {}
+
+  /// Fonts saved with [saveUserFont].
+  Future<List<PickedFile>> loadUserFonts() async => const [];
+
+  Future<void> deleteUserFont(String fileName) async {}
+
   /// Lets the user pick a folder (desktop only; null elsewhere).
   Future<String?> pickFolder() async => null;
 

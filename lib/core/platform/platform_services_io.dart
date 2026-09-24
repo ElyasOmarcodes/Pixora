@@ -109,6 +109,55 @@ class IoPlatformServices extends PlatformServices {
     }
   }
 
+  static const _fontExts = ['ttf', 'otf'];
+
+  @override
+  Future<List<PickedFile>> pickFontFiles() async {
+    // Font MIME types are unreliable on phones, so accept any file there
+    // and filter by extension.
+    final files = await FilePicker.pickFiles(
+      type: info.isMobile ? FileType.any : FileType.custom,
+      allowedExtensions: info.isMobile ? null : _fontExts,
+    );
+    return [
+      for (final f in files)
+        if (_fontExts.contains(f.name.split('.').last.toLowerCase()))
+          PickedFile(f.name, await f.readAsBytes()),
+    ];
+  }
+
+  Future<Directory> _fontDir() async {
+    final base = await getApplicationSupportDirectory();
+    return Directory('${base.path}${_sep}fonts').create(recursive: true);
+  }
+
+  @override
+  Future<void> saveUserFont(String fileName, Uint8List bytes) async {
+    final dir = await _fontDir();
+    await File('${dir.path}$_sep$fileName').writeAsBytes(bytes, flush: true);
+  }
+
+  @override
+  Future<List<PickedFile>> loadUserFonts() async {
+    try {
+      final dir = await _fontDir();
+      return [
+        await for (final e in dir.list())
+          if (e is File)
+            PickedFile(e.uri.pathSegments.last, await e.readAsBytes()),
+      ];
+    } catch (e) {
+      debugPrint('Pixora: could not load user fonts: $e');
+      return const [];
+    }
+  }
+
+  @override
+  Future<void> deleteUserFont(String fileName) async {
+    final f = File('${(await _fontDir()).path}$_sep$fileName');
+    if (await f.exists()) await f.delete();
+  }
+
   /// Converts 0.1-style project folders into `.pixora` files, once.
   Future<void> _migrateLegacy(PixoraFileStore store) async {
     final base = info.isMobile

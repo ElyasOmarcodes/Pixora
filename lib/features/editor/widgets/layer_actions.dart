@@ -18,12 +18,14 @@ class LayerCommands {
   const LayerCommands({
     required this.openPanel,
     required this.editText,
+    required this.pickFont,
     required this.replaceImage,
     required this.runAsync,
   });
 
   final void Function(ToolPanel panel) openPanel;
   final void Function(TextLayer layer) editText;
+  final void Function(TextLayer layer) pickFont;
   final void Function(RasterLayer layer) replaceImage;
 
   /// Runs a slow operation (merge, rasterize) with a progress indicator.
@@ -107,7 +109,8 @@ List<QuickAction> quickActionsFor(
   return switch (layer) {
     TextLayer t => [
       QuickAction(Icons.edit_rounded, l.editText, () => cmd.editText(t)),
-      panel(Icons.font_download_rounded, l.font, ToolPanel.font),
+      QuickAction(Icons.font_download_rounded, l.font, () => cmd.pickFont(t)),
+      panel(Icons.text_format_rounded, l.style, ToolPanel.textStyle),
       panel(Icons.palette_rounded, l.color, ToolPanel.fill),
       panel(Icons.border_color_rounded, l.stroke, ToolPanel.stroke),
       shadow,

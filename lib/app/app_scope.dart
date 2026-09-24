@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import '../core/fonts/font_catalog.dart';
 import '../core/platform/platform_services.dart';
 import '../core/settings/app_settings.dart';
 import '../editor/actions/action_registry.dart';
@@ -12,12 +13,14 @@ class AppServices {
     required this.platform,
     required this.projects,
     required this.actions,
+    required this.fonts,
   });
 
   final AppSettings settings;
   final PlatformServices platform;
   final ProjectRepository projects;
   final ActionRegistry actions;
+  final FontCatalog fonts;
 }
 
 class AppScope extends InheritedWidget {

@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -18,6 +19,7 @@ class PixoraApp extends StatelessWidget {
       builder: (context, _) => MaterialApp(
         title: 'Pixora',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const _PixScrollBehavior(),
         theme: AppTheme.light(settings.accent),
         darkTheme: AppTheme.dark(settings.accent),
         themeMode: settings.themeMode,
@@ -65,4 +67,18 @@ class _CupertinoFallbackDelegate
 
   @override
   bool shouldReload(_CupertinoFallbackDelegate old) => false;
+}
+
+/// Lets toolbars and lists be dragged with a mouse or trackpad too (not
+/// only touch), which is how PixelLab-style strips are used on desktop.
+class _PixScrollBehavior extends MaterialScrollBehavior {
+  const _PixScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
 }

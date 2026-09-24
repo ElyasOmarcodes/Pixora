@@ -136,6 +136,22 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const _kRecentFonts = 'recentFonts';
+  static const _kFavoriteFonts = 'favoriteFonts';
+
+  /// Most recently used font families, newest first.
+  List<String> get recentFonts => _prefs.getStringList(_kRecentFonts) ?? [];
+  set recentFonts(List<String> v) {
+    _prefs.setStringList(_kRecentFonts, v);
+    notifyListeners();
+  }
+
+  List<String> get favoriteFonts => _prefs.getStringList(_kFavoriteFonts) ?? [];
+  set favoriteFonts(List<String> v) {
+    _prefs.setStringList(_kFavoriteFonts, v);
+    notifyListeners();
+  }
+
   void _setBool(String key, bool v) {
     _prefs.setBool(key, v);
     notifyListeners();
