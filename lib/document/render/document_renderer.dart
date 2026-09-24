@@ -324,13 +324,15 @@ class DocumentRenderer {
     double scale = 1,
     double? maxSide,
     Color? matte,
+    int? width,
+    int? height,
   }) async {
     await assets.decodeAll(doc.referencedAssets);
     final longest = math.max(doc.width, doc.height);
     var s = scale;
     if (maxSide != null) s = math.min(s, maxSide / longest);
-    final w = math.max(1, (doc.width * s).round());
-    final h = math.max(1, (doc.height * s).round());
+    final w = width ?? math.max(1, (doc.width * s).round());
+    final h = height ?? math.max(1, (doc.height * s).round());
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     if (matte != null) {

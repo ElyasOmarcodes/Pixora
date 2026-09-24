@@ -147,6 +147,10 @@ abstract final class PixoraFormat {
     'effects': 'effect',
     'colors': 'color',
     'stops': 'stop',
+    'vertical': 'x',
+    'horizontal': 'y',
+    'xLines': 'x',
+    'yLines': 'y',
   };
 
   /// Keys written as child text elements instead of attributes (free text

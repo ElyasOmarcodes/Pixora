@@ -6,11 +6,25 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../editor/tools/editor_tool.dart';
+import '../../../editor/tools/grid_tool.dart';
 import '../../../ui/widgets/checkerboard.dart';
 
-/// Lets the page ask the canvas to re-fit (e.g. from a toolbar button).
+/// Lets the page drive the canvas viewport (fit, zoom presets) and read
+/// the current zoom level.
 class CanvasViewController extends ChangeNotifier {
-  void fit() => notifyListeners();
+  _CanvasViewState? _state;
+
+  /// Current zoom (1 = 100 %, one canvas pixel per logical pixel).
+  double get zoom => _state?._vp.scale ?? 1;
+
+  void fit() => _state?._animateFit();
+
+  /// Zooms to [scale] around the view centre (1 = 100 %).
+  void zoomTo(double scale) => _state?._animateZoom(scale);
+
+  void zoomBy(double factor) => zoomTo(zoom * factor);
+
+  void _changed() => notifyListeners();
 }
 
 /// The interactive canvas: renders the document, owns the viewport
@@ -20,15 +34,15 @@ class CanvasView extends StatefulWidget {
     super.key,
     required this.editor,
     required this.tool,
-    required this.snapping,
-    required this.showGrid,
+    required this.snap,
+    this.showRulers = false,
     this.controller,
   });
 
   final EditorController editor;
   final EditorTool tool;
-  final bool snapping;
-  final bool showGrid;
+  final SnapOptions snap;
+  final bool showRulers;
   final CanvasViewController? controller;
 
   @override
@@ -60,24 +74,34 @@ class _CanvasViewState extends State<CanvasView>
 
   final ValueNotifier<int> _overlayTick = ValueNotifier(0);
 
+  /// Guide being dragged out of a ruler: (vertical?, doc position).
+  final ValueNotifier<(bool, double)?> _pendingGuide = ValueNotifier(null);
+
   @override
   void initState() {
     super.initState();
-    widget.controller?.addListener(_animateFit);
+    widget.controller?._state = this;
   }
 
   @override
   void didUpdateWidget(CanvasView old) {
     super.didUpdateWidget(old);
     if (old.controller != widget.controller) {
-      old.controller?.removeListener(_animateFit);
-      widget.controller?.addListener(_animateFit);
+      old.controller?._state = null;
+      widget.controller?._state = this;
     }
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    widget.controller?._changed();
+  }
+
+  @override
   void dispose() {
-    widget.controller?.removeListener(_animateFit);
+    if (widget.controller?._state == this) widget.controller?._state = null;
+    _pendingGuide.dispose();
     _anim.dispose();
     _overlayTick.dispose();
     super.dispose();
@@ -88,7 +112,7 @@ class _CanvasViewState extends State<CanvasView>
     return ToolContext(
       editor: widget.editor,
       viewport: _vp,
-      snapping: widget.snapping,
+      snap: widget.snap,
       style: ToolStyle(
         selection: pix.selection,
         guide: pix.guide,
@@ -126,6 +150,18 @@ class _CanvasViewState extends State<CanvasView>
     _animToScale = s;
     _animToOffset = o;
     _userNavigated = false;
+    _anim.forward(from: 0);
+  }
+
+  void _animateZoom(double scale) {
+    final target = scale.clamp(0.02, 64.0);
+    final center = Offset(_size.width / 2, _size.height / 2);
+    final docPt = _vp.toDoc(center);
+    _animFromScale = _vp.scale;
+    _animFromOffset = _vp.offset;
+    _animToScale = target;
+    _animToOffset = center - docPt * target;
+    _userNavigated = true;
     _anim.forward(from: 0);
   }
 
@@ -236,7 +272,7 @@ class _CanvasViewState extends State<CanvasView>
           _docSize = docSize;
           if (first || docChanged || !_userNavigated) _fitNow();
         }
-        return ClipRect(
+        final canvasWidget = ClipRect(
           child: ColoredBox(
             color: pix.canvasBackdrop,
             child: Listener(
@@ -265,7 +301,7 @@ class _CanvasViewState extends State<CanvasView>
                         editor: widget.editor,
                         tool: widget.tool,
                         ctx: _ctx,
-                        showGrid: widget.showGrid,
+                        pendingGuide: _pendingGuide,
                         tick: _overlayTick,
                         scale: _vp.scale,
                         offset: _vp.offset,
@@ -277,9 +313,193 @@ class _CanvasViewState extends State<CanvasView>
             ),
           ),
         );
+        if (!widget.showRulers) return canvasWidget;
+        return Stack(
+          children: [
+            Positioned.fill(child: canvasWidget),
+            Positioned(
+              left: _Ruler.thickness,
+              right: 0,
+              top: 0,
+              height: _Ruler.thickness,
+              child: _ruler(horizontal: true),
+            ),
+            Positioned(
+              left: 0,
+              top: _Ruler.thickness,
+              bottom: 0,
+              width: _Ruler.thickness,
+              child: _ruler(horizontal: false),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              width: _Ruler.thickness,
+              height: _Ruler.thickness,
+              child: ColoredBox(
+                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+              ),
+            ),
+          ],
+        );
       },
     );
   }
+
+  /// A ruler strip. Dragging out of the top ruler creates a horizontal
+  /// guide, out of the left ruler a vertical one (like Photoshop); drop it
+  /// outside the canvas to cancel.
+  Widget _ruler({required bool horizontal}) {
+    double docPos(Offset local) {
+      // Convert from ruler-local to canvas coordinates.
+      final canvasPt = horizontal
+          ? local + const Offset(_Ruler.thickness, 0)
+          : local + const Offset(0, _Ruler.thickness);
+      final d = _vp.toDoc(canvasPt);
+      return horizontal ? d.dy : d.dx;
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (d) =>
+          _pendingGuide.value = (!horizontal, docPos(d.localPosition)),
+      onPanUpdate: (d) =>
+          _pendingGuide.value = (!horizontal, docPos(d.localPosition)),
+      onPanEnd: (_) {
+        final g = _pendingGuide.value;
+        _pendingGuide.value = null;
+        if (g == null) return;
+        final (vertical, pos) = g;
+        final doc = widget.editor.document;
+        final limit = vertical ? doc.width : doc.height;
+        if (pos < 0 || pos > limit) return;
+        widget.editor.updateGuides(
+          (x) => vertical
+              ? x.copyWith(vertical: [...x.vertical, pos.roundToDouble()])
+              : x.copyWith(horizontal: [...x.horizontal, pos.roundToDouble()]),
+        );
+      },
+      child: MouseRegion(
+        cursor: horizontal
+            ? SystemMouseCursors.resizeUpDown
+            : SystemMouseCursors.resizeLeftRight,
+        child: CustomPaint(
+          painter: _Ruler(
+            horizontal: horizontal,
+            scale: _vp.scale,
+            origin: horizontal
+                ? _vp.offset.dx - _Ruler.thickness
+                : _vp.offset.dy - _Ruler.thickness,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            background: Theme.of(context).colorScheme.surfaceContainerHigh,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Ruler with tick marks in canvas pixels.
+class _Ruler extends CustomPainter {
+  _Ruler({
+    required this.horizontal,
+    required this.scale,
+    required this.origin,
+    required this.color,
+    required this.background,
+  });
+
+  static const double thickness = 22;
+
+  final bool horizontal;
+  final double scale;
+
+  /// Screen position (along the ruler) of canvas coordinate 0.
+  final double origin;
+  final Color color;
+  final Color background;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = background);
+    final length = horizontal ? size.width : size.height;
+    // Pick a step giving labels at least ~64 px apart.
+    const steps = [
+      1,
+      2,
+      5,
+      10,
+      20,
+      25,
+      50,
+      100,
+      200,
+      250,
+      500,
+      1000,
+      2000,
+      5000,
+    ];
+    final step = steps.firstWhere((s) => s * scale >= 64, orElse: () => 10000);
+    final minor = step / 5;
+    final start = ((-origin) / scale / minor).floor() * minor;
+    final tick = Paint()
+      ..color = color.withValues(alpha: 0.6)
+      ..strokeWidth = 1;
+    for (var v = start; (v * scale + origin) <= length; v += minor) {
+      final pos = v * scale + origin;
+      if (pos < 0) continue;
+      final major = (v / step).roundToDouble() == v / step;
+      final len = major ? thickness * 0.55 : thickness * 0.25;
+      if (horizontal) {
+        canvas.drawLine(
+          Offset(pos, thickness),
+          Offset(pos, thickness - len),
+          tick,
+        );
+      } else {
+        canvas.drawLine(
+          Offset(thickness, pos),
+          Offset(thickness - len, pos),
+          tick,
+        );
+      }
+      if (major) {
+        final tp = TextPainter(
+          text: TextSpan(
+            text: v.round().toString(),
+            style: TextStyle(fontSize: 9, color: color),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        if (horizontal) {
+          tp.paint(canvas, Offset(pos + 2, 1));
+        } else {
+          canvas
+            ..save()
+            ..translate(1, pos + 2 + tp.width)
+            ..rotate(-math.pi / 2);
+          tp.paint(canvas, Offset.zero);
+          canvas.restore();
+        }
+        tp.dispose();
+      }
+    }
+    canvas.drawLine(
+      horizontal ? Offset(0, size.height - 0.5) : Offset(size.width - 0.5, 0),
+      horizontal
+          ? Offset(size.width, size.height - 0.5)
+          : Offset(size.width - 0.5, size.height),
+      Paint()..color = color.withValues(alpha: 0.3),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_Ruler old) =>
+      old.scale != scale ||
+      old.origin != origin ||
+      old.color != color ||
+      old.background != background;
 }
 
 class _DocumentPainter extends CustomPainter {
@@ -338,42 +558,39 @@ class _OverlayPainter extends CustomPainter {
     required this.editor,
     required this.tool,
     required this.ctx,
-    required this.showGrid,
+    required this.pendingGuide,
     required ValueNotifier<int> tick,
     required this.scale,
     required this.offset,
-  }) : super(repaint: Listenable.merge([editor, tick]));
+  }) : super(repaint: Listenable.merge([editor, tick, pendingGuide]));
 
   final EditorController editor;
   final EditorTool tool;
   final ToolContext ctx;
-  final bool showGrid;
+  final ValueNotifier<(bool, double)?> pendingGuide;
   final double scale;
   final Offset offset;
 
   @override
   void paint(Canvas canvas, Size size) {
     final doc = editor.document;
-    if (showGrid) {
-      final r = Rect.fromLTWH(
-        offset.dx,
-        offset.dy,
-        doc.width * scale,
-        doc.height * scale,
-      );
+    paintGuides(canvas, doc, ctx.viewport);
+    final pending = pendingGuide.value;
+    if (pending != null) {
+      final (vertical, pos) = pending;
+      final vp = ctx.viewport;
+      final inside = vertical
+          ? pos >= 0 && pos <= doc.width
+          : pos >= 0 && pos <= doc.height;
       final p = Paint()
-        ..color = Colors.white.withValues(alpha: 0.55)
-        ..strokeWidth = 1;
-      final shadow = Paint()
-        ..color = Colors.black.withValues(alpha: 0.25)
-        ..strokeWidth = 2.5;
-      for (var i = 1; i < 3; i++) {
-        final x = r.left + r.width * i / 3, y = r.top + r.height * i / 3;
-        for (final paint in [shadow, p]) {
-          canvas
-            ..drawLine(Offset(x, r.top), Offset(x, r.bottom), paint)
-            ..drawLine(Offset(r.left, y), Offset(r.right, y), paint);
-        }
+        ..color = inside ? const Color(0xFF00C2FF) : const Color(0x8800C2FF)
+        ..strokeWidth = 1.5;
+      if (vertical) {
+        final x = vp.toScreen(Offset(pos, 0)).dx;
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+      } else {
+        final y = vp.toScreen(Offset(0, pos)).dy;
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
       }
     }
     tool.paintOverlay(canvas, size, ctx);
@@ -381,8 +598,5 @@ class _OverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_OverlayPainter old) =>
-      old.scale != scale ||
-      old.offset != offset ||
-      old.showGrid != showGrid ||
-      old.tool != tool;
+      old.scale != scale || old.offset != offset || old.tool != tool;
 }

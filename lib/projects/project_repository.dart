@@ -83,7 +83,20 @@ class ProjectRepository extends ChangeNotifier {
     height: src.height,
     background: src.background,
     layers: src.layers,
+    guides: src.guides,
   );
+
+  /// Saves [doc] as a brand-new project (new id, [name]) and returns its id.
+  Future<String> saveAsCopy(
+    PixDocument doc,
+    Map<String, Uint8List> assets, {
+    required String name,
+    Uint8List? thumbnail,
+  }) async {
+    final copy = _withNewId(doc, name: name);
+    await save(copy, assets, thumbnail: thumbnail);
+    return copy.id;
+  }
 }
 
 Uint8List _encode((PixDocument, Map<String, Uint8List>, Uint8List?) a) =>

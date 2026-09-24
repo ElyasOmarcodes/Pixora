@@ -44,19 +44,49 @@ class ToolStyle {
   final Color handleFill;
 }
 
+/// What moving layers snap to.
+class SnapOptions {
+  const SnapOptions({
+    this.enabled = true,
+    this.canvas = true,
+    this.guides = true,
+    this.layers = true,
+    this.angles = true,
+  });
+
+  static const SnapOptions off = SnapOptions(enabled: false);
+
+  final bool enabled;
+
+  /// Canvas edges and centre.
+  final bool canvas;
+
+  /// Ruler guides and (unrotated) grid lines.
+  final bool guides;
+
+  /// Smart guides: edges and centres of other layers.
+  final bool layers;
+
+  /// 45° rotation steps.
+  final bool angles;
+
+  bool get positions => enabled && (canvas || guides || layers);
+  bool get rotation => enabled && angles;
+}
+
 /// What a tool receives for every event.
 class ToolContext {
   const ToolContext({
     required this.editor,
     required this.viewport,
-    required this.snapping,
+    required this.snap,
     required this.style,
     required this.requestRepaint,
   });
 
   final EditorController editor;
   final CanvasViewport viewport;
-  final bool snapping;
+  final SnapOptions snap;
   final ToolStyle style;
   final void Function() requestRepaint;
 }

@@ -66,6 +66,7 @@ class TextLayoutCache {
       l.strokeWidth,
       l.strokeColor,
       l.underline,
+      l.boxWidth,
     );
     final hit = _cache.remove(key);
     if (hit != null) {
@@ -103,11 +104,15 @@ class TextLayoutCache {
       color: foreground == null ? l.fill.primary : null,
     );
 
-    TextPainter make(Paint? fg) => TextPainter(
-      text: TextSpan(text: l.text.isEmpty ? ' ' : l.text, style: style(fg)),
-      textDirection: dir,
-      textAlign: align,
-    )..layout();
+    TextPainter make(Paint? fg) =>
+        TextPainter(
+          text: TextSpan(text: l.text.isEmpty ? ' ' : l.text, style: style(fg)),
+          textDirection: dir,
+          textAlign: align,
+        )..layout(
+          minWidth: l.boxWidth ?? 0,
+          maxWidth: l.boxWidth ?? double.infinity,
+        );
 
     // Gradient fills need the laid-out size first, so lay out once plainly.
     var fill = make(null);

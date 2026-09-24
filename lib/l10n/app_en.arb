@@ -227,5 +227,55 @@
         "type": "String"
       }
     }
+  },
+  "allSaved": "All changes saved",
+  "unsavedChanges": "Unsaved changes",
+  "clearGuides": "Clear guides",
+  "columns": "Columns",
+  "rows": "Rows",
+  "dimensions": "Dimensions",
+  "editLines": "Edit lines",
+  "evenSpacing": "Even spacing",
+  "gridEditHint": "Tap a line to select it, drag to move it, drag it off the canvas or tap ✕ to delete. Layers can’t be picked in this mode.",
+  "gridSettings": "Grid settings",
+  "showGrid": "Show grid",
+  "handTool": "Hand (pan & zoom)",
+  "moveTool": "Move & select",
+  "imageFormat": "Format",
+  "pngTransparent": "Keeps transparency",
+  "jpgBackground": "Smaller, with background",
+  "keepRatio": "Keep ratio",
+  "longPressSettings": "Long-press for settings",
+  "project": "Project",
+  "quickShare": "Quick share",
+  "shareHint": "Send the image straight to an app",
+  "rulers": "Rulers",
+  "saveAsCopy": "Save as new project",
+  "saveChanges": "Save changes",
+  "saveImage": "Save image",
+  "sizeCustom": "Custom",
+  "sizeOriginal": "Original",
+  "sizeLow": "Low",
+  "sizeMedium": "Medium",
+  "sizeHigh": "High",
+  "sizeVeryHigh": "Very high",
+  "sizeMax": "Maximum",
+  "snap": "Snap",
+  "snapTo": "Snap to",
+  "snapCanvas": "Canvas edges & center",
+  "snapGuides": "Guides & grid",
+  "snapLayers": "Other layers (smart guides)",
+  "snapAngles": "Rotation (45° steps)",
+  "snapSettings": "Snap settings",
+  "zoom": "Zoom",
+  "zoomIn": "Zoom in",
+  "zoomOut": "Zoom out",
+  "projectSavedAs": "Saved as “{name}”",
+  "@projectSavedAs": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

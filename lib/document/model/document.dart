@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../core/utils/ids.dart';
 import '../../core/utils/json.dart';
 import 'fill.dart';
+import 'guides.dart';
 import 'layer.dart';
 
 /// The whole editable design: canvas size, background and the layer stack.
@@ -20,8 +21,10 @@ class PixDocument {
     required this.height,
     this.background,
     List<Layer> layers = const [],
+    CanvasGuides? guides,
   }) : id = id ?? newId('doc'),
-       layers = List.unmodifiable(layers);
+       layers = List.unmodifiable(layers),
+       guides = guides ?? CanvasGuides.none;
 
   /// Bumped whenever the on-disk format changes incompatibly; readers
   /// migrate older files forward in [fromJson]. 2 = groups + clipping.
@@ -36,6 +39,9 @@ class PixDocument {
   final PixFill? background;
   final List<Layer> layers;
 
+  /// Grid and ruler guides (layout aids; never rendered into exports).
+  final CanvasGuides guides;
+
   Size get size => Size(width, height);
   Rect get bounds => Offset.zero & size;
   Offset get center => Offset(width / 2, height / 2);
@@ -47,6 +53,7 @@ class PixDocument {
     PixFill? background,
     bool clearBackground = false,
     List<Layer>? layers,
+    CanvasGuides? guides,
   }) => PixDocument(
     id: id,
     name: name ?? this.name,
@@ -54,6 +61,7 @@ class PixDocument {
     height: height ?? this.height,
     background: clearBackground ? null : (background ?? this.background),
     layers: layers ?? this.layers,
+    guides: guides ?? this.guides,
   );
 
   // ---------------------------------------------------------------- queries
@@ -222,6 +230,7 @@ class PixDocument {
     'height': height,
     if (background != null) 'background': background!.toJson(),
     'layers': [for (final l in layers) l.toJson()],
+    if (!guides.isEmpty) 'guides': guides.toJson(),
   };
 
   static PixDocument fromJson(Json m) => PixDocument(
@@ -236,6 +245,7 @@ class PixDocument {
       for (final l in readList(m['layers']))
         if (l is Map) ?Layer.fromJson(readMap(l)),
     ],
+    guides: m['guides'] == null ? null : CanvasGuides.fromJson(m['guides']),
   );
 
   @override
@@ -246,9 +256,17 @@ class PixDocument {
       other.width == width &&
       other.height == height &&
       other.background == background &&
+      other.guides == guides &&
       listEquals(other.layers, layers);
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, width, height, background, Object.hashAll(layers));
+  int get hashCode => Object.hash(
+    id,
+    name,
+    width,
+    height,
+    background,
+    guides,
+    Object.hashAll(layers),
+  );
 }

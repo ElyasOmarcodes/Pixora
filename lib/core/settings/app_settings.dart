@@ -45,6 +45,11 @@ class AppSettings extends ChangeNotifier {
   static const _kExportFormat = 'exportFormat';
   static const _kExportQuality = 'exportQuality';
   static const _kStorageRoot = 'storageRoot';
+  static const _kSnapCanvas = 'snapCanvas';
+  static const _kSnapGuides = 'snapGuides';
+  static const _kSnapLayers = 'snapLayers';
+  static const _kSnapAngles = 'snapAngles';
+  static const _kRulers = 'rulers';
 
   /// `null` follows the system language.
   Locale? get locale {
@@ -88,6 +93,24 @@ class AppSettings extends ChangeNotifier {
   /// Snap layers to the canvas centre and edges while dragging.
   bool get snapping => _prefs.getBool(_kSnap) ?? true;
   set snapping(bool v) => _setBool(_kSnap, v);
+
+  /// What layers snap to while dragging (when [snapping] is on).
+  bool get snapCanvas => _prefs.getBool(_kSnapCanvas) ?? true;
+  set snapCanvas(bool v) => _setBool(_kSnapCanvas, v);
+
+  bool get snapGuides => _prefs.getBool(_kSnapGuides) ?? true;
+  set snapGuides(bool v) => _setBool(_kSnapGuides, v);
+
+  /// Smart guides: other layers' edges and centres.
+  bool get snapLayers => _prefs.getBool(_kSnapLayers) ?? true;
+  set snapLayers(bool v) => _setBool(_kSnapLayers, v);
+
+  /// Rotation snaps to 45° steps.
+  bool get snapAngles => _prefs.getBool(_kSnapAngles) ?? true;
+  set snapAngles(bool v) => _setBool(_kSnapAngles, v);
+
+  bool get showRulers => _prefs.getBool(_kRulers) ?? false;
+  set showRulers(bool v) => _setBool(_kRulers, v);
 
   /// 'png' or 'jpg'.
   String get exportFormat => _prefs.getString(_kExportFormat) ?? 'png';

@@ -10,6 +10,7 @@ import '../../document/model/document.dart';
 import '../../document/model/layer.dart';
 import '../../editor/editor_controller.dart';
 import '../../editor/tools/editor_tool.dart';
+import '../../editor/tools/grid_tool.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
 import '../../projects/pixora_format.dart';
@@ -22,6 +23,7 @@ import 'editor_scope.dart';
 import 'panels/tool_panel_host.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/context_dock.dart';
+import 'widgets/editor_top_bar.dart';
 import 'widgets/export_sheet.dart';
 import 'widgets/layer_actions.dart';
 import 'widgets/layers_panel.dart';
@@ -41,11 +43,19 @@ class _EditorPageState extends State<EditorPage> {
   late final EditorController _editor;
   final EditorUiState _ui = EditorUiState();
   final CanvasViewController _canvas = CanvasViewController();
-  late final EditorTool _tool = TransformTool(
+  late final TransformTool _moveTool = TransformTool(
     onEditRequest: (l) {
       if (l is TextLayer) _editText(l);
     },
   );
+  final HandTool _handTool = HandTool();
+  final GridTool _gridTool = GridTool();
+
+  EditorTool get _tool => switch (_ui.mode) {
+    ToolMode.move => _moveTool,
+    ToolMode.hand => _handTool,
+    ToolMode.grid => _gridTool,
+  };
 
   Timer? _saveTimer;
   int _savedRevision = -1;
@@ -81,8 +91,11 @@ class _EditorPageState extends State<EditorPage> {
   void _onEditorChanged() {
     if (_editor.selectedId != _lastSelection) {
       _lastSelection = _editor.selectedId;
+      final p = _ui.panel;
       final keep =
-          _ui.panel == ToolPanel.background && _editor.selectedId == null;
+          p == ToolPanel.grid ||
+          p == ToolPanel.snap ||
+          (p == ToolPanel.background && _editor.selectedId == null);
       if (!keep) _ui.panel = null;
     }
     if (_services.settings.autosave && _dirty && !_editor.isPreviewing) {
@@ -205,6 +218,63 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  void _openSaveSheet() => unawaited(
+    showSaveSheet(
+      context,
+      saved: !_dirty && _savedRevision >= 0,
+      onSaveChanges: () => unawaited(_saveNow()),
+      onSaveAsCopy: () => unawaited(_saveAsCopy()),
+      onExportProject: () => unawaited(_exportProject()),
+      onSaveImage: () => unawaited(showExportSheet(context, _editor)),
+    ),
+  );
+
+  Future<void> _saveNow() async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    _saveTimer?.cancel();
+    if (_editor.isPreviewing) _editor.commit('edit');
+    await _save();
+    messenger.showSnackBar(SnackBar(content: Text(l.allSaved)));
+  }
+
+  Future<void> _saveAsCopy() async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final name = await showTextPrompt(
+      context,
+      title: l.saveAsCopy,
+      label: l.projectName,
+      initial: '${_editor.document.name} 2',
+    );
+    if (name == null || name.trim().isEmpty) return;
+    final doc = _editor.document;
+    final thumb = await _editor.renderer.renderPng(doc, maxSide: 420);
+    await _services.projects.saveAsCopy(
+      doc,
+      _editor.assets.allBytes,
+      name: name.trim(),
+      thumbnail: thumb,
+    );
+    messenger.showSnackBar(
+      SnackBar(content: Text(l.projectSavedAs(name.trim()))),
+    );
+  }
+
+  void _deleteSelectedGuide() {
+    final ref = _gridTool.selected;
+    if (ref == null) return;
+    _gridTool.selected = null;
+    _editor.updateGuides((_) => GuideGeometry.remove(_editor.document, ref));
+  }
+
+  void _toggleRulers() =>
+      _services.settings.showRulers = !_services.settings.showRulers;
+
+  void _toggleGridVisible() => _editor.updateGuides(
+    (g) => g.copyWith(grid: g.grid.copyWith(visible: !g.grid.visible)),
+  );
+
   Future<void> _exportProject() async {
     final platform = _services.platform;
     final doc = _editor.document;
@@ -255,7 +325,7 @@ class _EditorPageState extends State<EditorPage> {
       mod(LogicalKeyboardKey.keyZ): e.undo,
       mod(LogicalKeyboardKey.keyZ, shift: true): e.redo,
       mod(LogicalKeyboardKey.keyY): e.redo,
-      mod(LogicalKeyboardKey.keyS): () => unawaited(_save()),
+      mod(LogicalKeyboardKey.keyS): () => unawaited(_saveNow()),
       mod(LogicalKeyboardKey.keyS, shift: true): () =>
           unawaited(showExportSheet(context, e)),
       mod(LogicalKeyboardKey.keyJ): e.duplicateSelected,
@@ -282,11 +352,27 @@ class _EditorPageState extends State<EditorPage> {
       mod(LogicalKeyboardKey.bracketLeft, shift: true): () =>
           withSel((id) => e.arrange(id, LayerArrange.back)),
       mod(LogicalKeyboardKey.digit0): _canvas.fit,
-      const SingleActivator(LogicalKeyboardKey.delete): e.deleteSelected,
-      const SingleActivator(LogicalKeyboardKey.backspace): e.deleteSelected,
+      mod(LogicalKeyboardKey.digit1): () => _canvas.zoomTo(1),
+      mod(LogicalKeyboardKey.equal): () => _canvas.zoomBy(1.25),
+      mod(LogicalKeyboardKey.add): () => _canvas.zoomBy(1.25),
+      mod(LogicalKeyboardKey.minus): () => _canvas.zoomBy(0.8),
+      mod(LogicalKeyboardKey.quote): _toggleGridVisible,
+      mod(LogicalKeyboardKey.keyR): _toggleRulers,
+      mod(LogicalKeyboardKey.semicolon, shift: true): () =>
+          _services.settings.snapping = !_services.settings.snapping,
+      const SingleActivator(LogicalKeyboardKey.keyV): () =>
+          _ui.mode = ToolMode.move,
+      const SingleActivator(LogicalKeyboardKey.keyH): () =>
+          _ui.mode = ToolMode.hand,
+      const SingleActivator(LogicalKeyboardKey.delete): _deleteKey,
+      const SingleActivator(LogicalKeyboardKey.backspace): _deleteKey,
       const SingleActivator(LogicalKeyboardKey.escape): () {
         _ui.panel = null;
-        e.deselect();
+        if (_ui.mode != ToolMode.move) {
+          _ui.mode = ToolMode.move;
+        } else {
+          e.deselect();
+        }
       },
       for (final (k, dx, dy) in [
         (LogicalKeyboardKey.arrowLeft, -1.0, 0.0),
@@ -299,6 +385,14 @@ class _EditorPageState extends State<EditorPage> {
             e.nudgeSelection(dx * 10, dy * 10),
       },
     };
+  }
+
+  void _deleteKey() {
+    if (_ui.mode == ToolMode.grid) {
+      _deleteSelectedGuide();
+    } else if (_ui.mode == ToolMode.move) {
+      _editor.deleteSelected();
+    }
   }
 
   // -------------------------------------------------------------- build
@@ -327,18 +421,14 @@ class _EditorPageState extends State<EditorPage> {
                     SafeArea(
                       child: Column(
                         children: [
-                          _TopBar(
+                          EditorTopBar(
                             editor: _editor,
                             ui: _ui,
+                            settings: _services.settings,
+                            canvas: _canvas,
                             wide: wide,
                             saved: !_dirty,
-                            onBack: _saveAndExit,
-                            onRename: _renameDocument,
-                            onFit: _canvas.fit,
-                            onExport: () => showExportSheet(context, _editor),
-                            onResize: _resizeCanvas,
-                            onSave: _save,
-                            onExportProject: _exportProject,
+                            actions: _topBarActions,
                           ),
                           Expanded(
                             child: wide
@@ -359,13 +449,34 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
-  Widget _canvasView() => CanvasView(
-    editor: _editor,
-    tool: _tool,
-    snapping: _services.settings.snapping,
-    showGrid: _ui.showGrid,
-    controller: _canvas,
+  late final TopBarActions _topBarActions = TopBarActions(
+    back: () => unawaited(_saveAndExit()),
+    rename: () => unawaited(_renameDocument()),
+    save: _openSaveSheet,
+    exportImage: () => unawaited(showExportSheet(context, _editor)),
+    resizeCanvas: () => unawaited(_resizeCanvas()),
+    exportProject: () => unawaited(_exportProject()),
   );
+
+  Widget _canvasView() {
+    final s = _services.settings;
+    return ListenableBuilder(
+      listenable: s,
+      builder: (context, _) => CanvasView(
+        editor: _editor,
+        tool: _tool,
+        snap: SnapOptions(
+          enabled: s.snapping,
+          canvas: s.snapCanvas,
+          guides: s.snapGuides,
+          layers: s.snapLayers,
+          angles: s.snapAngles,
+        ),
+        showRulers: s.showRulers,
+        controller: _canvas,
+      ),
+    );
+  }
 
   ContextDock _dock({bool vertical = false}) => ContextDock(
     editor: _editor,
@@ -389,7 +500,7 @@ class _EditorPageState extends State<EditorPage> {
           child: Stack(
             children: [
               Positioned.fill(child: _canvasView()),
-              if (_editor.document.layers.isEmpty)
+              if (_editor.document.layers.isEmpty && _ui.panel == null)
                 Positioned(
                   left: 24,
                   right: 24,
@@ -552,195 +663,6 @@ class _EditorPageState extends State<EditorPage> {
           ),
         ),
       ],
-    );
-  }
-}
-
-enum _MoreAction { grid, fit, resize, save, exportProject }
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.editor,
-    required this.ui,
-    required this.wide,
-    required this.saved,
-    required this.onBack,
-    required this.onRename,
-    required this.onFit,
-    required this.onExport,
-    required this.onResize,
-    required this.onSave,
-    required this.onExportProject,
-  });
-
-  final VoidCallback onExportProject;
-  final EditorController editor;
-  final EditorUiState ui;
-  final bool wide;
-  final bool saved;
-  final VoidCallback onBack;
-  final VoidCallback onRename;
-  final VoidCallback onFit;
-  final VoidCallback onExport;
-  final VoidCallback onResize;
-  final VoidCallback onSave;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-            onPressed: onBack,
-            icon: const BackButtonIcon(),
-          ),
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(PixTokens.radiusS),
-              onTap: onRename,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      editor.document.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        AnimatedSwitcher(
-                          duration: PixTokens.fast,
-                          child: Icon(
-                            saved
-                                ? Icons.cloud_done_rounded
-                                : Icons.cloud_upload_outlined,
-                            key: ValueKey(saved),
-                            size: 13,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '${editor.document.width.round()} × ${editor.document.height.round()}',
-                            textDirection: TextDirection.ltr,
-                            maxLines: 1,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: l.undo,
-            onPressed: editor.canUndo ? editor.undo : null,
-            icon: const Icon(Icons.undo_rounded),
-          ),
-          IconButton(
-            tooltip: l.redo,
-            onPressed: editor.canRedo ? editor.redo : null,
-            icon: const Icon(Icons.redo_rounded),
-          ),
-          if (!wide)
-            IconButton(
-              tooltip: l.layers,
-              isSelected: ui.showLayers,
-              onPressed: () => ui.showLayers = !ui.showLayers,
-              icon: const Icon(Icons.layers_outlined),
-              selectedIcon: const Icon(Icons.layers_rounded),
-            ),
-          if (wide) ...[
-            IconButton(
-              tooltip: l.grid,
-              isSelected: ui.showGrid,
-              onPressed: ui.toggleGrid,
-              icon: const Icon(Icons.grid_4x4_rounded),
-            ),
-            IconButton(
-              tooltip: l.fitToScreen,
-              onPressed: onFit,
-              icon: const Icon(Icons.fit_screen_rounded),
-            ),
-          ],
-          PopupMenuButton<_MoreAction>(
-            tooltip: l.more,
-            icon: const Icon(Icons.more_vert_rounded),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(PixTokens.radiusM),
-            ),
-            onSelected: (a) => switch (a) {
-              _MoreAction.grid => ui.toggleGrid(),
-              _MoreAction.fit => onFit(),
-              _MoreAction.resize => onResize(),
-              _MoreAction.save => onSave(),
-              _MoreAction.exportProject => onExportProject(),
-            },
-            itemBuilder: (context) => [
-              if (!wide)
-                CheckedPopupMenuItem(
-                  value: _MoreAction.grid,
-                  checked: ui.showGrid,
-                  child: Text(l.grid),
-                ),
-              if (!wide)
-                PopupMenuItem(
-                  value: _MoreAction.fit,
-                  child: ListTile(
-                    leading: const Icon(Icons.fit_screen_rounded),
-                    title: Text(l.fitToScreen),
-                  ),
-                ),
-              PopupMenuItem(
-                value: _MoreAction.resize,
-                child: ListTile(
-                  leading: const Icon(Icons.aspect_ratio_rounded),
-                  title: Text(l.canvasSize),
-                ),
-              ),
-              PopupMenuItem(
-                value: _MoreAction.save,
-                child: ListTile(
-                  leading: const Icon(Icons.save_rounded),
-                  title: Text(l.save),
-                ),
-              ),
-              PopupMenuItem(
-                value: _MoreAction.exportProject,
-                child: ListTile(
-                  leading: const Icon(Icons.inventory_2_rounded),
-                  title: Text(l.exportProject),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 4),
-          FilledButton.icon(
-            onPressed: onExport,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 42),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-            ),
-            icon: const Icon(Icons.ios_share_rounded, size: 18),
-            label: Text(l.export),
-          ),
-        ],
-      ),
     );
   }
 }

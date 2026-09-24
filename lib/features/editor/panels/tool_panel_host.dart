@@ -6,6 +6,7 @@ import '../../../editor/editor_controller.dart';
 import '../editor_scope.dart';
 import 'adjust_panels.dart';
 import 'canvas_panels.dart';
+import 'guides_panels.dart';
 import 'layout_panels.dart';
 import 'style_panels.dart';
 import 'text_panels.dart';
@@ -35,6 +36,10 @@ class ToolPanelHost extends StatelessWidget {
         );
       case ToolPanel.background:
         return BackgroundPanel(editor: editor);
+      case ToolPanel.grid:
+        return GridPanel(editor: editor, ui: ui);
+      case ToolPanel.snap:
+        return const SnapPanel();
       default:
         break;
     }

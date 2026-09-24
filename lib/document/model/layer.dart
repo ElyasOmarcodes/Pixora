@@ -241,6 +241,7 @@ final class TextLayer extends Layer {
     this.strokeWidth = 0,
     this.strokeColor = const Color(0xFF000000),
     this.underline = false,
+    this.boxWidth,
   }) : fill = fill ?? PixFill.white;
 
   final String text;
@@ -257,6 +258,11 @@ final class TextLayer extends Layer {
   final double strokeWidth;
   final Color strokeColor;
   final bool underline;
+
+  /// Text-box width in layer pixels: text wraps onto more lines to fit and
+  /// the box grows in height as needed. `null` = one line per paragraph
+  /// (the box hugs the text).
+  final double? boxWidth;
 
   @override
   LayerKind get kind => LayerKind.text;
@@ -278,6 +284,8 @@ final class TextLayer extends Layer {
     double? strokeWidth,
     Color? strokeColor,
     bool? underline,
+    double? boxWidth,
+    bool autoWidth = false,
   }) => TextLayer(
     props ?? this.props,
     text: text ?? this.text,
@@ -292,6 +300,7 @@ final class TextLayer extends Layer {
     strokeWidth: strokeWidth ?? this.strokeWidth,
     strokeColor: strokeColor ?? this.strokeColor,
     underline: underline ?? this.underline,
+    boxWidth: autoWidth ? null : (boxWidth ?? this.boxWidth),
   );
 
   @override
@@ -308,6 +317,7 @@ final class TextLayer extends Layer {
     if (strokeWidth > 0) 'strokeWidth': strokeWidth,
     if (strokeWidth > 0) 'strokeColor': writeColor(strokeColor),
     if (underline) 'underline': true,
+    'boxWidth': ?boxWidth,
   };
 
   static TextLayer fromJson(LayerProps props, Json m) => TextLayer(
@@ -324,6 +334,9 @@ final class TextLayer extends Layer {
     strokeWidth: readDouble(m['strokeWidth']),
     strokeColor: readColor(m['strokeColor']),
     underline: readBool(m['underline']),
+    boxWidth: m['boxWidth'] == null
+        ? null
+        : readDouble(m['boxWidth'], 100).clamp(4, 100000).toDouble(),
   );
 
   @override
@@ -341,7 +354,8 @@ final class TextLayer extends Layer {
       other.lineHeight == lineHeight &&
       other.strokeWidth == strokeWidth &&
       other.strokeColor == strokeColor &&
-      other.underline == underline;
+      other.underline == underline &&
+      other.boxWidth == boxWidth;
 
   @override
   int get hashCode => Object.hash(
@@ -358,6 +372,7 @@ final class TextLayer extends Layer {
     strokeWidth,
     strokeColor,
     underline,
+    boxWidth,
   );
 }
 

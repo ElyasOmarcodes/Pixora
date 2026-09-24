@@ -9,6 +9,7 @@ import '../document/effects/effect_registry.dart';
 import '../document/model/document.dart';
 import '../document/model/effect.dart';
 import '../document/model/fill.dart';
+import '../document/model/guides.dart';
 import '../document/model/blend.dart';
 import '../document/model/layer.dart';
 import '../document/model/layer_geometry.dart';
@@ -846,6 +847,16 @@ class EditorController extends ChangeNotifier {
     live ? preview(op) : apply('background', op);
   }
 
+  /// Changes the grid / ruler guides (undoable, like Photoshop guides).
+  void updateGuides(
+    CanvasGuides Function(CanvasGuides g) f, {
+    String label = 'guides',
+    bool live = false,
+  }) {
+    PixDocument op(PixDocument d) => d.copyWith(guides: f(d.guides));
+    live ? preview(op) : apply(label, op);
+  }
+
   void renameDocument(String name) =>
       apply('rename_document', (d) => d.copyWith(name: name));
 
@@ -856,8 +867,18 @@ class EditorController extends ChangeNotifier {
     apply('resize_canvas', (d) {
       final sx = width / d.width, sy = height / d.height;
       final s = math.min(sx, sy);
+      final dx = (width - d.width) / 2, dy = (height - d.height) / 2;
+      final g = d.guides;
+      // Grid lines are fractions and follow the canvas by themselves;
+      // ruler guides are pixels.
+      final guides = g.copyWith(
+        vertical: [for (final x in g.vertical) scaleContent ? x * sx : x + dx],
+        horizontal: [
+          for (final y in g.horizontal) scaleContent ? y * sy : y + dy,
+        ],
+      );
       return d
-          .copyWith(width: width, height: height)
+          .copyWith(width: width, height: height, guides: guides)
           .mapLayers(
             (l) => l is GroupLayer
                 ? l
