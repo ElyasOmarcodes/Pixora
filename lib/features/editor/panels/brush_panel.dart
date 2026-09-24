@@ -239,8 +239,7 @@ class _BrushPreview extends CustomPainter {
       for (var i = 0; i <= 32; i++)
         Offset(
           6 + (size.width - 12) * i / 32,
-          size.height / 2 +
-              size.height * 0.26 * math.sin(i / 32 * 2 * math.pi),
+          size.height / 2 + size.height * 0.26 * math.sin(i / 32 * 2 * math.pi),
         ),
     ];
     paintBrushStroke(

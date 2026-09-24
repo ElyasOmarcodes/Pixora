@@ -468,5 +468,14 @@
   "brushAirbrush": "بخاخ هوائي",
   "brushCalligraphy": "خط",
   "brushSpray": "رذاذ",
-  "brushNeon": "نيون"
+  "brushNeon": "نيون",
+  "copy": "نسخ",
+  "eyedropper": "أداة التقاط اللون",
+  "oneColor": "لون واحد",
+  "angular": "زاوي",
+  "reflected": "منعكس",
+  "addStop": "إضافة لون",
+  "deleteStop": "حذف اللون",
+  "distribute": "توزيع متساوٍ",
+  "location": "الموضع"
 }

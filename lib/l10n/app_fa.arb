@@ -468,5 +468,14 @@
   "brushAirbrush": "ایربراش",
   "brushCalligraphy": "خوشنویسی",
   "brushSpray": "اسپری",
-  "brushNeon": "نئون"
+  "brushNeon": "نئون",
+  "copy": "کپی",
+  "eyedropper": "قطره‌چکان",
+  "oneColor": "تک‌رنگ",
+  "angular": "زاویه‌ای",
+  "reflected": "بازتابی",
+  "addStop": "افزودن رنگ",
+  "deleteStop": "حذف رنگ",
+  "distribute": "توزیع یکسان",
+  "location": "موقعیت"
 }

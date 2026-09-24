@@ -468,5 +468,14 @@
   "brushAirbrush": "ایربرش",
   "brushCalligraphy": "خطاطي",
   "brushSpray": "سپری",
-  "brushNeon": "نیون"
+  "brushNeon": "نیون",
+  "copy": "کاپي",
+  "eyedropper": "رنګ اخیستونکی",
+  "oneColor": "یو رنګ",
+  "angular": "زاویه‌یي",
+  "reflected": "منعکس",
+  "addStop": "رنګ زیاتول",
+  "deleteStop": "رنګ لرې کول",
+  "distribute": "برابر وېشل",
+  "location": "ځای"
 }

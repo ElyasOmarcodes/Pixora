@@ -468,5 +468,14 @@
   "brushAirbrush": "Aerógrafo",
   "brushCalligraphy": "Caligrafía",
   "brushSpray": "Spray",
-  "brushNeon": "Neón"
+  "brushNeon": "Neón",
+  "copy": "Copiar",
+  "eyedropper": "Cuentagotas",
+  "oneColor": "Un color",
+  "angular": "Angular",
+  "reflected": "Reflejado",
+  "addStop": "Añadir color",
+  "deleteStop": "Eliminar color",
+  "distribute": "Repartir",
+  "location": "Posición"
 }

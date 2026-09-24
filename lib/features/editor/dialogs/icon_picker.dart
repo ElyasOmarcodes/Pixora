@@ -219,8 +219,11 @@ class _IconPickerPageState extends State<_IconPickerPage> {
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(12),
-                              child: SvgIcon(
-                                _icons![n]!,
+                              child: _StyledIcon(
+                                name: n,
+                                style: _style,
+                                filled: _filled,
+                                weight: _weight,
                                 color: sel ? scheme.primary : scheme.onSurface,
                               ),
                             ),
@@ -365,6 +368,100 @@ class _IconPickerPageState extends State<_IconPickerPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A grid preview in the chosen style. Shows the bundled outlined icon at
+/// once and swaps in the downloaded style when it arrives, so previews are
+/// always visible — even offline or on a slow connection.
+class _StyledIcon extends StatefulWidget {
+  const _StyledIcon({
+    required this.name,
+    required this.style,
+    required this.filled,
+    required this.weight,
+    required this.color,
+  });
+  final String name;
+  final IconStyle style;
+  final bool filled;
+  final int weight;
+  final Color color;
+
+  @override
+  State<_StyledIcon> createState() => _StyledIconState();
+}
+
+class _StyledIconState extends State<_StyledIcon> {
+  final _catalog = IconCatalog.instance;
+  bool _pending = false;
+
+  String? get _ready => _catalog.cached(
+    widget.name,
+    style: widget.style,
+    filled: widget.filled,
+    weight: widget.weight,
+  );
+
+  int _token = 0;
+
+  void _fetch() {
+    final token = ++_token;
+    if (_ready != null) {
+      _pending = false;
+      return;
+    }
+    final w = widget;
+    _pending = true;
+    _catalog
+        .pathFor(
+          w.name,
+          style: w.style,
+          filled: w.filled,
+          weight: w.weight,
+          wanted: () =>
+              mounted &&
+              widget.name == w.name &&
+              widget.style == w.style &&
+              widget.filled == w.filled &&
+              widget.weight == w.weight,
+        )
+        .then((_) {
+          // Only the latest request decides; older ones just repaint.
+          if (!mounted) return;
+          setState(() {
+            if (token == _token) _pending = false;
+          });
+        });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  @override
+  void didUpdateWidget(_StyledIcon old) {
+    super.didUpdateWidget(old);
+    if (old.name != widget.name ||
+        old.style != widget.style ||
+        old.filled != widget.filled ||
+        old.weight != widget.weight) {
+      _fetch();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ready = _ready;
+    final d = ready ?? _catalog.outlined(widget.name);
+    if (d == null) return const SizedBox.expand();
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: ready == null && _pending ? 0.55 : 1,
+      child: SvgIcon(d, color: widget.color),
     );
   }
 }

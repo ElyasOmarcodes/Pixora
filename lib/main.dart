@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app/app_scope.dart';
 import 'app/pixora_app.dart';
+import 'core/colors/recent_colors.dart';
 import 'core/fonts/font_catalog.dart';
 import 'core/platform/platform_services.dart';
 import 'core/settings/app_settings.dart';
@@ -22,6 +23,7 @@ Future<void> main(List<String> args) async {
   final fonts = FontCatalog(platform, settings);
   // Imported fonts load in the background; text re-lays out when ready.
   fonts.init().ignore();
+  RecentColors.instance.load().ignore();
 
   final services = AppServices(
     settings: settings,

@@ -468,5 +468,14 @@
   "brushAirbrush": "ایئر برش",
   "brushCalligraphy": "خطاطی",
   "brushSpray": "اسپرے",
-  "brushNeon": "نیون"
+  "brushNeon": "نیون",
+  "copy": "کاپی",
+  "eyedropper": "رنگ چننے والا",
+  "oneColor": "ایک رنگ",
+  "angular": "زاویائی",
+  "reflected": "منعکس",
+  "addStop": "رنگ شامل کریں",
+  "deleteStop": "رنگ ہٹائیں",
+  "distribute": "برابر پھیلائیں",
+  "location": "مقام"
 }

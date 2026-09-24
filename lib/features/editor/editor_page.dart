@@ -26,6 +26,7 @@ import 'dialogs/close_dialog.dart';
 import '../../ui/widgets/confirm_dialog.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
+import '../../ui/widgets/color_picker.dart';
 import '../../projects/pixora_format.dart';
 import '../../projects/project_share.dart';
 import '../../projects/project_store.dart';
@@ -235,6 +236,9 @@ class _EditorPageState extends State<EditorPage> {
       ..assets.addAll(widget.project.assets)
       ..addListener(_onEditorChanged);
     _ui.addListener(_syncPen);
+    // The colour pickers' eyedropper samples the current design.
+    Eyedropper.capture = () =>
+        _editor.renderer.renderImage(_editor.document, maxSide: 1600);
     _ui.maskBrush.addListener(_syncPen);
     for (final id in widget.project.document.referencedAssets) {
       unawaited(_editor.assets.decode(id));
@@ -248,6 +252,7 @@ class _EditorPageState extends State<EditorPage> {
 
   @override
   void dispose() {
+    Eyedropper.capture = null;
     _saveTimer?.cancel();
     _editor.removeListener(_onEditorChanged);
     _ui.removeListener(_syncPen);

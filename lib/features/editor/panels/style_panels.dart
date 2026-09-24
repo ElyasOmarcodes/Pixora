@@ -7,8 +7,9 @@ import '../widgets/rich_text_field.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/color_picker.dart';
+import '../../../ui/widgets/fill_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
-import 'canvas_panels.dart';
+import '../../../document/render/document_renderer.dart';
 import 'panel_common.dart';
 
 PixFill? _fillOf(Layer l) => switch (l) {
@@ -120,33 +121,27 @@ class _FillPanelState extends State<FillPanel> {
             fontFamily: text.fontFamily,
             onChanged: (v) => setState(() => _range = v),
           ),
-        PanelLabel(l.solid),
-        ColorStrip(
-          value: r != null
-              ? partColor()
-              : (fill.isGradient ? null : fill.primary),
-          onChanged: (c, {required live}) {
-            if (c == null) return;
-            r != null
-                ? setPart(c, live: live)
-                : set(PixFill.color(c), live: live);
-          },
-        ),
-        if (r == null) ...[
-          PanelLabel(l.gradient),
-          GradientStrip(selected: fill, onSelected: set),
-          if (fill.isGradient && fill.kind == FillKind.linear)
-            PixSlider(
-              label: l.angle,
-              value: fill.angle,
-              min: 0,
-              max: 360,
-              defaultValue: 135,
-              format: (v) => '${v.round()}°',
-              onChanged: (v) => set(fill.copyWith(angle: v), live: true),
-              onChangeEnd: (_) => editor.commit('fill'),
-            ),
-        ] else
+        if (r == null)
+          FillPicker(
+            value: fill,
+            aspect: () {
+              final b = layerLocalRect(layer);
+              return b.height <= 0 ? 1.0 : b.width / b.height;
+            }(),
+            onChanged: (f, {required live}) {
+              if (f != null) set(f, live: live);
+            },
+          ),
+        if (r != null) ...[
+          PanelLabel(l.solid),
+          ColorStrip(
+            value: partColor(),
+            onChanged: (c, {required live}) {
+              if (c != null) setPart(c, live: live);
+            },
+          ),
+        ],
+        if (r != null)
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: Padding(

@@ -4,9 +4,8 @@ import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../ui/widgets/color_picker.dart';
+import '../../../ui/widgets/fill_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
-import 'canvas_panels.dart';
 import 'panel_common.dart';
 
 void _edit(
@@ -238,22 +237,13 @@ class TextBackgroundPanel extends StatelessWidget {
           ),
         ),
         if (bg != null) ...[
-          PanelLabel(l.solid),
-          ColorStrip(
-            value: bg.isGradient ? null : bg.primary,
-            onChanged: (c, {required live}) {
-              if (c != null) {
-                edit(
-                  (t) => t.copyWith(background: PixFill.color(c)),
-                  live: live,
-                );
+          FillPicker(
+            value: bg,
+            onChanged: (f, {required live}) {
+              if (f != null) {
+                edit((t) => t.copyWith(background: f), live: live);
               }
             },
-          ),
-          PanelLabel(l.gradient),
-          GradientStrip(
-            selected: bg,
-            onSelected: (f) => edit((t) => t.copyWith(background: f)),
           ),
           PixSlider(
             label: l.paddingH,

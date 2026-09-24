@@ -468,5 +468,14 @@
   "brushAirbrush": "Hava fırçası",
   "brushCalligraphy": "Hat",
   "brushSpray": "Sprey",
-  "brushNeon": "Neon"
+  "brushNeon": "Neon",
+  "copy": "Kopyala",
+  "eyedropper": "Damlalık",
+  "oneColor": "Tek renk",
+  "angular": "Açısal",
+  "reflected": "Yansıtılmış",
+  "addStop": "Renk ekle",
+  "deleteStop": "Rengi sil",
+  "distribute": "Eşit dağıt",
+  "location": "Konum"
 }
