@@ -350,5 +350,12 @@
   "deleteFontTitle": "إزالة الخط «{name}»؟",
   "deleteLayersTitle": "حذف {count} طبقات؟",
   "guidesCount": "{count} أدلة",
-  "sizeLimit": "يجب أن يكون الحجم بين 1 و{max} بكسل"
+  "sizeLimit": "يجب أن يكون الحجم بين 1 و{max} بكسل",
+  "wholeText": "النص كله",
+  "partOfText": "جزء من النص",
+  "selectPartHint": "حدد الكلمات المراد تنسيقها",
+  "fontForWholeHint": "الخط للنص كله — حدد كلمات لتغييرها فقط",
+  "fontForSelection": "الخط للكلمات المحددة فقط",
+  "resetStyle": "إزالة النمط",
+  "partSelected": "تم تحديد {count} حرفًا"
 }

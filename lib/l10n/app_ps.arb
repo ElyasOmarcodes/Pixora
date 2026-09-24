@@ -350,5 +350,12 @@
   "deleteFontTitle": "«{name}» فونټ لرې شي؟",
   "deleteLayersTitle": "{count} لایرونه ړنګ شي؟",
   "guidesCount": "{count} لارښودونه",
-  "sizeLimit": "اندازه باید له ۱ تر {max} پکسله وي"
+  "sizeLimit": "اندازه باید له ۱ تر {max} پکسله وي",
+  "wholeText": "ټول متن",
+  "partOfText": "د متن یوه برخه",
+  "selectPartHint": "هغه کلمې وټاکئ چې بدلې یې غواړئ",
+  "fontForWholeHint": "فونټ د ټول متن لپاره — یوازې د څو کلمو لپاره یې وټاکئ",
+  "fontForSelection": "فونټ یوازې د ټاکل شویو کلمو لپاره",
+  "resetStyle": "سټایل لرې کول",
+  "partSelected": "{count} توري ټاکل شوي"
 }

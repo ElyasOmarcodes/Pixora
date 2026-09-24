@@ -420,6 +420,52 @@ class _RulerPanelState extends State<RulerPanel> {
                 ],
               ),
             ),
+            if (count > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final (i, x) in guides.vertical.indexed)
+                      InputChip(
+                        avatar: Icon(
+                          Icons.border_vertical_rounded,
+                          size: 18,
+                          color: s.guideColor,
+                        ),
+                        label: Text(
+                          '${s.rulerUnit.format(s.rulerUnit.fromPx(x, editor.document.dpi, reference: editor.document.width))} ${s.rulerUnit.suffix}',
+                          textDirection: TextDirection.ltr,
+                        ),
+                        deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                        onDeleted: () => editor.updateGuides(
+                          (g) => g.copyWith(
+                            vertical: [...g.vertical]..removeAt(i),
+                          ),
+                        ),
+                      ),
+                    for (final (i, y) in guides.horizontal.indexed)
+                      InputChip(
+                        avatar: Icon(
+                          Icons.border_horizontal_rounded,
+                          size: 18,
+                          color: s.guideColor,
+                        ),
+                        label: Text(
+                          '${s.rulerUnit.format(s.rulerUnit.fromPx(y, editor.document.dpi, reference: editor.document.height))} ${s.rulerUnit.suffix}',
+                          textDirection: TextDirection.ltr,
+                        ),
+                        deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                        onDeleted: () => editor.updateGuides(
+                          (g) => g.copyWith(
+                            horizontal: [...g.horizontal]..removeAt(i),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Row(

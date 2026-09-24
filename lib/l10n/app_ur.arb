@@ -350,5 +350,12 @@
   "deleteFontTitle": "فونٹ «{name}» ہٹائیں؟",
   "deleteLayersTitle": "{count} پرتیں حذف کریں؟",
   "guidesCount": "{count} گائیڈز",
-  "sizeLimit": "سائز 1 سے {max} px ہونا چاہیے"
+  "sizeLimit": "سائز 1 سے {max} px ہونا چاہیے",
+  "wholeText": "پورا متن",
+  "partOfText": "متن کا حصہ",
+  "selectPartHint": "وہ الفاظ منتخب کریں جنہیں بدلنا ہے",
+  "fontForWholeHint": "پورے متن کا فونٹ — صرف چند الفاظ کے لیے انہیں منتخب کریں",
+  "fontForSelection": "فونٹ صرف منتخب الفاظ کے لیے",
+  "resetStyle": "انداز ہٹائیں",
+  "partSelected": "{count} حروف منتخب"
 }

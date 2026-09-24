@@ -152,6 +152,7 @@ abstract final class PixoraFormat {
     'xLines': 'x',
     'yLines': 'y',
     'mask': 'stroke',
+    'spans': 'span',
   };
 
   /// Keys written as child text elements instead of attributes (free text

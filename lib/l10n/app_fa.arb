@@ -350,5 +350,12 @@
   "deleteFontTitle": "فونت «{name}» حذف شود؟",
   "deleteLayersTitle": "{count} لایه حذف شود؟",
   "guidesCount": "{count} راهنما",
-  "sizeLimit": "اندازه باید بین ۱ تا {max} پیکسل باشد"
+  "sizeLimit": "اندازه باید بین ۱ تا {max} پیکسل باشد",
+  "wholeText": "کل متن",
+  "partOfText": "بخشی از متن",
+  "selectPartHint": "کلماتی را که می‌خواهید تغییر دهید انتخاب کنید",
+  "fontForWholeHint": "فونت برای کل متن — برای تغییر چند کلمه آن‌ها را انتخاب کنید",
+  "fontForSelection": "فونت فقط برای کلمات انتخاب‌شده",
+  "resetStyle": "حذف سبک",
+  "partSelected": "{count} نویسه انتخاب شد"
 }

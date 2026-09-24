@@ -7,18 +7,31 @@ import '../../../core/fonts/font_catalog.dart';
 import '../../../document/render/text_layout.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/confirm_dialog.dart';
+import '../../../document/model/text_span_style.dart';
+import '../widgets/rich_text_field.dart';
 
-/// Opens the full-page font picker. Returns the chosen family, or null.
-Future<String?> showFontPicker(
+/// What the font picker returns: the family and, when the user chose
+/// "part of text", the range to apply it to.
+class FontPick {
+  const FontPick(this.family, [this.range]);
+  final String family;
+  final TextRange? range;
+}
+
+/// Opens the full-page font picker. With [partSpans] set (a text layer),
+/// the user can also pick a part of [sample] to apply the font to.
+Future<FontPick?> showFontPicker(
   BuildContext context, {
   required String current,
   String sample = '',
-}) => Navigator.of(context).push<String>(
+  List<TextSpanStyle>? partSpans,
+}) => Navigator.of(context).push<FontPick>(
   PageRouteBuilder(
     fullscreenDialog: true,
     transitionDuration: PixTokens.medium,
     reverseTransitionDuration: PixTokens.fast,
-    pageBuilder: (_, _, _) => _FontPickerPage(current: current, sample: sample),
+    pageBuilder: (_, _, _) =>
+        _FontPickerPage(current: current, sample: sample, partSpans: partSpans),
     transitionsBuilder: (_, a, _, child) => FadeTransition(
       opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
       child: SlideTransition(
@@ -35,9 +48,14 @@ Future<String?> showFontPicker(
 enum _Tab { pixora, mine, recent, favorites }
 
 class _FontPickerPage extends StatefulWidget {
-  const _FontPickerPage({required this.current, required this.sample});
+  const _FontPickerPage({
+    required this.current,
+    required this.sample,
+    this.partSpans,
+  });
   final String current;
   final String sample;
+  final List<TextSpanStyle>? partSpans;
 
   @override
   State<_FontPickerPage> createState() => _FontPickerPageState();
@@ -48,6 +66,7 @@ class _FontPickerPageState extends State<_FontPickerPage> {
   _Tab _tab = _Tab.pixora;
   FontScript? _script;
   String _query = '';
+  TextRange? _range;
 
   String get _sample {
     final t = widget.sample.trim().replaceAll('\n', ' ');
@@ -73,7 +92,7 @@ class _FontPickerPageState extends State<_FontPickerPage> {
 
   void _apply(FontCatalog catalog, String family) {
     catalog.markUsed(family);
-    Navigator.pop(context, family);
+    Navigator.pop(context, FontPick(family, _range));
   }
 
   @override
@@ -82,8 +101,6 @@ class _FontPickerPageState extends State<_FontPickerPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final catalog = AppScope.of(context).fonts;
-    final width = MediaQuery.sizeOf(context).width;
-    final columns = width >= 1000 ? 4 : (width >= 640 ? 3 : 2);
 
     return ListenableBuilder(
       listenable: catalog,
@@ -123,6 +140,18 @@ class _FontPickerPageState extends State<_FontPickerPage> {
                   background: _Preview(sample: _sample, family: _selected),
                 ),
               ),
+              if (widget.partSpans != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: TextPartSelector(
+                      text: widget.sample,
+                      spans: widget.partSpans!,
+                      fontFamily: _selected,
+                      onChanged: (r) => setState(() => _range = r),
+                    ),
+                  ),
+                ),
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _TabsHeader(
@@ -213,19 +242,13 @@ class _FontPickerPageState extends State<_FontPickerPage> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 32),
-                  sliver: SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 1.35,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 32),
+                  sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       childCount: families.length + (showImport ? 1 : 0),
                       (context, i) {
                         if (showImport && i == 0) {
-                          return _ImportCard(
+                          return _ImportRow(
                             hint: families.isEmpty ? l.noUserFonts : null,
                             label: l.importFont,
                             onTap: () async {
@@ -240,7 +263,7 @@ class _FontPickerPageState extends State<_FontPickerPage> {
                         final user = catalog.userFonts
                             .where((u) => u.family == f)
                             .firstOrNull;
-                        return _FontCard(
+                        return _FontRow(
                           family: f,
                           sample: _sample,
                           selected: f == _selected,
@@ -441,8 +464,8 @@ class _TabsHeader extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(_TabsHeader old) => true;
 }
 
-class _FontCard extends StatelessWidget {
-  const _FontCard({
+class _FontRow extends StatelessWidget {
+  const _FontRow({
     required this.family,
     required this.sample,
     required this.selected,
@@ -466,79 +489,91 @@ class _FontCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return AnimatedContainer(
-      duration: PixTokens.fast,
-      curve: PixTokens.curve,
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Material(
         color: selected
             ? scheme.primary.withValues(alpha: 0.10)
-            : scheme.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: selected ? scheme.primary : scheme.outlineVariant,
-          width: selected ? 2 : 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: selected ? 0.08 : 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? scheme.primary : Colors.transparent,
+            width: 1.5,
           ),
-        ],
-      ),
-      child: Material(
-        type: MaterialType.transparency,
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           onDoubleTap: onDoubleTap,
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            sample,
-                            maxLines: 1,
-                            textDirection: detectTextDirection(sample),
-                            style: TextStyle(
-                              fontFamily: family == 'System' ? null : family,
-                              fontFamilyFallback: FontCatalog.fallback,
-                              fontSize: 26,
-                              height: 1.3,
-                              color: scheme.onSurface,
-                            ),
-                          ),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 6, 2, 6),
+            child: Row(
+              children: [
+                AnimatedContainer(
+                  duration: PixTokens.fast,
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected ? scheme.primary : Colors.transparent,
+                    border: Border.all(
+                      color: selected ? scheme.primary : scheme.outlineVariant,
+                      width: 2,
+                    ),
+                  ),
+                  child: selected
+                      ? Icon(
+                          Icons.check_rounded,
+                          size: 14,
+                          color: scheme.onPrimary,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        sample,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textDirection: detectTextDirection(sample),
+                        style: TextStyle(
+                          fontFamily: family == 'System' ? null : family,
+                          fontFamilyFallback: FontCatalog.fallback,
+                          fontSize: 22,
+                          height: 1.3,
+                          color: scheme.onSurface,
                         ),
                       ),
-                    ),
-                    Text(
-                      family,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: selected
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                        fontWeight: selected ? FontWeight.w800 : null,
+                      Text(
+                        family,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: selected
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          fontWeight: selected ? FontWeight.w800 : null,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              PositionedDirectional(
-                top: 2,
-                end: 2,
-                child: IconButton(
+                if (onDelete != null)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onDelete,
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                IconButton(
                   visualDensity: VisualDensity.compact,
-                  iconSize: 20,
                   onPressed: onFavorite,
                   icon: Icon(
                     favorite
@@ -549,36 +584,8 @@ class _FontCard extends StatelessWidget {
                         : scheme.onSurfaceVariant.withValues(alpha: 0.6),
                   ),
                 ),
-              ),
-              if (onDelete != null)
-                PositionedDirectional(
-                  top: 2,
-                  start: 2,
-                  child: IconButton(
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 20,
-                    onPressed: onDelete,
-                    icon: Icon(
-                      Icons.delete_outline_rounded,
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ),
-              if (selected)
-                PositionedDirectional(
-                  bottom: 8,
-                  end: 8,
-                  child: CircleAvatar(
-                    radius: 10,
-                    backgroundColor: scheme.primary,
-                    child: Icon(
-                      Icons.check_rounded,
-                      size: 14,
-                      color: scheme.onPrimary,
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -586,8 +593,8 @@ class _FontCard extends StatelessWidget {
   }
 }
 
-class _ImportCard extends StatelessWidget {
-  const _ImportCard({required this.label, required this.onTap, this.hint});
+class _ImportRow extends StatelessWidget {
+  const _ImportRow({required this.label, required this.onTap, this.hint});
   final String label;
   final String? hint;
   final VoidCallback onTap;
@@ -596,43 +603,53 @@ class _ImportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Material(
-      color: scheme.primary.withValues(alpha: 0.06),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: scheme.primary.withValues(alpha: 0.5),
-          width: 1.5,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: scheme.primary.withValues(alpha: 0.06),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: scheme.primary.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
         ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: scheme.primary,
-                child: Icon(Icons.add_rounded, color: scheme.onPrimary),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w800,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: scheme.primary,
+                  child: Icon(Icons.add_rounded, color: scheme.onPrimary),
                 ),
-              ),
-              Text(
-                '.ttf · .otf',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$label  ·  .ttf / .otf',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (hint != null)
+                        Text(
+                          hint!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

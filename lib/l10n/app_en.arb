@@ -421,5 +421,19 @@
         "type": "int"
       }
     }
+  },
+  "wholeText": "Whole text",
+  "partOfText": "Part of text",
+  "selectPartHint": "Select the words to style",
+  "fontForWholeHint": "Font for the whole text — select words to change only them",
+  "fontForSelection": "Font for the selected words",
+  "resetStyle": "Reset style",
+  "partSelected": "{count} characters selected",
+  "@partSelected": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

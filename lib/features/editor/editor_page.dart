@@ -8,6 +8,7 @@ import '../../app/app_scope.dart';
 import '../../app/theme/app_theme.dart';
 import '../../document/model/document.dart';
 import '../../document/model/layer.dart';
+import '../../document/model/text_span_style.dart';
 import '../../editor/editor_controller.dart';
 import '../../editor/tools/editor_tool.dart';
 import '../../editor/tools/grid_tool.dart';
@@ -228,12 +229,19 @@ class _EditorPageState extends State<EditorPage> {
     final l = AppLocalizations.of(context);
     final r = await showTextDialog(context, fontFamily: _lastFont);
     if (r == null || r.text.trim().isEmpty) return;
-    _editor.addText(
+    final layer = _editor.addText(
       r.text,
       name: l.text,
       color: _contrastingTextColor(),
       fontFamily: r.fontFamily,
     );
+    if (r.spans.isNotEmpty) {
+      _editor.updateLayer(
+        layer.id,
+        (x) => (x as TextLayer).copyWith(spans: r.spans),
+        label: 'text',
+      );
+    }
   }
 
   Future<void> _editText(TextLayer layer) async {
@@ -241,11 +249,16 @@ class _EditorPageState extends State<EditorPage> {
       context,
       initial: layer.text,
       fontFamily: layer.fontFamily,
+      spans: layer.spans,
     );
     if (r == null || r.text.trim().isEmpty) return;
     _editor.updateLayer(
       layer.id,
-      (l) => (l as TextLayer).copyWith(text: r.text, fontFamily: r.fontFamily),
+      (l) => (l as TextLayer).copyWith(
+        text: r.text,
+        fontFamily: r.fontFamily,
+        spans: r.spans,
+      ),
       label: 'text',
     );
   }
@@ -255,13 +268,27 @@ class _EditorPageState extends State<EditorPage> {
       context,
       current: layer.fontFamily,
       sample: layer.text,
+      partSpans: layer.spans,
     );
     if (f == null) return;
-    _editor.updateLayer(
-      layer.id,
-      (l) => (l as TextLayer).copyWith(fontFamily: f),
-      label: 'font',
-    );
+    final r = f.range;
+    _editor.updateLayer(layer.id, (l) {
+      final t = l as TextLayer;
+      return r == null
+          // Whole text: the new font replaces per-part fonts.
+          ? t.copyWith(
+              fontFamily: f.family,
+              spans: TextSpans.clear(t.spans, 0, t.text.length, color: false),
+            )
+          : t.copyWith(
+              spans: TextSpans.apply(
+                t.spans,
+                r.start,
+                r.end,
+                fontFamily: f.family,
+              ),
+            );
+    }, label: 'font');
   }
 
   Future<void> _addImage() async {

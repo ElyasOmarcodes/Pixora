@@ -7,12 +7,17 @@ import '../../../core/fonts/font_catalog.dart';
 import '../../../document/render/text_layout.dart';
 import '../../../l10n/app_localizations.dart';
 import 'font_picker.dart';
+import '../../../document/model/text_span_style.dart';
+import '../widgets/rich_text_field.dart';
 
 /// Result of [showTextDialog].
 class TextDialogResult {
-  const TextDialogResult(this.text, this.fontFamily);
+  const TextDialogResult(this.text, this.fontFamily, [this.spans = const []]);
   final String text;
   final String fontFamily;
+
+  /// Fonts for parts of the text chosen in the editor.
+  final List<TextSpanStyle> spans;
 }
 
 /// Full-page text editor: a big, calm writing area in the chosen font,
@@ -22,13 +27,14 @@ Future<TextDialogResult?> showTextDialog(
   BuildContext context, {
   String initial = '',
   required String fontFamily,
+  List<TextSpanStyle> spans = const [],
 }) => Navigator.of(context).push<TextDialogResult>(
   PageRouteBuilder(
     fullscreenDialog: true,
     transitionDuration: PixTokens.medium,
     reverseTransitionDuration: PixTokens.fast,
     pageBuilder: (_, _, _) =>
-        _TextEditorPage(initial: initial, fontFamily: fontFamily),
+        _TextEditorPage(initial: initial, fontFamily: fontFamily, spans: spans),
     transitionsBuilder: (_, a, _, child) => FadeTransition(
       opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
       child: SlideTransition(
@@ -43,17 +49,22 @@ Future<TextDialogResult?> showTextDialog(
 );
 
 class _TextEditorPage extends StatefulWidget {
-  const _TextEditorPage({required this.initial, required this.fontFamily});
+  const _TextEditorPage({
+    required this.initial,
+    required this.fontFamily,
+    this.spans = const [],
+  });
   final String initial;
   final String fontFamily;
+  final List<TextSpanStyle> spans;
 
   @override
   State<_TextEditorPage> createState() => _TextEditorPageState();
 }
 
 class _TextEditorPageState extends State<_TextEditorPage> {
-  late final TextEditingController _c =
-      TextEditingController(text: widget.initial)
+  late final RichTextController _c =
+      RichTextController(text: widget.initial, spans: widget.spans)
         ..selection = TextSelection(
           baseOffset: 0,
           extentOffset: widget.initial.length,
@@ -73,13 +84,48 @@ class _TextEditorPageState extends State<_TextEditorPage> {
 
   void _done() {
     if (!_canSave) return;
-    Navigator.pop(context, TextDialogResult(_c.text, _font));
+    Navigator.pop(context, TextDialogResult(_c.text, _font, _c.spans));
+  }
+
+  /// The selected part of the text, if any.
+  TextRange? get _selection {
+    final s = _c.selection;
+    return s.isValid && !s.isCollapsed
+        ? TextRange(start: s.start, end: s.end)
+        : null;
+  }
+
+  /// Applies [family] to the selected part, or to the whole text.
+  void _useFont(String family) {
+    final r = _selection;
+    setState(() {
+      if (r == null) {
+        _font = family;
+      } else {
+        _c.spans = TextSpans.apply(
+          _c.spans,
+          r.start,
+          r.end,
+          fontFamily: family,
+        );
+      }
+    });
   }
 
   Future<void> _allFonts() async {
+    final sel = _c.selection;
     final f = await showFontPicker(context, current: _font, sample: _c.text);
-    if (f != null) setState(() => _font = f);
+    if (f != null) {
+      _c.selection = sel;
+      _useFont(f.family);
+    }
     _focus.requestFocus();
+  }
+
+  void _clearPartStyle() {
+    final r = _selection;
+    if (r == null) return;
+    setState(() => _c.spans = TextSpans.clear(_c.spans, r.start, r.end));
   }
 
   Future<void> _paste() async {
@@ -240,6 +286,48 @@ class _TextEditorPageState extends State<_TextEditorPage> {
                   ),
                 ),
               ),
+              // What the fonts apply to.
+              AnimatedSwitcher(
+                duration: PixTokens.fast,
+                child: Padding(
+                  key: ValueKey(_selection != null),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _selection == null
+                            ? Icons.notes_rounded
+                            : Icons.highlight_alt_rounded,
+                        size: 16,
+                        color: _selection == null
+                            ? scheme.onSurfaceVariant
+                            : scheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _selection == null
+                              ? l.fontForWholeHint
+                              : l.fontForSelection,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _selection == null
+                                ? scheme.onSurfaceVariant
+                                : scheme.primary,
+                            fontWeight: _selection == null
+                                ? null
+                                : FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (_selection != null)
+                        TextButton(
+                          onPressed: _clearPartStyle,
+                          child: Text(l.resetStyle),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
               // Quick fonts.
               ListenableBuilder(
                 listenable: catalog,
@@ -261,10 +349,10 @@ class _TextEditorPageState extends State<_TextEditorPage> {
                           _FontChip(
                             label: f,
                             preview: f,
-                            selected: f == _font,
+                            selected: _selection == null && f == _font,
                             onTap: () {
                               HapticFeedback.selectionClick();
-                              setState(() => _font = f);
+                              _useFont(f);
                             },
                           ),
                       ],

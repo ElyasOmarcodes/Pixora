@@ -9,6 +9,7 @@ import 'effect.dart';
 import 'fill.dart';
 import 'layer_transform.dart';
 import 'mask.dart';
+import 'text_span_style.dart';
 
 enum LayerKind { raster, text, shape, group }
 
@@ -280,7 +281,9 @@ final class TextLayer extends Layer {
     this.bgPadX = 0.3,
     this.bgPadY = 0.15,
     this.bgRadius = 0.2,
-  }) : fill = fill ?? PixFill.white;
+    List<TextSpanStyle> spans = const [],
+  }) : fill = fill ?? PixFill.white,
+       spans = List.unmodifiable(spans);
 
   final String text;
   final String fontFamily;
@@ -320,6 +323,9 @@ final class TextLayer extends Layer {
   final double bgPadX;
   final double bgPadY;
   final double bgRadius;
+
+  /// Fonts / colours for parts of the text (sorted, non-overlapping).
+  final List<TextSpanStyle> spans;
 
   /// [text] with [textCase] applied.
   String get displayText => switch (textCase) {
@@ -363,6 +369,7 @@ final class TextLayer extends Layer {
     double? bgPadX,
     double? bgPadY,
     double? bgRadius,
+    List<TextSpanStyle>? spans,
   }) => TextLayer(
     props ?? this.props,
     text: text ?? this.text,
@@ -386,6 +393,7 @@ final class TextLayer extends Layer {
     bgPadX: bgPadX ?? this.bgPadX,
     bgPadY: bgPadY ?? this.bgPadY,
     bgRadius: bgRadius ?? this.bgRadius,
+    spans: spans ?? this.spans,
   );
 
   @override
@@ -413,6 +421,7 @@ final class TextLayer extends Layer {
       'bgPadY': bgPadY,
       'bgRadius': bgRadius,
     },
+    if (spans.isNotEmpty) 'spans': [for (final s in spans) s.toJson()],
   };
 
   static TextLayer fromJson(LayerProps props, Json m) => TextLayer(
@@ -440,6 +449,10 @@ final class TextLayer extends Layer {
     bgPadX: readDouble(m['bgPadX'], 0.3),
     bgPadY: readDouble(m['bgPadY'], 0.15),
     bgRadius: readDouble(m['bgRadius'], 0.2),
+    spans: [
+      for (final s in readList(m['spans']))
+        if (s is Map) TextSpanStyle.fromJson(readMap(s)),
+    ],
   );
 
   @override
@@ -466,7 +479,8 @@ final class TextLayer extends Layer {
       other.background == background &&
       other.bgPadX == bgPadX &&
       other.bgPadY == bgPadY &&
-      other.bgRadius == bgRadius;
+      other.bgRadius == bgRadius &&
+      listEquals(other.spans, spans);
 
   @override
   int get hashCode => Object.hash(
@@ -493,6 +507,7 @@ final class TextLayer extends Layer {
       bgPadX,
       bgPadY,
       bgRadius,
+      Object.hashAll(spans),
     ),
   );
 }

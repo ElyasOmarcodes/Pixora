@@ -350,5 +350,12 @@
   "deleteFontTitle": "¿Quitar la fuente «{name}»?",
   "deleteLayersTitle": "¿Eliminar {count} capas?",
   "guidesCount": "{count} guías",
-  "sizeLimit": "El tamaño debe ser de 1 a {max} px"
+  "sizeLimit": "El tamaño debe ser de 1 a {max} px",
+  "wholeText": "Todo el texto",
+  "partOfText": "Parte del texto",
+  "selectPartHint": "Selecciona las palabras",
+  "fontForWholeHint": "Fuente para todo el texto — selecciona palabras para cambiar solo esas",
+  "fontForSelection": "Fuente para las palabras seleccionadas",
+  "resetStyle": "Quitar estilo",
+  "partSelected": "{count} caracteres seleccionados"
 }

@@ -350,5 +350,12 @@
   "deleteFontTitle": "“{name}” yazı tipi kaldırılsın mı?",
   "deleteLayersTitle": "{count} katman silinsin mi?",
   "guidesCount": "{count} kılavuz",
-  "sizeLimit": "Boyut 1–{max} px olmalı"
+  "sizeLimit": "Boyut 1–{max} px olmalı",
+  "wholeText": "Tüm metin",
+  "partOfText": "Metnin bir kısmı",
+  "selectPartHint": "Biçimlenecek kelimeleri seçin",
+  "fontForWholeHint": "Tüm metnin yazı tipi — yalnızca bazı kelimeler için onları seçin",
+  "fontForSelection": "Seçili kelimelerin yazı tipi",
+  "resetStyle": "Stili sıfırla",
+  "partSelected": "{count} karakter seçili"
 }

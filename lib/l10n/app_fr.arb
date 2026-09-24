@@ -350,5 +350,12 @@
   "deleteFontTitle": "Retirer la police « {name} » ?",
   "deleteLayersTitle": "Supprimer {count} calques ?",
   "guidesCount": "{count} repères",
-  "sizeLimit": "La taille doit être de 1 à {max} px"
+  "sizeLimit": "La taille doit être de 1 à {max} px",
+  "wholeText": "Tout le texte",
+  "partOfText": "Une partie",
+  "selectPartHint": "Sélectionnez les mots",
+  "fontForWholeHint": "Police pour tout le texte — sélectionnez des mots pour ne changer qu’eux",
+  "fontForSelection": "Police pour les mots sélectionnés",
+  "resetStyle": "Retirer le style",
+  "partSelected": "{count} caractères sélectionnés"
 }

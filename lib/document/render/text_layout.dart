@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 
 import '../model/layer.dart';
+import '../model/text_span_style.dart';
 
 /// Detects the base direction from the first strong character, so Pashto,
 /// Dari/Persian, Arabic and Urdu text is laid out right-to-left automatically.
@@ -87,6 +88,7 @@ class TextLayoutCache {
       l.bgPadX,
       l.bgPadY,
       l.bgRadius,
+      Object.hashAll(l.spans),
     );
     final hit = _cache.remove(key);
     if (hit != null) {
@@ -114,6 +116,45 @@ class _Placed {
   /// Centre of the cluster on the curve (relative to the layer centre).
   final Offset pos;
   final double angle;
+}
+
+/// Builds the paragraph: the base style for the whole text plus child
+/// spans for ranges with their own font or colour. The stroke pass only
+/// takes fonts (the outline keeps its own colour).
+InlineSpan _spanTree(
+  String text,
+  TextStyle base,
+  List<TextSpanStyle> spans, {
+  required bool stroke,
+  required bool foreground,
+}) {
+  if (spans.isEmpty) return TextSpan(text: text, style: base);
+  final children = <InlineSpan>[];
+  var cursor = 0;
+  for (final s in spans) {
+    final a = s.start.clamp(0, text.length), b = s.end.clamp(0, text.length);
+    if (b <= a || a < cursor) continue;
+    if (a > cursor) children.add(TextSpan(text: text.substring(cursor, a)));
+    final c = stroke ? null : s.color;
+    children.add(
+      TextSpan(
+        text: text.substring(a, b),
+        style: TextStyle(
+          fontFamily: s.fontFamily == 'System' ? null : s.fontFamily,
+          // A gradient base paints with `foreground`; a span colour then
+          // has to be a foreground paint too (both can't be set).
+          color: c != null && !foreground ? c : null,
+          foreground: c != null && foreground ? (Paint()..color = c) : null,
+          decorationColor: c,
+        ),
+      ),
+    );
+    cursor = b;
+  }
+  if (cursor < text.length) {
+    children.add(TextSpan(text: text.substring(cursor)));
+  }
+  return TextSpan(style: base, children: children);
 }
 
 class TextLayoutEntry {
@@ -168,9 +209,15 @@ class TextLayoutEntry {
       color: foreground == null ? l.fill.primary : null,
     );
 
-    TextPainter make(Paint? fg) =>
+    TextPainter make(Paint? fg, {bool stroke = false}) =>
         TextPainter(
-          text: TextSpan(text: text.isEmpty ? ' ' : text, style: style(fg)),
+          text: _spanTree(
+            text.isEmpty ? ' ' : text,
+            style(fg),
+            l.spans,
+            stroke: stroke,
+            foreground: fg != null,
+          ),
           textDirection: dir,
           textAlign: align,
         )..layout(
@@ -193,6 +240,7 @@ class TextLayoutEntry {
           ..strokeWidth = l.strokeWidth
           ..strokeJoin = ui.StrokeJoin.round
           ..color = l.strokeColor,
+        stroke: true,
       );
     }
 
