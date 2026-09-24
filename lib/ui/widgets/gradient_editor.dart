@@ -219,6 +219,7 @@ class _GradientEditorState extends State<_GradientEditor> {
         b = p;
       case _Handle.move:
         final delta = p - _dragStart;
+        // (both in the layer's true proportions)
         setState(
           () => _center =
               _centerStart +
@@ -264,13 +265,25 @@ class _GradientEditorState extends State<_GradientEditor> {
     final sel = _stops[_sel];
 
     Widget round(IconData icon, String tip, VoidCallback? onTap) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: IconButton.filled(
         tooltip: tip,
         onPressed: onTap,
+        iconSize: 20,
+        constraints: const BoxConstraints.tightFor(width: 42, height: 42),
+        padding: EdgeInsets.zero,
         icon: Icon(icon),
       ),
     );
+    final narrow = MediaQuery.sizeOf(context).width < 520;
+    ButtonSegment<FillKind> seg(FillKind k, IconData i, String label) =>
+        ButtonSegment(
+          value: k,
+          tooltip: label,
+          icon: Icon(i, size: 20),
+          // Phones: icons only, so labels never wrap or get cut.
+          label: narrow ? null : Text(label),
+        );
 
     return Scaffold(
       appBar: AppBar(
@@ -296,42 +309,34 @@ class _GradientEditorState extends State<_GradientEditor> {
                 showSelectedIcon: false,
                 style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 segments: [
-                  ButtonSegment(
-                    value: FillKind.linear,
-                    icon: const Icon(Icons.gradient_rounded, size: 18),
-                    label: Text(l.linear),
-                  ),
-                  ButtonSegment(
-                    value: FillKind.radial,
-                    icon: const Icon(Icons.radio_button_checked, size: 18),
-                    label: Text(l.radial),
-                  ),
-                  ButtonSegment(
-                    value: FillKind.sweep,
-                    icon: const Icon(Icons.rotate_right_rounded, size: 18),
-                    label: Text(l.angular),
-                  ),
-                  ButtonSegment(
-                    value: FillKind.reflected,
-                    icon: const Icon(Icons.compare_arrows_rounded, size: 18),
-                    label: Text(l.reflected),
+                  seg(FillKind.linear, Icons.gradient_rounded, l.linear),
+                  seg(FillKind.radial, Icons.radio_button_checked, l.radial),
+                  seg(FillKind.sweep, Icons.rotate_right_rounded, l.angular),
+                  seg(
+                    FillKind.reflected,
+                    Icons.compare_arrows_rounded,
+                    l.reflected,
                   ),
                 ],
                 selected: {_kind},
                 onSelectionChanged: (s) => setState(() => _kind = s.first),
               ),
             ),
-            // Live preview with draggable start / end handles.
+            // Live preview with draggable start / end handles. Very wide
+            // or tall layers (a line of text) are shown stretched into a
+            // comfortable box; handles and drags map back exactly.
             Expanded(
+              flex: 5,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: LayoutBuilder(
                   builder: (context, c) {
                     final box = c.biggest;
-                    var w = box.width, h = w / widget.aspect;
-                    if (h > box.height) {
-                      h = box.height;
-                      w = h * widget.aspect;
+                    final shown = widget.aspect.clamp(0.55, 1.8);
+                    var w = box.width, h = w / shown;
+                    if (h > box.height - 16) {
+                      h = math.max(40.0, box.height - 16);
+                      w = math.min(box.width, h * shown);
                     }
                     final r = Rect.fromLTWH(
                       (box.width - w) / 2,
@@ -339,20 +344,30 @@ class _GradientEditorState extends State<_GradientEditor> {
                       w,
                       h,
                     );
-                    final (a, b) = _handles(r);
+                    // The layer's true proportions.
+                    final v = widget.aspect >= 1
+                        ? Rect.fromLTWH(0, 0, w, w / widget.aspect)
+                        : Rect.fromLTWH(0, 0, h * widget.aspect, h);
+                    final sx = r.width / v.width, sy = r.height / v.height;
+                    Offset toShown(Offset p) =>
+                        r.topLeft + Offset(p.dx * sx, p.dy * sy);
+                    Offset toTrue(Offset p) =>
+                        Offset((p.dx - r.left) / sx, (p.dy - r.top) / sy);
+                    final (a, b) = _handles(v);
+                    final sa = toShown(a), sb = toShown(b);
                     return GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onPanStart: (d) {
                         final p = d.localPosition;
-                        _dragStart = p;
+                        _dragStart = toTrue(p);
                         _centerStart = _center;
-                        _drag = (p - b).distance < 36
+                        _drag = (p - sb).distance < 36
                             ? _Handle.b
-                            : (p - a).distance < 36
+                            : (p - sa).distance < 36
                             ? _Handle.a
                             : _Handle.move;
                       },
-                      onPanUpdate: (d) => _dragTo(r, d.localPosition),
+                      onPanUpdate: (d) => _dragTo(v, toTrue(d.localPosition)),
                       onPanEnd: (_) => _drag = null,
                       child: Stack(
                         children: [
@@ -360,24 +375,31 @@ class _GradientEditorState extends State<_GradientEditor> {
                             rect: r,
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(16),
-                              child: CheckerboardBox(
-                                a: pix.checkerA,
-                                b: pix.checkerB,
-                                cell: 10,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  CheckerboardBox(
+                                    a: pix.checkerA,
+                                    b: pix.checkerB,
+                                    cell: 10,
+                                  ),
+                                  CustomPaint(
+                                    painter: _StretchedFillPainter(
+                                      fill,
+                                      v,
+                                      sx,
+                                      sy,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ),
-                          Positioned.fromRect(
-                            rect: r,
-                            child: CustomPaint(
-                              painter: FillSwatchPainter(fill, radius: 16),
                             ),
                           ),
                           Positioned.fill(
                             child: CustomPaint(
                               painter: _HandlesPainter(
-                                a: a,
-                                b: b,
+                                a: sa,
+                                b: sb,
                                 line: _kind != FillKind.radial,
                                 accent: scheme.primary,
                               ),
@@ -390,127 +412,155 @@ class _GradientEditorState extends State<_GradientEditor> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            // Colour stops.
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: _StopsBar(
-                stops: _stops,
-                selected: _sel,
-                fill: fill,
-                onSelect: (i) => setState(() => _sel = i),
-                onMove: (i, pos) =>
-                    setState(() => _stops[i].pos = pos.clamp(0.0, 1.0)),
-                onRemove: (i) {
-                  if (_stops.length <= 2) return;
-                  setState(() {
-                    _stops.removeAt(i);
-                    _sel = _sel.clamp(0, _stops.length - 1);
-                  });
-                },
-                onAddAt: _addStop,
-                onEdit: _pickColor,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                round(Icons.add_rounded, l.addStop, () => _addStop()),
-                round(
-                  Icons.remove_rounded,
-                  l.deleteStop,
-                  _stops.length > 2 ? _deleteStop : null,
-                ),
-                round(Icons.chevron_left_rounded, l.previous, () => _step(-1)),
-                round(Icons.swap_horiz_rounded, l.reverse, _reverse),
-                round(Icons.chevron_right_rounded, l.next, () => _step(1)),
-                round(Icons.format_color_fill_rounded, l.color, _pickColor),
-                round(
-                  Icons.align_horizontal_center_rounded,
-                  l.distribute,
-                  _distribute,
-                ),
-              ],
-            ),
-            PixSlider(
-              label: l.location,
-              value: sel.pos,
-              min: 0,
-              max: 1,
-              format: (v) => '${(v * 100).round()}%',
-              onChanged: (v) => setState(() => sel.pos = v),
-            ),
-            PixSlider(
-              label: l.opacity,
-              value: sel.color.a,
-              min: 0,
-              max: 1,
-              defaultValue: 1,
-              format: (v) => '${(v * 100).round()}%',
-              onChanged: (v) =>
-                  setState(() => sel.color = sel.color.withValues(alpha: v)),
-            ),
-            if (_kind != FillKind.radial)
-              PixSlider(
-                label: l.angle,
-                value: _angle,
-                min: 0,
-                max: 360,
-                defaultValue: 90,
-                format: (v) => '${v.round()}°',
-                onChanged: (v) => setState(() => _angle = v),
-              ),
-            if (_kind != FillKind.sweep)
-              PixSlider(
-                label: l.scale,
-                value: _scale,
-                min: 0.1,
-                max: 3,
-                defaultValue: 1,
-                format: (v) => '${(v * 100).round()}%',
-                onChanged: (v) => setState(() => _scale = v),
-              ),
-            // Presets and recently used gradients.
-            SizedBox(
-              height: 58,
-              child: ListenableBuilder(
-                listenable: RecentColors.instance,
-                builder: (context, _) => ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+            // Everything below scrolls on short screens.
+            Flexible(
+              flex: 6,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final g in [
-                      ...RecentColors.instance.gradients,
-                      for (final c in kBackgroundGradients)
-                        PixFill.linear(c, angle: 90),
-                    ])
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() {
-                              final k = _kind, a = _angle;
-                              final sc = _scale, c = _center;
-                              _load(g);
-                              // Presets bring colours; keep the geometry.
-                              if (g.kind == FillKind.linear) {
-                                _kind = k;
-                                _angle = a;
-                                _scale = sc;
-                                _center = c;
-                              }
-                            });
-                          },
-                          child: SizedBox(
-                            width: 46,
-                            height: 46,
-                            child: CustomPaint(painter: FillSwatchPainter(g)),
-                          ),
+                    const SizedBox(height: 10),
+                    // Colour stops.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: _StopsBar(
+                        stops: _stops,
+                        selected: _sel,
+                        fill: fill,
+                        onSelect: (i) => setState(() => _sel = i),
+                        onMove: (i, pos) =>
+                            setState(() => _stops[i].pos = pos.clamp(0.0, 1.0)),
+                        onRemove: (i) {
+                          if (_stops.length <= 2) return;
+                          setState(() {
+                            _stops.removeAt(i);
+                            _sel = _sel.clamp(0, _stops.length - 1);
+                          });
+                        },
+                        onAddAt: _addStop,
+                        onEdit: _pickColor,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        round(Icons.add_rounded, l.addStop, () => _addStop()),
+                        round(
+                          Icons.remove_rounded,
+                          l.deleteStop,
+                          _stops.length > 2 ? _deleteStop : null,
+                        ),
+                        round(
+                          Icons.chevron_left_rounded,
+                          l.previous,
+                          () => _step(-1),
+                        ),
+                        round(Icons.swap_horiz_rounded, l.reverse, _reverse),
+                        round(
+                          Icons.chevron_right_rounded,
+                          l.next,
+                          () => _step(1),
+                        ),
+                        round(
+                          Icons.format_color_fill_rounded,
+                          l.color,
+                          _pickColor,
+                        ),
+                        round(
+                          Icons.align_horizontal_center_rounded,
+                          l.distribute,
+                          _distribute,
+                        ),
+                      ],
+                    ),
+                    PixSlider(
+                      label: l.location,
+                      value: sel.pos,
+                      min: 0,
+                      max: 1,
+                      format: (v) => '${(v * 100).round()}%',
+                      onChanged: (v) => setState(() => sel.pos = v),
+                    ),
+                    PixSlider(
+                      label: l.opacity,
+                      value: sel.color.a,
+                      min: 0,
+                      max: 1,
+                      defaultValue: 1,
+                      format: (v) => '${(v * 100).round()}%',
+                      onChanged: (v) => setState(
+                        () => sel.color = sel.color.withValues(alpha: v),
+                      ),
+                    ),
+                    if (_kind != FillKind.radial)
+                      PixSlider(
+                        label: l.angle,
+                        value: _angle,
+                        min: 0,
+                        max: 360,
+                        defaultValue: 90,
+                        format: (v) => '${v.round()}°',
+                        onChanged: (v) => setState(() => _angle = v),
+                      ),
+                    if (_kind != FillKind.sweep)
+                      PixSlider(
+                        label: l.scale,
+                        value: _scale,
+                        min: 0.1,
+                        max: 3,
+                        defaultValue: 1,
+                        format: (v) => '${(v * 100).round()}%',
+                        onChanged: (v) => setState(() => _scale = v),
+                      ),
+                    // Presets and recently used gradients.
+                    SizedBox(
+                      height: 58,
+                      child: ListenableBuilder(
+                        listenable: RecentColors.instance,
+                        builder: (context, _) => ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                          children: [
+                            for (final g in [
+                              ...RecentColors.instance.gradients,
+                              for (final c in kBackgroundGradients)
+                                PixFill.linear(c, angle: 90),
+                            ])
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    setState(() {
+                                      final k = _kind, a = _angle;
+                                      final sc = _scale, c = _center;
+                                      _load(g);
+                                      // Presets bring colours; keep the geometry.
+                                      if (g.kind == FillKind.linear) {
+                                        _kind = k;
+                                        _angle = a;
+                                        _scale = sc;
+                                        _center = c;
+                                      }
+                                    });
+                                  },
+                                  child: SizedBox(
+                                    width: 46,
+                                    height: 46,
+                                    child: CustomPaint(
+                                      painter: FillSwatchPainter(g),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -520,6 +570,28 @@ class _GradientEditorState extends State<_GradientEditor> {
       ),
     );
   }
+}
+
+/// Paints [fill] laid out in [v] (the layer's proportions), stretched by
+/// [sx]/[sy] into the preview box.
+class _StretchedFillPainter extends CustomPainter {
+  _StretchedFillPainter(this.fill, this.v, this.sx, this.sy);
+  final PixFill fill;
+  final Rect v;
+  final double sx, sy;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas
+      ..save()
+      ..scale(sx, sy)
+      ..drawRect(v, fill.applyTo(Paint()..isAntiAlias = true, v))
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_StretchedFillPainter old) =>
+      old.fill != fill || old.v != v || old.sx != sx || old.sy != sy;
 }
 
 class _HandlesPainter extends CustomPainter {

@@ -10,6 +10,7 @@ import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/fill_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../../../document/render/document_renderer.dart';
+import '../../../document/render/text_layout.dart';
 import 'panel_common.dart';
 
 PixFill? _fillOf(Layer l) => switch (l) {
@@ -124,8 +125,11 @@ class _FillPanelState extends State<FillPanel> {
         if (r == null)
           FillPicker(
             value: fill,
+            // The box the gradient is laid out in (text: the glyph box).
             aspect: () {
-              final b = layerLocalRect(layer);
+              final b = layer is TextLayer
+                  ? Offset.zero & TextLayoutCache.instance.fill(layer).size
+                  : layerLocalRect(layer);
               return b.height <= 0 ? 1.0 : b.width / b.height;
             }(),
             onChanged: (f, {required live}) {

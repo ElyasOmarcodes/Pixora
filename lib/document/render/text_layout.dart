@@ -411,9 +411,15 @@ class TextLayoutEntry {
     }
     final mesh = _mesh;
     if (mesh == null) {
-      final origin = Offset(-fill.width / 2, -fill.height / 2);
-      stroke?.paint(canvas, origin);
-      fill.paint(canvas, origin);
+      // Paint at the paragraph's own origin: gradient shaders are laid
+      // out in the text's local box (0,0 → width,height), so the canvas
+      // must be moved rather than passing an offset to paint().
+      canvas
+        ..save()
+        ..translate(-fill.width / 2, -fill.height / 2);
+      stroke?.paint(canvas, Offset.zero);
+      fill.paint(canvas, Offset.zero);
+      canvas.restore();
       return;
     }
     mesh.paint(canvas, pixelScale, (c) {

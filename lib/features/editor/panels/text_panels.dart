@@ -4,6 +4,7 @@ import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../document/render/text_layout.dart';
 import '../../../ui/widgets/fill_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import 'panel_common.dart';
@@ -239,6 +240,10 @@ class TextBackgroundPanel extends StatelessWidget {
         if (bg != null) ...[
           FillPicker(
             value: bg,
+            aspect: () {
+              final z = TextLayoutCache.instance.sizeOf(layer);
+              return z.height <= 0 ? 1.0 : z.width / z.height;
+            }(),
             onChanged: (f, {required live}) {
               if (f != null) {
                 edit((t) => t.copyWith(background: f), live: live);
