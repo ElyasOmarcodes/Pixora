@@ -7,9 +7,9 @@ import '../../l10n/app_localizations.dart';
 
 /// A labelled slider row: `Label ━━━━●──── [42]`.
 ///
-/// A custom, soft control: thick rounded track with a gradient fill (from
-/// zero for ranges that cross zero), a tick at the default value it gently
-/// snaps to, a thumb that grows and shows a value bubble while dragging,
+/// A custom, soft control: slim rounded track with step dots, a solid fill
+/// (from zero for ranges that cross zero), a mark at the default value it
+/// gently snaps to, a round knob that grows and shows a value bubble while dragging,
 /// and a value pill — tap it to type an exact number, long-press (or
 /// double-tap the label) to reset.
 ///
@@ -180,36 +180,45 @@ class _PixSliderState extends State<PixSlider>
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final v = _value;
     final text = _text(v);
+    // A soft, light tint of the brand colour (like a lavender on dark).
+    final active = theme.brightness == Brightness.dark
+        ? Color.lerp(scheme.primary, Colors.white, 0.35)!
+        : Color.lerp(scheme.primary, Colors.white, 0.15)!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       child: Row(
         children: [
-          GestureDetector(
-            onDoubleTap: widget.defaultValue == null ? null : _reset,
-            child: SizedBox(
-              width: 92,
-              child: Row(
-                children: [
-                  if (widget.icon != null) ...[
-                    Icon(widget.icon, size: 18, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Text(
-                      widget.label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+          if (widget.label.isNotEmpty || widget.icon != null)
+            GestureDetector(
+              onDoubleTap: widget.defaultValue == null ? null : _reset,
+              child: SizedBox(
+                width: 92,
+                child: Row(
+                  children: [
+                    if (widget.icon != null) ...[
+                      Icon(
+                        widget.icon,
+                        size: 18,
                         color: scheme.onSurfaceVariant,
-                        height: 1.15,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Text(
+                        widget.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          height: 1.15,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           Expanded(
             child: LayoutBuilder(
               builder: (context, box) {
@@ -248,17 +257,18 @@ class _PixSliderState extends State<PixSlider>
                           press: _press.value,
                           label: text,
                           rtl: rtl,
-                          primary: scheme.primary,
+                          primary: active,
+                          // Dots on the filled part / on the empty track.
                           secondary: Color.lerp(
-                            scheme.primary,
-                            scheme.tertiary,
-                            0.6,
-                          )!,
-                          track: scheme.onSurface.withValues(alpha: 0.09),
+                            active,
+                            Colors.black,
+                            0.35,
+                          )!.withValues(alpha: 0.7),
+                          track: scheme.onSurface.withValues(alpha: 0.1),
                           thumb: scheme.surface,
                           bubble: scheme.inverseSurface,
                           onBubble: scheme.onInverseSurface,
-                          shadow: Colors.black.withValues(alpha: 0.18),
+                          shadow: scheme.onSurface.withValues(alpha: 0.28),
                         ),
                       ),
                     ),
@@ -299,7 +309,7 @@ class _PixSliderState extends State<PixSlider>
   }
 }
 
-const double _thumbRadius = 11;
+const double _thumbRadius = 12;
 
 class _SliderPainter extends CustomPainter {
   _SliderPainter({
@@ -332,67 +342,82 @@ class _SliderPainter extends CustomPainter {
     const pad = _thumbRadius;
     final w = size.width - 2 * pad;
     double x(double f) => pad + (rtl ? 1 - f : f) * w;
-    const h = 8.0;
+    const h = 6.0;
 
     // Track.
-    final trackRect = RRect.fromLTRBR(
-      pad - h / 2,
-      cy - h / 2,
-      size.width - pad + h / 2,
-      cy + h / 2,
-      const Radius.circular(h),
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        pad - h / 2,
+        cy - h / 2,
+        size.width - pad + h / 2,
+        cy + h / 2,
+        const Radius.circular(h),
+      ),
+      Paint()..color = track,
     );
-    canvas.drawRRect(trackRect, Paint()..color = track);
 
     // Active part: from zero (bipolar) or from the start.
     final a = x(origin), b = x(t.clamp(0.0, 1.0));
     final left = math.min(a, b), right = math.max(a, b);
     if (right - left > 0.5) {
-      final r = Rect.fromLTRB(
-        left - h / 2,
-        cy - h / 2,
-        right + h / 2,
-        cy + h / 2,
-      );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(r, const Radius.circular(h)),
-        Paint()
-          ..shader = LinearGradient(
-            colors: rtl ? [primary, secondary] : [secondary, primary],
-          ).createShader(r),
+        RRect.fromLTRBR(
+          left - h / 2,
+          cy - h / 2,
+          right + h / 2,
+          cy + h / 2,
+          const Radius.circular(h),
+        ),
+        Paint()..color = primary,
       );
     }
 
-    // Default tick.
-    if (defaultT != null && defaultT! > 0.001 && defaultT! < 0.999) {
+    // Step dots along the track (darker on the filled part).
+    const steps = 10;
+    for (var i = 0; i <= steps; i++) {
+      final dx = x(i / steps);
+      final on = dx >= left - 0.5 && dx <= right + 0.5 && right - left > 0.5;
       canvas.drawCircle(
-        Offset(x(defaultT!), cy),
-        2.2,
-        Paint()..color = primary.withValues(alpha: 0.55),
+        Offset(dx, cy),
+        1.6,
+        Paint()..color = on ? secondary : shadow,
       );
     }
 
-    // Thumb.
+    // Default value mark.
+    if (defaultT != null && defaultT! > 0.001 && defaultT! < 0.999) {
+      final dx = x(defaultT!);
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+          dx - 1.5,
+          cy - 7,
+          dx + 1.5,
+          cy + 7,
+          const Radius.circular(2),
+        ),
+        Paint()..color = primary.withValues(alpha: 0.6),
+      );
+    }
+
+    // Thumb: a solid round knob that grows while held.
     final tx = x(t.clamp(0.0, 1.0));
     final r = _thumbRadius + 3 * press;
+    if (press > 0.01) {
+      canvas.drawCircle(
+        Offset(tx, cy),
+        r + 7 * press,
+        Paint()..color = primary.withValues(alpha: 0.16 * press),
+      );
+    }
     canvas
       ..drawCircle(
-        Offset(tx, cy + 1.5),
-        r + 1,
+        Offset(tx, cy + 1),
+        r,
         Paint()
-          ..color = shadow
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+          ..color = Colors.black.withValues(alpha: 0.22)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
       )
-      ..drawCircle(Offset(tx, cy), r, Paint()..color = thumb)
-      ..drawCircle(
-        Offset(tx, cy),
-        r - 1.5,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..color = primary,
-      )
-      ..drawCircle(Offset(tx, cy), 3 + 1.5 * press, Paint()..color = primary);
+      ..drawCircle(Offset(tx, cy), r, Paint()..color = primary);
 
     // Value bubble while dragging.
     if (press > 0.01) {

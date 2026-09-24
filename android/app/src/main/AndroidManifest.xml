@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Online icon styles (Google Material Symbols) are downloaded once
+         and then kept in the project. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only needed on Android 10 and older to write the Pixora folder and
          save exports to the gallery; newer versions need no permission. -->
     <uses-permission

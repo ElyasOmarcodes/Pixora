@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../ui/widgets/pix_slider.dart';
+
 import 'package:flutter/services.dart';
 
 import '../../app/app_scope.dart';
@@ -9,7 +12,7 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
 
-const String kAppVersion = '0.6.0';
+const String kAppVersion = '0.6.1';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -162,11 +165,12 @@ class SettingsPage extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.high_quality_rounded),
                         title: Text('${l.quality}  ${settings.exportQuality}%'),
-                        subtitle: Slider(
+                        subtitle: PixSlider(
+                          label: '',
                           value: settings.exportQuality.toDouble(),
                           min: 50,
                           max: 100,
-                          divisions: 50,
+                          format: (v) => '${v.round()}%',
                           onChanged: (v) => settings.exportQuality = v.round(),
                         ),
                       ),

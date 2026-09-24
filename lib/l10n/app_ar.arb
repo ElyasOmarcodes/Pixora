@@ -434,5 +434,7 @@
   "vZigzag": "متعرج",
   "vector": "متجه",
   "vectors": "متجهات",
-  "allIcons": "الكل ({count})"
+  "allIcons": "الكل ({count})",
+  "aspectRatio": "نسبة الأبعاد",
+  "selectFullPage": "التحديد في صفحة كاملة"
 }

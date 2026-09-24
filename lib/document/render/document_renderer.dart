@@ -626,7 +626,12 @@ class DocumentRenderer {
             ..isAntiAlias = true,
         );
       case TextLayer l:
-        TextLayoutCache.instance.paint(canvas, l);
+        final t = l.props.transform;
+        TextLayoutCache.instance.paint(
+          canvas,
+          l,
+          pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs()),
+        );
       case IconLayer l:
         final path = iconPath(l);
         final b = path.getBounds();

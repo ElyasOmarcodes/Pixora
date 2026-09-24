@@ -434,5 +434,7 @@
   "vZigzag": "زیګزاګ",
   "vector": "وکتور",
   "vectors": "وکتورونه",
-  "allIcons": "ټول ({count})"
+  "allIcons": "ټول ({count})",
+  "aspectRatio": "نسبت",
+  "selectFullPage": "په ټوله پاڼه کې ټاکل"
 }

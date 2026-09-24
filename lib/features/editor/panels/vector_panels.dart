@@ -110,10 +110,10 @@ class ShapePreview extends StatelessWidget {
 
 // ------------------------------------------------------ shape menu (4)
 
-enum _AddTab { shapes, vectors }
-
-/// The Shape menu: Icons, Shapes, Pen and Vectors.
-class AddShapePanel extends StatefulWidget {
+/// The Shape menu: only its four sections — Icons, Shapes, Pen and
+/// Vectors. Shapes and Vectors open their choices in a sheet, so the
+/// canvas stays uncluttered.
+class AddShapePanel extends StatelessWidget {
   const AddShapePanel({
     super.key,
     required this.editor,
@@ -126,160 +126,186 @@ class AddShapePanel extends StatefulWidget {
   final VoidCallback onIcons;
   final VoidCallback onPen;
 
-  @override
-  State<AddShapePanel> createState() => _AddShapePanelState();
-}
+  Future<void> _sheet(
+    BuildContext context,
+    String title,
+    List<Widget> Function(BuildContext sheet) tiles,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheet) => ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(sheet).height * 0.7,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Text(
+              title,
+              style: Theme.of(sheet).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          Flexible(
+            child: GridView.extent(
+              shrinkWrap: true,
+              maxCrossAxisExtent: 96,
+              padding: EdgeInsets.fromLTRB(
+                14,
+                0,
+                14,
+                16 + MediaQuery.paddingOf(sheet).bottom,
+              ),
+              mainAxisSpacing: 8,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.92,
+              children: tiles(sheet),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
-class _AddShapePanelState extends State<AddShapePanel> {
-  _AddTab _tab = _AddTab.shapes;
+  void _shapes(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final color = Theme.of(context).colorScheme.primary;
+    _sheet(
+      context,
+      l.shapes,
+      (sheet) => [
+        for (final k in ShapeKind.values)
+          _PresetTile(
+            label: shapeLabel(l, k),
+            preview: ShapePreview(k, color: color),
+            onTap: () {
+              Navigator.pop(sheet);
+              editor.addShape(k, name: l.shape, color: color);
+              onAdded();
+            },
+          ),
+      ],
+    );
+  }
+
+  void _vectors(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final color = Theme.of(context).colorScheme.primary;
+    _sheet(
+      context,
+      l.vectors,
+      (sheet) => [
+        for (final p in vectorPresets(100))
+          _PresetTile(
+            label: p.label(l),
+            preview: CustomPaint(
+              painter: _VectorPreview(p.layer, color),
+              child: const SizedBox(width: 44, height: 34),
+            ),
+            onTap: () {
+              Navigator.pop(sheet);
+              final unit = math.min(
+                editor.document.width,
+                editor.document.height,
+              );
+              final preset = vectorPresets(unit * 0.3)
+                  .firstWhere((x) => x.id == p.id);
+              editor.addPath(
+                preset.layer.copyWith(
+                  strokeColor: color,
+                  strokeWidth: math.max(2, unit * 0.012),
+                  fill: preset.layer.fill == null ? null : PixFill.color(color),
+                ),
+                name: l.vector,
+              );
+              onAdded();
+            },
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final color = scheme.primary;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    Widget card(
-      IconData icon,
-      String label,
-      bool selected,
-      VoidCallback onTap, {
-      List<Color>? gradient,
-    }) => Expanded(
-      child: Pressable(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
-        scale: 0.94,
-        child: AnimatedContainer(
-          duration: PixTokens.fast,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            gradient: selected
-                ? LinearGradient(
-                    colors:
-                        gradient ??
-                        [
-                          scheme.primary,
-                          Color.lerp(scheme.primary, scheme.tertiary, 0.6)!,
-                        ],
-                  )
-                : null,
-            color: selected ? null : scheme.onSurface.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(PixTokens.radiusM),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: selected ? scheme.onPrimary : scheme.primary),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: selected ? scheme.onPrimary : scheme.onSurface,
-                ),
+    Widget card(IconData icon, String label, Color tint, VoidCallback onTap) =>
+        Expanded(
+          child: Pressable(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
+            scale: 0.94,
+            semanticLabel: label,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(PixTokens.radiusL),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              card(Icons.emoji_symbols_rounded, l.icons, false, widget.onIcons),
-              card(
-                Icons.category_rounded,
-                l.shapes,
-                _tab == _AddTab.shapes,
-                () => setState(() => _tab = _AddTab.shapes),
-              ),
-              card(Icons.draw_rounded, l.pen, false, widget.onPen),
-              card(
-                Icons.north_east_rounded,
-                l.vectors,
-                _tab == _AddTab.vectors,
-                () => setState(() => _tab = _AddTab.vectors),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (_tab == _AddTab.shapes)
-          SizedBox(
-            height: 176,
-            child: GridView.count(
-              scrollDirection: Axis.horizontal,
-              crossAxisCount: 2,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 1.05,
-              children: [
-                for (final k in ShapeKind.values)
-                  _PresetTile(
-                    label: shapeLabel(l, k),
-                    preview: ShapePreview(k, color: color),
-                    onTap: () {
-                      widget.editor.addShape(k, name: l.shape, color: color);
-                      widget.onAdded();
-                    },
-                  ),
-              ],
-            ),
-          )
-        else
-          SizedBox(
-            height: 176,
-            child: GridView.count(
-              scrollDirection: Axis.horizontal,
-              crossAxisCount: 2,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 1.05,
-              children: [
-                for (final p in vectorPresets(100))
-                  _PresetTile(
-                    label: p.label(l),
-                    preview: CustomPaint(
-                      painter: _VectorPreview(p.layer, color),
-                      child: const SizedBox(width: 44, height: 34),
+              child: Column(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [tint, Color.lerp(tint, Colors.black, 0.25)!],
+                      ),
+                      shape: BoxShape.circle,
                     ),
-                    onTap: () {
-                      final unit = math.min(
-                        widget.editor.document.width,
-                        widget.editor.document.height,
-                      );
-                      final preset = vectorPresets(unit * 0.3)
-                          .firstWhere((x) => x.id == p.id);
-                      widget.editor.addPath(
-                        preset.layer.copyWith(
-                          strokeColor: color,
-                          strokeWidth: math.max(2, unit * 0.012),
-                          fill: preset.layer.fill == null
-                              ? null
-                              : PixFill.color(color),
-                        ),
-                        name: l.vector,
-                      );
-                      widget.onAdded();
-                    },
+                    child: Icon(icon, color: Colors.white, size: 24),
                   ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        const SizedBox(height: 8),
-      ],
+        );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: Row(
+        children: [
+          card(
+            Icons.emoji_symbols_rounded,
+            l.icons,
+            const Color(0xFFF59E0B),
+            onIcons,
+          ),
+          card(
+            Icons.category_rounded,
+            l.shapes,
+            scheme.primary,
+            () => _shapes(context),
+          ),
+          card(Icons.draw_rounded, l.pen, const Color(0xFF10B981), onPen),
+          card(
+            Icons.north_east_rounded,
+            l.vectors,
+            const Color(0xFFEC4899),
+            () => _vectors(context),
+          ),
+        ],
+      ),
     );
   }
 }

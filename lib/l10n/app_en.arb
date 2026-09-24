@@ -519,5 +519,7 @@
         "type": "int"
       }
     }
-  }
+  },
+  "aspectRatio": "Aspect ratio",
+  "selectFullPage": "Select on a full page"
 }

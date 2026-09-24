@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
@@ -61,7 +62,8 @@ class TextLayoutCache {
   Size sizeOf(TextLayer l) => entry(l).size;
 
   /// Paints [l] centred on the canvas origin.
-  void paint(Canvas canvas, TextLayer l) => entry(l).paint(canvas);
+  void paint(Canvas canvas, TextLayer l, [double pixelScale = 2]) =>
+      entry(l).paint(canvas, pixelScale);
 
   TextLayoutEntry entry(TextLayer l) {
     final key = Object.hash(
@@ -106,16 +108,95 @@ class TextLayoutCache {
   }
 }
 
-/// One vertical strip of a line placed on a curve.
-class _Placed {
-  const _Placed(this.box, this.pos, this.angle);
+/// Curved text: the straight layout is rendered once into a bitmap and
+/// drawn bent over a triangle strip that follows concentric arcs. Every
+/// glyph bends continuously (no seams or gaps, Arabic-script joins stay
+/// intact) and the bitmap is reused until the zoom level doubles/halves.
+class _CurveMesh {
+  _CurveMesh({required this.source, required this.positions, required this.xs});
 
-  /// Strip (clip) box in the straight layout.
-  final Rect box;
+  /// Straight-layout area that is bent (text box plus padding).
+  final Rect source;
 
-  /// Centre of the cluster on the curve (relative to the layer centre).
-  final Offset pos;
-  final double angle;
+  /// Triangle strip, top/bottom pairs, relative to the layer centre.
+  final Float32List positions;
+
+  /// Straight x of every column (relative to [source.left]).
+  final List<double> xs;
+
+  double? _scale;
+  ui.Image? _image;
+  ui.Vertices? _vertices;
+
+  void paint(Canvas canvas, double pixelScale, void Function(Canvas) draw) {
+    var bucket = 1.0;
+    // Oversampled: the bitmap is resampled once more when bent.
+    final want = (pixelScale * 1.5).clamp(1 / 16, 16.0);
+    while (bucket < want) {
+      bucket *= 2;
+    }
+    while (bucket / 2 >= want) {
+      bucket /= 2;
+    }
+    final longest = math.max(source.width, source.height);
+    final s = math.min(bucket, 4096 / longest);
+    if (_scale != s || _image == null) {
+      final w = math.max(1, (source.width * s).ceil());
+      final h = math.max(1, (source.height * s).ceil());
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder)
+        ..scale(w / source.width, h / source.height)
+        ..translate(-source.left, -source.top);
+      draw(c);
+      final picture = recorder.endRecording();
+      _image = picture.toImageSync(w, h);
+      picture.dispose();
+      final tex = Float32List(xs.length * 4);
+      final kx = w / source.width;
+      for (var i = 0; i < xs.length; i++) {
+        tex[i * 4] = xs[i] * kx;
+        tex[i * 4 + 1] = 0;
+        tex[i * 4 + 2] = xs[i] * kx;
+        tex[i * 4 + 3] = h.toDouble();
+      }
+      _vertices = ui.Vertices.raw(
+        ui.VertexMode.triangleStrip,
+        positions,
+        textureCoordinates: tex,
+      );
+      _scale = s;
+    }
+    canvas.drawVertices(
+      _vertices!,
+      BlendMode.srcOver,
+      Paint()
+        ..isAntiAlias = true
+        ..shader = ImageShader(
+          _image!,
+          TileMode.clamp,
+          TileMode.clamp,
+          Float64List.fromList([
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+          ]),
+          filterQuality: FilterQuality.medium,
+        ),
+    );
+  }
 }
 
 /// Builds the paragraph: the base style for the whole text plus child
@@ -158,14 +239,7 @@ InlineSpan _spanTree(
 }
 
 class TextLayoutEntry {
-  TextLayoutEntry._(
-    this.layer,
-    this.fill,
-    this.stroke,
-    this.size,
-    this._placed,
-    this._curveShift,
-  );
+  TextLayoutEntry._(this.layer, this.fill, this.stroke, this.size, this._mesh);
 
   final TextLayer layer;
   final TextPainter fill;
@@ -173,8 +247,7 @@ class TextLayoutEntry {
 
   /// Local box size (centred on the origin).
   final Size size;
-  final List<_Placed>? _placed;
-  final Offset _curveShift;
+  final _CurveMesh? _mesh;
 
   static TextLayoutEntry _build(TextLayer l) {
     final text = l.displayText;
@@ -252,83 +325,76 @@ class TextLayoutEntry {
     if (l.curve.abs() < 0.5 || fill.width <= 0) {
       final w = fill.width + 2 * math.max(pad, bgPad.width);
       final h = fill.height + 2 * math.max(pad, bgPad.height);
-      return TextLayoutEntry._(l, fill, stroke, Size(w, h), null, Offset.zero);
+      return TextLayoutEntry._(l, fill, stroke, Size(w, h), null);
     }
 
-    // Curved: cut every line into thin, slightly overlapping vertical
-    // strips and bend each onto concentric arcs. Whole lines are painted
-    // (clipped per strip), so joined Arabic-script letters stay connected
-    // and bend smoothly instead of breaking apart letter by letter.
+    // Curved: map the straight layout onto concentric arcs. A point at
+    // (dx, dy) from the centre goes to angle dx / r0 on radius r0 - dy.
     final w = fill.width, h = fill.height;
     final sign = l.curve.sign;
     final r0 = w / (l.curve.abs() * math.pi / 180);
-    final lines = fill.computeLineMetrics();
-    final strip = (l.fontSize / 10).clamp(2.0, 14.0);
-    final overlap = strip * 0.2;
-    final placed = <_Placed>[];
+    Offset map(double x, double y) {
+      final theta = (x - w / 2) / r0;
+      final r = math.max(0.0, r0 - sign * (y - h / 2));
+      return Offset(
+        r * math.sin(theta),
+        sign * r0 - sign * r * math.cos(theta),
+      );
+    }
+
+    // Room for strokes, italics and diacritics outside the line boxes.
+    final padX = pad + l.fontSize * 0.1;
+    final padY = pad + l.fontSize * 0.35;
+    final source = Rect.fromLTRB(-padX, -padY, w + padX, h + padY);
+    // One column per degree (or finer for small, strongly bent text).
+    final sweep = source.width / r0 * 180 / math.pi;
+    final n = sweep.ceil().clamp(4, 720);
+    final xs = <double>[];
+    final pos = Float32List((n + 1) * 4);
     var bounds = Rect.zero;
     var first = true;
-    for (var li = 0; li < lines.length; li++) {
-      final m = lines[li];
-      if (m.width <= 0) continue;
-      final top = m.baseline - m.ascent, bottom = m.baseline + m.descent;
-      // Vertical clip: halfway to the neighbouring lines, generous at the
-      // outer edges for diacritics and strokes.
-      final clipTop = li == 0
-          ? top - l.fontSize * 0.5
-          : (top + lines[li - 1].baseline + lines[li - 1].descent) / 2;
-      final clipBottom = li == lines.length - 1
-          ? bottom + l.fontSize * 0.5
-          : (bottom + lines[li + 1].baseline - lines[li + 1].ascent) / 2;
-      final n = math.max(1, (m.width / strip).ceil());
-      final sw = m.width / n;
-      for (var k = 0; k < n; k++) {
-        final x0 = m.left + k * sw;
-        final box = Rect.fromLTRB(
-          x0 - overlap,
-          clipTop,
-          x0 + sw + overlap,
-          clipBottom,
-        );
-        final dx = box.center.dx - w / 2, dy = box.center.dy - h / 2;
-        final theta = dx / r0;
-        final r = r0 - sign * dy;
-        final pos = Offset(
-          r * math.sin(theta),
-          sign * r0 - sign * r * math.cos(theta),
-        );
-        final angle = sign * theta;
-        placed.add(_Placed(box, pos, angle));
-        final c = math.cos(angle), sn = math.sin(angle);
-        // Glyph extent (not the generous clip) for the bounds.
-        final hw = box.width / 2;
-        final gt = top - box.center.dy, gb = bottom - box.center.dy;
-        for (final (x, y) in [(-hw, gt), (hw, gt), (hw, gb), (-hw, gb)]) {
-          final p = pos + Offset(x * c - y * sn, x * sn + y * c);
-          final pr = Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy);
-          bounds = first ? pr : bounds.expandToInclude(pr);
-          first = false;
-        }
+    final lines = fill.computeLineMetrics();
+    var gTop = 0.0, gBottom = h;
+    if (lines.isNotEmpty) {
+      gTop = lines.first.baseline - lines.first.ascent - pad;
+      gBottom = lines.last.baseline + lines.last.descent + pad;
+    }
+    for (var i = 0; i <= n; i++) {
+      final x = source.left + source.width * i / n;
+      xs.add(x - source.left);
+      final t = map(x, source.top), b = map(x, source.bottom);
+      pos[i * 4] = t.dx;
+      pos[i * 4 + 1] = t.dy;
+      pos[i * 4 + 2] = b.dx;
+      pos[i * 4 + 3] = b.dy;
+      if (x < -pad || x > w + pad) continue;
+      for (final p in [map(x, gTop), map(x, gBottom)]) {
+        final pr = Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy);
+        bounds = first ? pr : bounds.expandToInclude(pr);
+        first = false;
       }
     }
-    if (placed.isEmpty) {
-      return TextLayoutEntry._(
-        l,
-        fill,
-        stroke,
-        Size(w + 2 * pad, h + 2 * pad),
-        null,
-        Offset.zero,
-      );
+    // Centre the bent text on the layer origin.
+    final c = bounds.center;
+    for (var i = 0; i < pos.length; i += 2) {
+      pos[i] -= c.dx;
+      pos[i + 1] -= c.dy;
     }
     final size = Size(
       bounds.width + 2 * math.max(pad, bgPad.width),
       bounds.height + 2 * math.max(pad, bgPad.height),
     );
-    return TextLayoutEntry._(l, fill, stroke, size, placed, -bounds.center);
+    return TextLayoutEntry._(
+      l,
+      fill,
+      stroke,
+      size,
+      _CurveMesh(source: source, positions: pos, xs: xs),
+    );
   }
 
-  void paint(Canvas canvas) {
+  /// [pixelScale]: device pixels per local unit (sharpness of curves).
+  void paint(Canvas canvas, [double pixelScale = 2]) {
     final l = layer;
     final bg = l.background;
     if (bg != null) {
@@ -343,35 +409,16 @@ class TextLayoutEntry {
         bg.applyTo(Paint()..isAntiAlias = true, rect),
       );
     }
-    final placed = _placed;
-    if (placed == null) {
+    final mesh = _mesh;
+    if (mesh == null) {
       final origin = Offset(-fill.width / 2, -fill.height / 2);
       stroke?.paint(canvas, origin);
       fill.paint(canvas, origin);
       return;
     }
-    // Each cluster: clip the straight layout to the cluster and paint it
-    // rotated onto the arc. Painting whole lines keeps Arabic-script joins
-    // and shaping intact.
-    void pass(TextPainter p) {
-      for (final g in placed) {
-        canvas
-          ..save()
-          ..translate(g.pos.dx + _curveShift.dx, g.pos.dy + _curveShift.dy)
-          ..rotate(g.angle)
-          ..clipRect(
-            Rect.fromCenter(
-              center: Offset.zero,
-              width: g.box.width,
-              height: g.box.height,
-            ),
-          );
-        p.paint(canvas, -g.box.center);
-        canvas.restore();
-      }
-    }
-
-    if (stroke != null) pass(stroke!);
-    pass(fill);
+    mesh.paint(canvas, pixelScale, (c) {
+      stroke?.paint(c, Offset.zero);
+      fill.paint(c, Offset.zero);
+    });
   }
 }

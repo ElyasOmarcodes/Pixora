@@ -434,5 +434,7 @@
   "vZigzag": "زیگزاگ",
   "vector": "وکتور",
   "vectors": "وکتورها",
-  "allIcons": "همه ({count})"
+  "allIcons": "همه ({count})",
+  "aspectRatio": "نسبت ابعاد",
+  "selectFullPage": "انتخاب در صفحهٔ کامل"
 }

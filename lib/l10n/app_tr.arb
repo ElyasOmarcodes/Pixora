@@ -434,5 +434,7 @@
   "vZigzag": "Zikzak",
   "vector": "Vektör",
   "vectors": "Vektörler",
-  "allIcons": "Tümü ({count})"
+  "allIcons": "Tümü ({count})",
+  "aspectRatio": "En-boy oranı",
+  "selectFullPage": "Tam sayfada seç"
 }

@@ -107,9 +107,16 @@ class _EditorPageState extends State<EditorPage> {
       pen.reset();
       _maskPen.clear();
     }
-    // The canvas tool may have changed (mask brush ↔ mask pen).
-    if (mounted) setState(() {});
+    // Rebuild only when what the page shows changed (the canvas tool, the
+    // panel, the layers sheet) — not on every brush-size or pen tweak.
+    final key = (_ui.mode, p, _ui.showLayers, _ui.maskBrush.kind);
+    if (key != _uiKey && mounted) {
+      _uiKey = key;
+      setState(() {});
+    }
   }
+
+  (ToolMode, ToolPanel?, bool, MaskToolKind)? _uiKey;
 
   void _finishPen() {
     final t = _ui.penState.target;
@@ -237,6 +244,10 @@ class _EditorPageState extends State<EditorPage> {
       _saveTimer?.cancel();
       _saveTimer = Timer(const Duration(milliseconds: 1400), _save);
     }
+    // Live previews (dragging, pen, sliders) repaint the canvas and the
+    // widgets that listen to the editor themselves; rebuilding the whole
+    // page every frame made long gestures heavy.
+    if (_editor.isPreviewing) return;
     setState(() {});
   }
 

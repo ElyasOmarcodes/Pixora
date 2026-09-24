@@ -132,6 +132,106 @@ class _TextPartSelectorState extends State<TextPartSelector> {
     super.dispose();
   }
 
+  /// Temporarily turns the selection area into a whole page, so parts of
+  /// long texts are easy to pick. It edits the same selection.
+  Future<void> _fullPage() async {
+    final l = AppLocalizations.of(context);
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return Dialog.fullscreen(
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(l.partOfText),
+              actions: [
+                Padding(
+                  padding: const EdgeInsetsDirectional.only(end: 12),
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.check_rounded),
+                    label: Text(l.done),
+                  ),
+                ),
+              ],
+            ),
+            body: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListenableBuilder(
+                    listenable: _c,
+                    builder: (context, _) {
+                      final sel = _c.selection;
+                      final n = sel.isValid ? sel.end - sel.start : 0;
+                      return Container(
+                        margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: n > 0
+                              ? scheme.primary.withValues(alpha: 0.1)
+                              : scheme.onSurface.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          n > 0 ? l.partSelected(n) : l.selectPartHint,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: n > 0 ? scheme.primary : null,
+                            fontWeight: n > 0 ? FontWeight.w700 : null,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: TextField(
+                        controller: _c,
+                        readOnly: true,
+                        showCursor: true,
+                        autofocus: true,
+                        enableInteractiveSelection: true,
+                        expands: true,
+                        maxLines: null,
+                        textAlignVertical: TextAlignVertical.top,
+                        textDirection: detectTextDirection(widget.text),
+                        style: TextStyle(
+                          fontFamily: widget.fontFamily == 'System'
+                              ? null
+                              : widget.fontFamily,
+                          fontFamilyFallback: FontCatalog.fallback,
+                          fontSize: 26,
+                          height: 1.6,
+                          color: scheme.onSurface,
+                        ),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: scheme.onSurface.withValues(alpha: 0.04),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.all(18),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    _onSel();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -194,31 +294,56 @@ class _TextPartSelectorState extends State<TextPartSelector> {
                           horizontal: 12,
                           vertical: 4,
                         ),
-                        child: TextField(
-                          controller: _c,
-                          readOnly: true,
-                          showCursor: true,
-                          enableInteractiveSelection: true,
-                          maxLines: 3,
-                          minLines: 1,
-                          textAlign: TextAlign.center,
-                          textDirection: detectTextDirection(widget.text),
-                          style: TextStyle(
-                            fontFamily: widget.fontFamily == 'System'
-                                ? null
-                                : widget.fontFamily,
-                            fontFamilyFallback: FontCatalog.fallback,
-                            fontSize: 22,
-                            height: 1.4,
-                            color: scheme.onSurface,
-                          ),
-                          decoration: const InputDecoration(
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            isDense: true,
-                          ),
+                        child: Stack(
+                          children: [
+                            TextField(
+                              controller: _c,
+                              readOnly: true,
+                              showCursor: true,
+                              enableInteractiveSelection: true,
+                              maxLines: 3,
+                              minLines: 1,
+                              textAlign: TextAlign.center,
+                              textDirection: detectTextDirection(widget.text),
+                              style: TextStyle(
+                                fontFamily: widget.fontFamily == 'System'
+                                    ? null
+                                    : widget.fontFamily,
+                                fontFamilyFallback: FontCatalog.fallback,
+                                fontSize: 22,
+                                height: 1.4,
+                                color: scheme.onSurface,
+                              ),
+                              decoration: const InputDecoration(
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.fromLTRB(
+                                  34,
+                                  10,
+                                  34,
+                                  10,
+                                ),
+                              ),
+                            ),
+                            // Long text: select on a full page instead.
+                            PositionedDirectional(
+                              top: 0,
+                              end: -6,
+                              child: IconButton(
+                                tooltip: l.selectFullPage,
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  Icons.open_in_full_rounded,
+                                  size: 20,
+                                  color: scheme.primary,
+                                ),
+                                onPressed: _fullPage,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 4),

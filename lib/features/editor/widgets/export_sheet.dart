@@ -2,6 +2,9 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+
+import '../../../ui/widgets/pix_slider.dart';
+
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
@@ -397,24 +400,14 @@ class _ExportSheetState extends State<_ExportSheet> {
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       padding: const EdgeInsets.only(top: 14),
-                      child: Row(
-                        children: [
-                          Text(l.quality, style: theme.textTheme.labelLarge),
-                          Expanded(
-                            child: Slider(
-                              value: _quality.toDouble(),
-                              min: 50,
-                              max: 100,
-                              divisions: 50,
-                              onChanged: (v) =>
-                                  setState(() => _quality = v.round()),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 44,
-                            child: Text('$_quality%', textAlign: TextAlign.end),
-                          ),
-                        ],
+                      child: PixSlider(
+                        label: l.quality,
+                        value: _quality.toDouble(),
+                        min: 50,
+                        max: 100,
+                        defaultValue: 92,
+                        format: (v) => '${v.round()}%',
+                        onChanged: (v) => setState(() => _quality = v.round()),
                       ),
                     ),
             ),

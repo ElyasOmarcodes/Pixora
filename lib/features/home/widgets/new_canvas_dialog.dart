@@ -32,8 +32,11 @@ Future<CanvasSizeResult?> showNewCanvasDialog(
   double height = 1080,
   double dpi = 72,
   bool resizing = false,
-}) => showDialog<CanvasSizeResult>(
+}) => showModalBottomSheet<CanvasSizeResult>(
   context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  showDragHandle: true,
   builder: (_) => _NewCanvasDialog(
     width: width,
     height: height,
@@ -142,6 +145,22 @@ class _NewCanvasDialogState extends State<_NewCanvasDialog> {
     setState(() {});
   }
 
+  void _setRatio(double r) {
+    final w = _px(_w) ?? widget.width;
+    var h = (w / r).roundToDouble();
+    var ww = w;
+    if (h > _maxPx) {
+      h = _maxPx;
+      ww = (h * r).roundToDouble();
+    }
+    setState(() {
+      _lock = true;
+      _ratio = r;
+      _w.text = _fmt(ww);
+      _h.text = _fmt(h);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -149,60 +168,156 @@ class _NewCanvasDialogState extends State<_NewCanvasDialog> {
     final scheme = theme.colorScheme;
     final w = _px(_w), h = _px(_h);
     final valid = w != null && h != null && _dpi >= 1;
+    final fieldFill = scheme.onSurface.withValues(alpha: 0.05);
+    OutlineInputBorder border() => OutlineInputBorder(
+      borderRadius: BorderRadius.circular(16),
+      borderSide: BorderSide.none,
+    );
 
-    Widget field(TextEditingController c, String label) => Expanded(
-      child: TextField(
-        controller: c,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.center,
-        style: theme.textTheme.titleMedium?.copyWith(
+    Widget section(String title) => Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Text(
+        title,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: scheme.onSurfaceVariant,
           fontWeight: FontWeight.w700,
         ),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-        ],
-        decoration: InputDecoration(
-          labelText: label,
-          suffixText: _unit.suffix,
-          filled: true,
-          fillColor: scheme.onSurface.withValues(alpha: 0.04),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-        ),
-        onChanged: (_) => _linked(c),
       ),
     );
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.aspect_ratio_rounded, color: scheme.primary),
-                  const SizedBox(width: 10),
-                  Text(
-                    widget.resizing ? l.canvasSize : l.customSize,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
+    Widget field(TextEditingController c, String label) => Expanded(
+      // Numbers and units read left-to-right in every language.
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: TextField(
+          controller: c,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+          ],
+          decoration: InputDecoration(
+            labelText: label,
+            floatingLabelAlignment: FloatingLabelAlignment.center,
+            suffixText: _unit.suffix,
+            filled: true,
+            fillColor: fieldFill,
+            border: border(),
+          ),
+          onChanged: (_) => _linked(c),
+        ),
+      ),
+    );
+
+    // Live preview of the proportions.
+    final ratio = valid ? w / h : _ratio;
+    const box = 76.0;
+    final pw = ratio >= 1 ? box : box * ratio;
+    final ph = ratio >= 1 ? box / ratio : box;
+
+    const ratios = <(String, double)>[
+      ('1:1', 1),
+      ('4:5', 4 / 5),
+      ('9:16', 9 / 16),
+      ('16:9', 16 / 9),
+      ('3:2', 3 / 2),
+      ('2:3', 2 / 3),
+      ('4:3', 4 / 3),
+      ('A4', 210 / 297),
+    ];
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header: title, and the size at a glance with a preview.
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.resizing ? l.canvasSize : l.customSize,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        valid
+                            ? '${w.round()} × ${h.round()} px'
+                            : l.sizeLimit(_maxPx.round()),
+                        textDirection: TextDirection.ltr,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: valid ? scheme.primary : scheme.error,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (valid)
+                        Text(
+                          '${MeasureUnit.cm.format(MeasureUnit.cm.fromPx(w, _dpi))}'
+                          ' × '
+                          '${MeasureUnit.cm.format(MeasureUnit.cm.fromPx(h, _dpi))}'
+                          ' cm · ${_dpi.round()} dpi',
+                          textDirection: TextDirection.ltr,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: box + 8,
+                  height: box + 8,
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      width: pw.clamp(6.0, box),
+                      height: ph.clamp(6.0, box),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.12),
+                        border: Border.all(color: scheme.primary, width: 2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                   ),
+                ),
+              ],
+            ),
+            section(l.aspectRatio),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final (name, r) in ratios)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 6),
+                      child: ChoiceChip(
+                        label: Text(name),
+                        selected: _lock && (_ratio - r).abs() < 0.002,
+                        onSelected: (_) => _setRatio(r),
+                      ),
+                    ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(l.units, style: theme.textTheme.labelLarge),
-              const SizedBox(height: 6),
-              SegmentedButton<MeasureUnit>(
+            ),
+            section(l.units),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<MeasureUnit>(
                 showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
                 segments: [
                   for (final u in _units)
                     ButtonSegment(value: u, label: Text(u.suffix)),
@@ -210,48 +325,65 @@ class _NewCanvasDialogState extends State<_NewCanvasDialog> {
                 selected: {_unit},
                 onSelectionChanged: (s) => _setUnit(s.first),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  field(_w, l.width),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: IconButton(
-                      tooltip: l.keepRatio,
-                      isSelected: _lock,
-                      onPressed: () => setState(() {
-                        _lock = !_lock;
-                        if (w != null && h != null) _ratio = w / h;
-                      }),
-                      icon: const Icon(Icons.link_off_rounded),
-                      selectedIcon: Icon(
-                        Icons.link_rounded,
-                        color: scheme.primary,
-                      ),
-                    ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                field(_w, l.width),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: IconButton.filledTonal(
+                    tooltip: l.keepRatio,
+                    isSelected: _lock,
+                    onPressed: () => setState(() {
+                      _lock = !_lock;
+                      if (w != null && h != null) _ratio = w / h;
+                    }),
+                    icon: const Icon(Icons.link_off_rounded),
+                    selectedIcon: const Icon(Icons.link_rounded),
                   ),
-                  field(_h, l.height),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 110,
+                ),
+                field(_h, l.height),
+              ],
+            ),
+            section(l.resolution),
+            Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<double>(
+                    showSelectedIcon: false,
+                    emptySelectionAllowed: true,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    segments: [
+                      for (final d in const [72.0, 150.0, 300.0])
+                        ButtonSegment(value: d, label: Text('${d.round()}')),
+                    ],
+                    selected: {
+                      if (const [72.0, 150.0, 300.0].contains(_dpi)) _dpi,
+                    },
+                    onSelectionChanged: (s) {
+                      if (s.isNotEmpty) _setDpi(s.first);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 104,
+                  child: Directionality(
+                    textDirection: TextDirection.ltr,
                     child: TextField(
                       controller: _d,
                       keyboardType: TextInputType.number,
-                      textDirection: TextDirection.ltr,
+                      textAlign: TextAlign.center,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: InputDecoration(
-                        labelText: l.resolution,
+                        isDense: true,
                         suffixText: 'dpi',
                         filled: true,
-                        fillColor: scheme.onSurface.withValues(alpha: 0.04),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
+                        fillColor: fieldFill,
+                        border: border(),
                       ),
                       onChanged: (v) {
                         final d = double.tryParse(v);
@@ -259,121 +391,67 @@ class _NewCanvasDialogState extends State<_NewCanvasDialog> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        for (final d in const [72.0, 150.0, 300.0])
-                          ChoiceChip(
-                            label: Text('${d.round()}'),
-                            selected: _dpi == d,
-                            onSelected: (_) => _setDpi(d),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: fieldFill,
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 14),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: valid
-                      ? scheme.primary.withValues(alpha: 0.08)
-                      : scheme.error.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      valid ? Icons.crop_square_rounded : Icons.error_outline,
-                      size: 18,
-                      color: valid ? scheme.primary : scheme.error,
+              child: widget.resizing
+                  ? SwitchListTile.adaptive(
+                      value: _scale,
+                      secondary: const Icon(Icons.open_in_full_rounded),
+                      title: Text(l.scaleContent),
+                      onChanged: (v) => setState(() => _scale = v),
+                    )
+                  : SwitchListTile.adaptive(
+                      value: _transparent,
+                      secondary: const Icon(Icons.grid_4x4_rounded),
+                      title: Text(l.transparent),
+                      onChanged: (v) => setState(() => _transparent = v),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        valid
-                            ? '${w.round()} × ${h.round()} px'
-                            : l.sizeLimit(_maxPx.round()),
-                        textDirection: TextDirection.ltr,
-                        textAlign: TextAlign.start,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: valid ? scheme.primary : scheme.error,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 52),
                     ),
-                    if (valid && _unit == MeasureUnit.px)
-                      Text(
-                        '${MeasureUnit.cm.format(MeasureUnit.cm.fromPx(w, _dpi))} × '
-                        '${MeasureUnit.cm.format(MeasureUnit.cm.fromPx(h, _dpi))} cm',
-                        textDirection: TextDirection.ltr,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 6),
-              if (widget.resizing)
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  value: _scale,
-                  title: Text(l.scaleContent),
-                  onChanged: (v) => setState(() => _scale = v),
-                )
-              else
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  value: _transparent,
-                  title: Text(l.transparent),
-                  onChanged: (v) => setState(() => _transparent = v),
-                ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 50),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(l.cancel),
-                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l.cancel),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 50),
-                      ),
-                      onPressed: !valid
-                          ? null
-                          : () => Navigator.pop(
-                              context,
-                              CanvasSizeResult(
-                                math.max(1, w),
-                                math.max(1, h),
-                                transparent: _transparent,
-                                scaleContent: _scale,
-                                dpi: _dpi,
-                              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 52),
+                    ),
+                    icon: const Icon(Icons.check_rounded),
+                    onPressed: !valid
+                        ? null
+                        : () => Navigator.pop(
+                            context,
+                            CanvasSizeResult(
+                              math.max(1, w),
+                              math.max(1, h),
+                              transparent: _transparent,
+                              scaleContent: _scale,
+                              dpi: _dpi,
                             ),
-                      child: Text(widget.resizing ? l.apply : l.create),
-                    ),
+                          ),
+                    label: Text(widget.resizing ? l.apply : l.create),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

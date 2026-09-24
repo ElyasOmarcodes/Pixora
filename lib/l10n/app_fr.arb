@@ -434,5 +434,7 @@
   "vZigzag": "Zigzag",
   "vector": "Vecteur",
   "vectors": "Vecteurs",
-  "allIcons": "Toutes ({count})"
+  "allIcons": "Toutes ({count})",
+  "aspectRatio": "Proportions",
+  "selectFullPage": "Sélectionner en plein écran"
 }

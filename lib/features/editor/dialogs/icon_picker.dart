@@ -27,6 +27,7 @@ class _IconPickerPage extends StatefulWidget {
 }
 
 class _IconPickerPageState extends State<_IconPickerPage> {
+  List<String>? _sorted;
   final _catalog = IconCatalog.instance;
   Map<String, String>? _icons;
   String _query = '';
@@ -58,7 +59,7 @@ class _IconPickerPageState extends State<_IconPickerPage> {
           if (icons.containsKey(n)) n,
       ];
     }
-    final all = icons.keys.toList()..sort();
+    final all = _sorted ??= (icons.keys.toList()..sort());
     return q.isEmpty ? all : all.where((n) => n.contains(q)).toList();
   }
 
@@ -202,14 +203,19 @@ class _IconPickerPageState extends State<_IconPickerPage> {
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
+                            // Instant: no double-tap detector (it delays
+                            // every tap). Tap the selected icon again to add.
                             onTap: () {
                               HapticFeedback.selectionClick();
-                              setState(() => _selected = n);
+                              if (sel && !_loading) {
+                                _add();
+                                return;
+                              }
+                              setState(() {
+                                _selected = n;
+                                _preview = _icons![n];
+                              });
                               _refreshPreview();
-                            },
-                            onDoubleTap: () {
-                              setState(() => _selected = n);
-                              _refreshPreview().then((_) => _add());
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(12),
