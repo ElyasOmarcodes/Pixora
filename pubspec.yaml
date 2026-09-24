@@ -1,0 +1,57 @@
+name: pixora
+description: "Pixora — a layered, cross-platform photo & graphic editor."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.3
+  shared_preferences: ^2.5.5
+  path_provider: ^2.1.6
+  file_picker: ^13.1.0
+  share_plus: ^13.3.0
+  image: ^4.10.1
+  cupertino_icons: ^1.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  generate: true
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/Vazirmatn-Regular.ttf
+        - asset: assets/fonts/Vazirmatn-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Vazirmatn-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Vazirmatn-Black.ttf
+          weight: 900
+
+# App icons for every platform: `dart run flutter_launcher_icons`
+flutter_launcher_icons:
+  image_path: assets/branding/icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#1E8BFF"
+  windows:
+    generate: true
+    icon_size: 256
+  macos:
+    generate: true
+  web:
+    generate: true
+    background_color: "#1E8BFF"
+    theme_color: "#3D7BFF"

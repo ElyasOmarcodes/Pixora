@@ -1,0 +1,206 @@
+name: Release
+
+# Builds Pixora for every platform, compresses the outputs as much as
+# practical and publishes them as a GitHub Release.
+#
+#   * push a tag like `v0.2.0`, or
+#   * run this workflow manually and enter a version.
+#
+# Optional secrets for a properly signed Android build (otherwise the APKs
+# are signed with a debug key, which installs fine but can't go on Play):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+  # Tag name without the leading "v".
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get && flutter analyze && flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - name: Configure signing
+        if: env.KEYSTORE != ''
+        run: |
+          echo "$KEYSTORE" | base64 -d > android/app/release.jks
+          cat > android/key.properties <<PROPS
+          storeFile=release.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          PROPS
+      - run: flutter pub get
+      - name: Build split APKs (one small APK per CPU type)
+        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/symbols/android --tree-shake-icons
+      - name: Build App Bundle (Google Play)
+        run: flutter build appbundle --release --obfuscate --split-debug-info=build/symbols/android --tree-shake-icons
+      - name: Collect
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            cp "build/app/outputs/flutter-apk/app-$abi-release.apk" "dist/Pixora-$V-android-$abi.apk"
+          done
+          cp build/app/outputs/bundle/release/app-release.aab "dist/Pixora-$V-android.aab"
+          (cd build/symbols && zip -9 -r "../../dist-symbols-android.zip" android)
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: dist/*, compression-level: 0 }
+      - uses: actions/upload-artifact@v4
+        with: { name: symbols-android, path: dist-symbols-android.zip }
+
+  ios:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get
+      - name: Build (unsigned)
+        run: flutter build ios --release --no-codesign --obfuscate --split-debug-info=build/symbols/ios --tree-shake-icons
+      - name: Package unsigned IPA
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -9 -q -r -y "dist/Pixora-$V-ios-unsigned.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with: { name: ios, path: dist/*, compression-level: 0 }
+
+  macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get
+      - run: flutter build macos --release --obfuscate --split-debug-info=build/symbols/macos --tree-shake-icons
+      - name: Package compressed DMG
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist
+          # ULMO = LZMA-compressed disk image (smallest, macOS 10.15+).
+          hdiutil create -volname Pixora -srcfolder build/macos/Build/Products/Release/Pixora.app \
+            -ov -format ULMO "dist/Pixora-$V-macos.dmg"
+      - uses: actions/upload-artifact@v4
+        with: { name: macos, path: dist/*, compression-level: 0 }
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get
+      - run: flutter build windows --release --obfuscate --split-debug-info=build/symbols/windows --tree-shake-icons
+      - name: Package (max compression)
+        shell: bash
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist
+          cd build/windows/x64/runner/Release
+          7z a -tzip -mx=9 -mm=Deflate64 "../../../../../dist/Pixora-$V-windows-x64.zip" . > /dev/null
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist/*, compression-level: 0 }
+
+  linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get
+      - run: flutter build linux --release --obfuscate --split-debug-info=build/symbols/linux --tree-shake-icons
+      - name: Package (xz -9)
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist
+          tar -C build/linux/x64/release -cf - bundle | xz -9e -T0 > "dist/Pixora-$V-linux-x64.tar.xz"
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: dist/*, compression-level: 0 }
+
+  web:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
+      - run: flutter pub get
+      - run: flutter build web --release --no-web-resources-cdn
+      - name: Package
+        run: |
+          V="${VERSION#v}"
+          mkdir -p dist
+          (cd build/web && zip -9 -q -r "../../dist/Pixora-$V-web.zip" .)
+      - uses: actions/upload-artifact@v4
+        with: { name: web, path: dist/*, compression-level: 0 }
+
+  release:
+    needs: [android, ios, macos, windows, linux, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: '{android,ios,macos,windows,linux,web}'
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && ls -la
+      - name: Tag
+        id: tag
+        run: |
+          V="${VERSION#v}"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Pixora ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          body: |
+            ## Downloads
+            | Platform | File |
+            |---|---|
+            | Android (most phones) | `*-android-arm64-v8a.apk` |
+            | Android (older 32-bit phones) | `*-android-armeabi-v7a.apk` |
+            | Android (Google Play) | `*-android.aab` |
+            | Windows 10/11 | `*-windows-x64.zip` — unzip and run `pixora.exe` |
+            | macOS | `*-macos.dmg` |
+            | Linux | `*-linux-x64.tar.xz` |
+            | iOS | `*-ios-unsigned.ipa` — must be signed (e.g. AltStore / Sideloadly) before installing |
+            | Web | `*-web.zip` |
+          files: dist/*
