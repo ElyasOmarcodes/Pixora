@@ -5,6 +5,7 @@ import '../../../document/model/mask.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../editor/tools/mask_tool.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui/widgets/confirm_dialog.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../editor_scope.dart';
 import 'panel_common.dart';
@@ -86,7 +87,16 @@ class MaskPanel extends StatelessWidget {
                 label: l.clearMask,
                 onTap: props.mask.isEmpty
                     ? null
-                    : () => editor.clearMask(layer.id),
+                    : () async {
+                        if (await showConfirmDialog(
+                          context,
+                          title: l.clearMaskConfirm,
+                          message: l.undoHint,
+                          confirmLabel: l.clearMask,
+                        )) {
+                          editor.clearMask(layer.id);
+                        }
+                      },
               ),
             ],
           ),

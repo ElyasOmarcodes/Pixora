@@ -103,7 +103,7 @@ class ContextDock extends StatelessWidget {
         DockItem(
           Icons.delete_outline_rounded,
           l.delete,
-          onTap: editor.deleteSelected,
+          onTap: () => commands.deleteLayers(editor.topLevelSelection),
           destructive: true,
         ),
         div,
@@ -141,7 +141,7 @@ class ContextDock extends StatelessWidget {
       DockItem(
         Icons.delete_outline_rounded,
         l.delete,
-        onTap: () => editor.deleteLayer(id),
+        onTap: () => commands.deleteLayers([id]),
         destructive: true,
       ),
       DockItem(

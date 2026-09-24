@@ -18,7 +18,11 @@ class TopBarActions {
     required this.resizeCanvas,
     required this.exportProject,
     required this.editLayer,
+    required this.deleteSelection,
   });
+
+  /// Deletes the selected layers (after confirmation).
+  final VoidCallback deleteSelection;
 
   /// Edits the selected layer (text → text sheet, image → replace,
   /// shape → style panel).
@@ -201,9 +205,10 @@ class EditorTopBar extends StatelessWidget {
       ),
       _ToolButton(
         icon: Icons.straighten_rounded,
-        tooltip: l.rulers,
+        tooltip: '${l.rulers} · ${l.longPressSettings}',
         active: settings.showRulers,
         onTap: () => settings.showRulers = !settings.showRulers,
+        onLongPress: () => _openPanel(ToolPanel.rulers),
       ),
       const _Divider(),
       if (wide)
@@ -241,7 +246,7 @@ class EditorTopBar extends StatelessWidget {
         ),
         onSelected: (a) => switch (a) {
           _More.share => actions.exportImage(),
-          _More.rulers => settings.showRulers = !settings.showRulers,
+          _More.rulers => _openPanel(ToolPanel.rulers),
           _More.gridSettings => _openPanel(ToolPanel.grid),
           _More.snapSettings => _openPanel(ToolPanel.snap),
           _More.canvasSize => actions.resizeCanvas(),
@@ -256,12 +261,13 @@ class EditorTopBar extends StatelessWidget {
                 title: Text(l.shareImage),
               ),
             ),
-          if (compact)
-            CheckedPopupMenuItem(
-              value: _More.rulers,
-              checked: settings.showRulers,
-              child: Text(l.rulers),
+          PopupMenuItem(
+            value: _More.rulers,
+            child: ListTile(
+              leading: const Icon(Icons.straighten_rounded),
+              title: Text(l.rulersGuides),
             ),
+          ),
           PopupMenuItem(
             value: _More.gridSettings,
             child: ListTile(
@@ -655,6 +661,7 @@ class _CompactBar extends StatelessWidget {
                               : ToolMode.hand,
                         ),
                       ),
+                      cell(_ZoomChip(canvas: bar.canvas, color: fg)),
                       cell(
                         _BarIcon(
                           icon: Icons.grid_on_rounded,
@@ -676,7 +683,6 @@ class _CompactBar extends StatelessWidget {
                           onLongPress: () => bar._openPanel(ToolPanel.snap),
                         ),
                       ),
-                      cell(_ZoomChip(canvas: bar.canvas, color: fg)),
                     ],
                   ),
                 ),
@@ -739,7 +745,11 @@ class _ContextPill extends StatelessWidget {
                 children: [
                   round(Icons.edit_rounded, l.edit, bar.actions.editLayer),
                   const SizedBox(width: 6),
-                  round(Icons.delete_rounded, l.delete, editor.deleteSelected),
+                  round(
+                    Icons.delete_rounded,
+                    l.delete,
+                    bar.actions.deleteSelection,
+                  ),
                 ],
               )
             : InkWell(

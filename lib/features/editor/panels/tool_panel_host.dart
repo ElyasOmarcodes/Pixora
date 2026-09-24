@@ -43,6 +43,8 @@ class ToolPanelHost extends StatelessWidget {
         return GridPanel(editor: editor, ui: ui);
       case ToolPanel.snap:
         return const SnapPanel();
+      case ToolPanel.rulers:
+        return RulerPanel(editor: editor);
       default:
         break;
     }

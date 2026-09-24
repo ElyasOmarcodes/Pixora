@@ -17,6 +17,7 @@ import '../document/model/layer_geometry.dart';
 import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
 import '../document/render/document_renderer.dart';
+import '../document/render/layer_cache.dart';
 import 'history.dart';
 
 /// Signature of a document edit. Every change to a document is expressed as
@@ -77,6 +78,14 @@ class EditorController extends ChangeNotifier {
   bool get canRedo => history.canRedo;
 
   DocumentRenderer get renderer => DocumentRenderer(assets);
+
+  /// Bitmap cache for expensive layers on the on-screen canvas.
+  final LayerRasterCache rasterCache = LayerRasterCache();
+
+  /// Renderer for the canvas at [pixelScale] output pixels per document
+  /// pixel, drawing expensive layers from [rasterCache].
+  DocumentRenderer viewRenderer(double pixelScale) =>
+      DocumentRenderer(assets, cache: rasterCache, pixelScale: pixelScale);
 
   void _onAssetsChanged() {
     paintRevision++;
@@ -223,6 +232,7 @@ class EditorController extends ChangeNotifier {
   @override
   void dispose() {
     assets.removeListener(_onAssetsChanged);
+    rasterCache.clear();
     super.dispose();
   }
 
@@ -965,7 +975,12 @@ class EditorController extends ChangeNotifier {
   /// Changes the canvas size. When [scaleContent] is true layers are scaled
   /// and moved proportionally, otherwise they keep their size and stay
   /// centred.
-  void resizeCanvas(double width, double height, {bool scaleContent = true}) {
+  void resizeCanvas(
+    double width,
+    double height, {
+    bool scaleContent = true,
+    double? dpi,
+  }) {
     apply('resize_canvas', (d) {
       final sx = width / d.width, sy = height / d.height;
       final s = math.min(sx, sy);
@@ -980,7 +995,7 @@ class EditorController extends ChangeNotifier {
         ],
       );
       return d
-          .copyWith(width: width, height: height, guides: guides)
+          .copyWith(width: width, height: height, guides: guides, dpi: dpi)
           .mapLayers(
             (l) => l is GroupLayer
                 ? l

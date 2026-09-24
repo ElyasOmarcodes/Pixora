@@ -6,11 +6,13 @@ import 'package:flutter/painting.dart';
 
 import '../assets/asset_store.dart';
 import '../effects/effect_registry.dart';
+import '../model/blend.dart';
 import '../model/document.dart';
 import '../model/layer.dart';
 import '../model/layer_transform.dart';
 import '../model/mask.dart';
 import 'color_matrix.dart';
+import 'layer_cache.dart';
 import 'shape_paths.dart';
 import 'text_layout.dart';
 
@@ -93,7 +95,21 @@ bool hitTestLayer(Layer layer, Offset docPoint, {double tolerance = 0}) {
 /// Paints documents. The one renderer used for the on-screen canvas,
 /// thumbnails and export, so what you see is exactly what you get.
 class DocumentRenderer {
-  const DocumentRenderer(this.assets, {this.effects});
+  const DocumentRenderer(
+    this.assets, {
+    this.effects,
+    this.cache,
+    this.pixelScale = 1,
+  });
+
+  /// When set, expensive layers are drawn from cached bitmaps (on-screen
+  /// canvas). Export and thumbnails render without it, at full quality.
+  final LayerRasterCache? cache;
+
+  /// Output pixels per document pixel (zoom × device pixel ratio on screen,
+  /// the export scale otherwise). Sets the resolution of cached bitmaps
+  /// and of pre-rendered effect silhouettes.
+  final double pixelScale;
 
   final AssetStore assets;
   final EffectRegistry? effects;
@@ -171,6 +187,29 @@ class DocumentRenderer {
     if (props.opacity <= 0) return;
     final blend = asClipBase ? BlendMode.srcOver : props.blendMode.engine;
 
+    if (cache != null && layer is! GroupLayer && _isExpensive(layer)) {
+      final hit = _cachedBitmap(layer);
+      if (hit != null) {
+        final t = props.transform;
+        canvas.drawImageRect(
+          hit.image,
+          Rect.fromLTWH(
+            0,
+            0,
+            hit.image.width.toDouble(),
+            hit.image.height.toDouble(),
+          ),
+          hit.rect.shift(Offset(t.x, t.y)),
+          Paint()
+            ..color = Color.fromRGBO(0, 0, 0, props.opacity)
+            ..blendMode = blend
+            ..filterQuality = FilterQuality.medium
+            ..isAntiAlias = true,
+        );
+        return;
+      }
+    }
+
     List<double>? matrix;
     var blur = 0.0;
     final shadows = <ShadowSpec>[];
@@ -230,6 +269,15 @@ class DocumentRenderer {
     // The layer's shape (content with its mask) — what effects derive from.
     void shape(Canvas c) => _paintMasked(c, layer, hidden, layerBounds);
 
+    // Effects redraw the shape many times; stamp one pre-rendered bitmap
+    // of it instead (the visible content itself stays vector).
+    final passes =
+        shadows.length + inners.length + bevels.length * 4 + extrudes.length;
+    final stamp = !isGroup && passes >= 2
+        ? _Stamp.of(layer, shape, pixelScale)
+        : null;
+    void effectShape(Canvas c) => stamp == null ? shape(c) : stamp.draw(c);
+
     // Effect offsets are in document space; undo rotation/scale so they
     // always fall the same way.
     Offset toLocal(Offset o) {
@@ -255,7 +303,7 @@ class DocumentRenderer {
               : null,
       );
       canvas.translate(lo.dx, lo.dy);
-      shape(canvas);
+      effectShape(canvas);
       canvas.restore();
     }
 
@@ -263,7 +311,14 @@ class DocumentRenderer {
       silhouette(s.offset, s.blur, s.color);
     }
     for (final x in extrudes) {
-      _paintExtrude(canvas, x, layerBounds, toLocal, shape);
+      _paintExtrude(
+        canvas,
+        x,
+        layerBounds,
+        toLocal,
+        stamp ?? _Stamp.of(layer, shape, pixelScale),
+        disposeStamp: stamp == null,
+      );
     }
     // Outer halves of bevels sit behind the content.
     for (final b in bevels) {
@@ -325,6 +380,79 @@ class DocumentRenderer {
 
     if (needsGroup) canvas.restore();
     canvas.restore();
+    stamp?.dispose();
+  }
+
+  /// Whether a layer is worth caching as a bitmap.
+  bool _isExpensive(Layer layer) {
+    final p = layer.props;
+    if (p.hasMask) return true;
+    if (layer is TextLayer && layer.curve.abs() >= 0.5) return true;
+    for (final e in p.effects) {
+      if (!e.enabled) continue;
+      final d = _fx[e.type];
+      if (d == null) continue;
+      if (d.shadow != null ||
+          d.inner != null ||
+          d.bevel != null ||
+          d.extrude != null ||
+          (d.blurSigma?.call(e) ?? 0) > 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Renders [layer] (at the document origin, full opacity, normal blend)
+  /// into a bitmap at the current resolution, or returns the cached one.
+  CachedLayer? _cachedBitmap(Layer layer) {
+    if (layer is RasterLayer && assets.imageOf(layer.assetId) == null) {
+      return null; // not decoded yet — don't cache the placeholder
+    }
+    final p = layer.props;
+    final base = layer.withProps(
+      p.copyWith(
+        transform: p.transform.copyWith(x: 0, y: 0),
+        opacity: 1,
+        blendMode: PixBlendMode.normal,
+        clip: false,
+      ),
+    );
+    // Power-of-two resolution buckets: zooming re-renders only when the
+    // needed detail doubles or halves.
+    var bucket = 1.0;
+    final want = pixelScale.clamp(1 / 64, 16.0);
+    while (bucket < want) {
+      bucket *= 2;
+    }
+    while (bucket / 2 >= want) {
+      bucket /= 2;
+    }
+    final key = (base, bucket, TextLayoutCache.generation);
+    final hit = cache!.lookup(key);
+    if (hit != null) return hit;
+
+    final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
+    if (rect.isEmpty || !rect.isFinite) return null;
+    final longest = math.max(rect.width, rect.height);
+    final s = math.min(bucket, 4096 / longest);
+    final w = math.max(1, (rect.width * s).ceil());
+    final h = math.max(1, (rect.height * s).ceil());
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(w / rect.width, h / rect.height)
+      ..translate(-rect.left, -rect.top);
+    DocumentRenderer(
+      assets,
+      effects: effects,
+      pixelScale: s,
+    ).paintLayer(c, base);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(w, h);
+    picture.dispose();
+    final entry = CachedLayer(image, rect, s);
+    cache!.put(key, entry);
+    return entry;
   }
 
   /// Inner shadow / glow: a blurred, offset inverse of the shape drawn only
@@ -363,15 +491,17 @@ class DocumentRenderer {
   }
 
   /// 3D extrusion: the shape repeated along the extrusion direction,
-  /// shaded in bands from the front colour to a darker back.
+  /// shaded in bands from the front colour to a darker back. The shape is
+  /// stamped from one bitmap, so deep extrusions stay fast.
   void _paintExtrude(
     Canvas canvas,
     ExtrudeSpec x,
     Rect? bounds,
     Offset Function(Offset) toLocal,
-    void Function(Canvas) shape,
-  ) {
-    final steps = x.depth.ceil().clamp(1, 160);
+    _Stamp stamp, {
+    bool disposeStamp = false,
+  }) {
+    final steps = x.depth.ceil().clamp(1, 240);
     final dir = Offset(math.cos(x.angle), math.sin(x.angle));
     const bands = 6;
     final hsl = HSLColor.fromColor(x.color);
@@ -390,15 +520,11 @@ class DocumentRenderer {
       final from = (steps * band / bands).floor() + 1;
       final to = (steps * (band + 1) / bands).floor();
       for (var i = to; i >= from; i--) {
-        final o = toLocal(dir * (x.depth * i / steps));
-        canvas
-          ..save()
-          ..translate(o.dx, o.dy);
-        shape(canvas);
-        canvas.restore();
+        stamp.draw(canvas, toLocal(dir * (x.depth * i / steps)));
       }
       canvas.restore();
     }
+    if (disposeStamp) stamp.dispose();
   }
 
   /// Content with the layer mask applied (vector strokes, white = visible).
@@ -539,7 +665,11 @@ class DocumentRenderer {
       );
     }
     canvas.scale(w / doc.width, h / doc.height);
-    paint(canvas, doc);
+    DocumentRenderer(
+      assets,
+      effects: effects,
+      pixelScale: math.max(w / doc.width, h / doc.height),
+    ).paint(canvas, doc);
     final picture = recorder.endRecording();
     final image = await picture.toImage(w, h);
     picture.dispose();
@@ -617,4 +747,49 @@ class DocumentRenderer {
     }
     return spill;
   }
+}
+
+/// A layer's shape (content + mask) rendered once into a bitmap in its
+/// local space, then drawn ("stamped") as often as effects need it.
+class _Stamp {
+  _Stamp._(this.image, this.rect);
+
+  static _Stamp of(
+    Layer layer,
+    void Function(Canvas) shape,
+    double pixelScale,
+  ) {
+    final t = layer.props.transform;
+    final local = layerLocalRect(layer).inflate(4);
+    final layerScale = math.max(t.scaleX.abs(), t.scaleY.abs());
+    var rs = pixelScale * layerScale;
+    rs = math.min(rs, 4096 / math.max(local.width, local.height));
+    rs = math.max(rs, 0.05);
+    final w = math.max(1, (local.width * rs).ceil());
+    final h = math.max(1, (local.height * rs).ceil());
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(w / local.width, h / local.height)
+      ..translate(-local.left, -local.top);
+    shape(c);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(w, h);
+    picture.dispose();
+    return _Stamp._(image, local);
+  }
+
+  final ui.Image image;
+  final Rect rect;
+  static final Paint _paint = Paint()..filterQuality = FilterQuality.medium;
+
+  void draw(Canvas canvas, [Offset offset = Offset.zero]) {
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      rect.shift(offset),
+      _paint,
+    );
+  }
+
+  void dispose() => image.dispose();
 }

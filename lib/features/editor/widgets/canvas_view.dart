@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../editor/editor_controller.dart';
+import '../../../core/units/units.dart';
 import '../../../editor/tools/editor_tool.dart';
 import '../../../editor/tools/grid_tool.dart';
 import '../../../ui/widgets/checkerboard.dart';
@@ -36,6 +37,8 @@ class CanvasView extends StatefulWidget {
     required this.tool,
     required this.snap,
     this.showRulers = false,
+    this.rulerUnit = MeasureUnit.px,
+    this.guideColor = const Color(0xFF00C2FF),
     this.controller,
     this.onTap,
   });
@@ -47,6 +50,8 @@ class CanvasView extends StatefulWidget {
   final EditorTool tool;
   final SnapOptions snap;
   final bool showRulers;
+  final MeasureUnit rulerUnit;
+  final Color guideColor;
   final CanvasViewController? controller;
 
   @override
@@ -301,6 +306,9 @@ class _CanvasViewState extends State<CanvasView>
                         checkerA: pix.checkerA,
                         checkerB: pix.checkerB,
                         shadow: pix.softShadow,
+                        devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                          context,
+                        ),
                       ),
                       foregroundPainter: _OverlayPainter(
                         editor: widget.editor,
@@ -310,6 +318,7 @@ class _CanvasViewState extends State<CanvasView>
                         tick: _overlayTick,
                         scale: _vp.scale,
                         offset: _vp.offset,
+                        guideColor: widget.guideColor,
                       ),
                     ),
                   ),
@@ -391,6 +400,11 @@ class _CanvasViewState extends State<CanvasView>
         child: CustomPaint(
           painter: _Ruler(
             horizontal: horizontal,
+            unit: widget.rulerUnit,
+            dpi: widget.editor.document.dpi,
+            reference: horizontal
+                ? widget.editor.document.width
+                : widget.editor.document.height,
             scale: _vp.scale,
             origin: horizontal
                 ? _vp.offset.dx - _Ruler.thickness
@@ -404,10 +418,13 @@ class _CanvasViewState extends State<CanvasView>
   }
 }
 
-/// Ruler with tick marks in canvas pixels.
+/// Ruler with tick marks in the chosen unit (px, cm, mm, in, pt, %).
 class _Ruler extends CustomPainter {
   _Ruler({
     required this.horizontal,
+    required this.unit,
+    required this.dpi,
+    required this.reference,
     required this.scale,
     required this.origin,
     required this.color,
@@ -417,6 +434,11 @@ class _Ruler extends CustomPainter {
   static const double thickness = 22;
 
   final bool horizontal;
+  final MeasureUnit unit;
+  final double dpi;
+
+  /// Canvas size along this ruler (100 % for percent units).
+  final double reference;
   final double scale;
 
   /// Screen position (along the ruler) of canvas coordinate 0.
@@ -429,7 +451,17 @@ class _Ruler extends CustomPainter {
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final length = horizontal ? size.width : size.height;
     // Pick a step giving labels at least ~64 px apart.
+    // Work in the ruler's unit: `k` document px per unit.
+    final k = unit.pixelsPerUnit(dpi, reference: reference);
+    final s = scale * k; // screen px per unit
     const steps = [
+      0.01,
+      0.02,
+      0.05,
+      0.1,
+      0.2,
+      0.25,
+      0.5,
       1,
       2,
       5,
@@ -444,17 +476,20 @@ class _Ruler extends CustomPainter {
       1000,
       2000,
       5000,
+      10000,
     ];
-    final step = steps.firstWhere((s) => s * scale >= 64, orElse: () => 10000);
+    final step = steps.firstWhere((x) => x * s >= 64, orElse: () => 20000);
     final minor = step / 5;
-    final start = ((-origin) / scale / minor).floor() * minor;
+    final start = ((-origin) / s / minor).floor() * minor;
     final tick = Paint()
       ..color = color.withValues(alpha: 0.6)
       ..strokeWidth = 1;
-    for (var v = start; (v * scale + origin) <= length; v += minor) {
-      final pos = v * scale + origin;
+    for (var i = 0; ; i++) {
+      final v = start + i * minor;
+      final pos = v * s + origin;
+      if (pos > length) break;
       if (pos < 0) continue;
-      final major = (v / step).roundToDouble() == v / step;
+      final major = ((v / step) - (v / step).roundToDouble()).abs() < 1e-6;
       final len = major ? thickness * 0.55 : thickness * 0.25;
       if (horizontal) {
         canvas.drawLine(
@@ -472,7 +507,7 @@ class _Ruler extends CustomPainter {
       if (major) {
         final tp = TextPainter(
           text: TextSpan(
-            text: v.round().toString(),
+            text: unit.format(v.abs() < 1e-9 ? 0 : v),
             style: TextStyle(fontSize: 9, color: color),
           ),
           textDirection: TextDirection.ltr,
@@ -502,6 +537,9 @@ class _Ruler extends CustomPainter {
   @override
   bool shouldRepaint(_Ruler old) =>
       old.scale != scale ||
+      old.unit != unit ||
+      old.dpi != dpi ||
+      old.reference != reference ||
       old.origin != origin ||
       old.color != color ||
       old.background != background;
@@ -515,7 +553,10 @@ class _DocumentPainter extends CustomPainter {
     required this.checkerA,
     required this.checkerB,
     required this.shadow,
+    required this.devicePixelRatio,
   }) : super(repaint: editor);
+
+  final double devicePixelRatio;
 
   final EditorController editor;
   final double scale;
@@ -546,7 +587,7 @@ class _DocumentPainter extends CustomPainter {
       ..save()
       ..translate(offset.dx, offset.dy)
       ..scale(scale);
-    editor.renderer.paint(canvas, doc);
+    editor.viewRenderer(scale * devicePixelRatio).paint(canvas, doc);
     canvas.restore();
   }
 
@@ -555,6 +596,7 @@ class _DocumentPainter extends CustomPainter {
       old.scale != scale ||
       old.offset != offset ||
       old.editor != editor ||
+      old.devicePixelRatio != devicePixelRatio ||
       old.checkerA != checkerA;
 }
 
@@ -567,9 +609,12 @@ class _OverlayPainter extends CustomPainter {
     required ValueNotifier<int> tick,
     required this.scale,
     required this.offset,
+    required this.guideColor,
   }) : super(
          repaint: Listenable.merge([editor, tick, pendingGuide, tool.repaint]),
        );
+
+  final Color guideColor;
 
   final EditorController editor;
   final EditorTool tool;
@@ -581,7 +626,7 @@ class _OverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final doc = editor.document;
-    paintGuides(canvas, doc, ctx.viewport);
+    paintGuides(canvas, doc, ctx.viewport, guideColor: guideColor);
     final pending = pendingGuide.value;
     if (pending != null) {
       final (vertical, pos) = pending;
@@ -590,7 +635,7 @@ class _OverlayPainter extends CustomPainter {
           ? pos >= 0 && pos <= doc.width
           : pos >= 0 && pos <= doc.height;
       final p = Paint()
-        ..color = inside ? const Color(0xFF00C2FF) : const Color(0x8800C2FF)
+        ..color = inside ? guideColor : guideColor.withValues(alpha: 0.5)
         ..strokeWidth = 1.5;
       if (vertical) {
         final x = vp.toScreen(Offset(pos, 0)).dx;
@@ -605,5 +650,8 @@ class _OverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_OverlayPainter old) =>
-      old.scale != scale || old.offset != offset || old.tool != tool;
+      old.scale != scale ||
+      old.offset != offset ||
+      old.tool != tool ||
+      old.guideColor != guideColor;
 }

@@ -114,6 +114,7 @@ class _HomePageState extends State<HomePage> {
     double h, {
     PixFill? background,
     bool transparent = false,
+    double dpi = 72,
   }) {
     final l = AppLocalizations.of(context);
     final doc = PixDocument(
@@ -121,6 +122,7 @@ class _HomePageState extends State<HomePage> {
       width: w,
       height: h,
       background: transparent ? null : (background ?? PixFill.white),
+      dpi: dpi,
     );
     unawaited(_openEditor(StoredProject(doc, const {})));
   }
@@ -167,7 +169,12 @@ class _HomePageState extends State<HomePage> {
   Future<void> _custom() async {
     final result = await showNewCanvasDialog(context);
     if (result == null) return;
-    _createBlank(result.width, result.height, transparent: result.transparent);
+    _createBlank(
+      result.width,
+      result.height,
+      transparent: result.transparent,
+      dpi: result.dpi,
+    );
   }
 
   Future<void> _openExisting(ProjectSummary s) async {

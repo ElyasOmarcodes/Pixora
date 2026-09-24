@@ -20,6 +20,7 @@ class LayerCommands {
     required this.editText,
     required this.pickFont,
     required this.replaceImage,
+    required this.deleteLayers,
     required this.runAsync,
   });
 
@@ -27,6 +28,9 @@ class LayerCommands {
   final void Function(TextLayer layer) editText;
   final void Function(TextLayer layer) pickFont;
   final void Function(RasterLayer layer) replaceImage;
+
+  /// Deletes layers after asking for confirmation.
+  final void Function(List<String> ids) deleteLayers;
 
   /// Runs a slow operation (merge, rasterize) with a progress indicator.
   final Future<void> Function(Future<void> Function() job) runAsync;
@@ -96,10 +100,22 @@ List<QuickAction> quickActionsFor(
     l.rasterize,
     () => cmd.runAsync(() => e.rasterizeLayer(id)),
   );
+  final siblings = e.document.siblingsOf(id).length;
+  final index = e.document.indexOf(id);
+  final toFront = QuickAction(
+    Icons.flip_to_front_rounded,
+    l.toFront,
+    index < siblings - 1 ? () => e.arrange(id, LayerArrange.front) : () {},
+  );
+  final toBack = QuickAction(
+    Icons.flip_to_back_rounded,
+    l.toBack,
+    index > 0 ? () => e.arrange(id, LayerArrange.back) : () {},
+  );
   final delete = QuickAction(
     Icons.delete_outline_rounded,
     l.delete,
-    () => e.deleteLayer(id),
+    () => cmd.deleteLayers([id]),
     destructive: true,
   );
   final blend = panel(Icons.opacity_rounded, l.blendMode, ToolPanel.opacity);
@@ -120,6 +136,8 @@ List<QuickAction> quickActionsFor(
       flipH,
       clip,
       duplicate,
+      toFront,
+      toBack,
       rename,
       rasterize,
       delete,
@@ -144,6 +162,8 @@ List<QuickAction> quickActionsFor(
       ),
       clip,
       duplicate,
+      toFront,
+      toBack,
       rename,
       delete,
     ],
@@ -158,6 +178,8 @@ List<QuickAction> quickActionsFor(
       flipH,
       clip,
       duplicate,
+      toFront,
+      toBack,
       rename,
       rasterize,
       delete,
@@ -172,6 +194,8 @@ List<QuickAction> quickActionsFor(
       rotate,
       flipH,
       duplicate,
+      toFront,
+      toBack,
       QuickAction(
         Icons.call_merge_rounded,
         l.merge,

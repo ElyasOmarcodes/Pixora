@@ -15,6 +15,8 @@ import '../../editor/tools/mask_tool.dart';
 import '../../core/fonts/font_catalog.dart';
 import 'dialogs/font_picker.dart';
 import 'dialogs/text_dialog.dart';
+import 'dialogs/close_dialog.dart';
+import '../../ui/widgets/confirm_dialog.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
 import '../../projects/pixora_format.dart';
@@ -68,6 +70,10 @@ class _EditorPageState extends State<EditorPage> {
   bool _pendingSave = false;
   String? _lastSelection;
 
+  /// Whether the project was already in the library when it was opened
+  /// (decides what "don't save" means when closing).
+  bool? _existedBefore;
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +83,11 @@ class _EditorPageState extends State<EditorPage> {
     for (final id in widget.project.document.referencedAssets) {
       unawaited(_editor.assets.decode(id));
     }
+    unawaited(
+      _services.projects
+          .exists(widget.project.document.id)
+          .then((v) => _existedBefore = v),
+    );
   }
 
   @override
@@ -100,6 +111,7 @@ class _EditorPageState extends State<EditorPage> {
       final keep =
           p == ToolPanel.grid ||
           p == ToolPanel.snap ||
+          p == ToolPanel.rulers ||
           (p == ToolPanel.background && _editor.selectedId == null);
       if (!keep) _ui.panel = null;
     }
@@ -136,6 +148,55 @@ class _EditorPageState extends State<EditorPage> {
         unawaited(_save());
       }
     }
+  }
+
+  /// Asks what to do with changes made since the project was opened:
+  /// save them, throw them away (restoring the project as it was), or keep
+  /// editing.
+  Future<void> _requestClose() async {
+    if (_editor.isPreviewing) _editor.commit('edit');
+    if (_editor.revision == 0) {
+      await _saveAndExit();
+      return;
+    }
+    final choice = await showCloseProjectDialog(context);
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case CloseChoice.save:
+        await _saveAndExit();
+      case CloseChoice.discard:
+        await _discardAndExit();
+    }
+  }
+
+  Future<void> _discardAndExit() async {
+    _saveTimer?.cancel();
+    final nav = Navigator.of(context);
+    // Wait for an autosave that is still writing.
+    while (_saving) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    final original = widget.project.document;
+    try {
+      if (_existedBefore ?? true) {
+        if (_savedRevision >= 0) {
+          final thumb = await _editor.renderer.renderPng(
+            original,
+            maxSide: 420,
+          );
+          await _services.projects.save(
+            original,
+            widget.project.assets,
+            thumbnail: thumb,
+          );
+        }
+      } else if (_savedRevision >= 0) {
+        await _services.projects.delete(original.id);
+      }
+    } catch (e) {
+      debugPrint('Pixora: discard failed: $e');
+    }
+    if (mounted) nav.pop();
   }
 
   Future<void> _saveAndExit() async {
@@ -221,10 +282,16 @@ class _EditorPageState extends State<EditorPage> {
       context,
       width: d.width,
       height: d.height,
+      dpi: d.dpi,
       resizing: true,
     );
     if (r != null) {
-      _editor.resizeCanvas(r.width, r.height, scaleContent: r.scaleContent);
+      _editor.resizeCanvas(
+        r.width,
+        r.height,
+        scaleContent: r.scaleContent,
+        dpi: r.dpi,
+      );
     }
   }
 
@@ -296,6 +363,22 @@ class _EditorPageState extends State<EditorPage> {
     );
   }
 
+  Future<void> _confirmDeleteLayers(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final l = AppLocalizations.of(context);
+    final single = ids.length == 1
+        ? _editor.document.layerById(ids.first)
+        : null;
+    final ok = await showConfirmDialog(
+      context,
+      title: single != null
+          ? l.deleteLayerTitle(single.props.name)
+          : l.deleteLayersTitle(ids.length),
+      message: l.undoHint,
+    );
+    if (ok) _editor.deleteLayers(ids);
+  }
+
   void _deleteSelectedGuide() {
     final ref = _gridTool.selected;
     if (ref == null) return;
@@ -331,6 +414,7 @@ class _EditorPageState extends State<EditorPage> {
     editText: _editText,
     pickFont: _pickFont,
     replaceImage: _replaceImage,
+    deleteLayers: (ids) => unawaited(_confirmDeleteLayers(ids)),
     runAsync: (job) => runWithProgress(context, job),
   );
 
@@ -428,14 +512,16 @@ class _EditorPageState extends State<EditorPage> {
   void _onCanvasTap() {
     final p = _ui.panel;
     if (_ui.mode == ToolMode.grid) return;
-    if (p == ToolPanel.grid || p == ToolPanel.snap) _ui.panel = null;
+    if (p == ToolPanel.grid || p == ToolPanel.snap || p == ToolPanel.rulers) {
+      _ui.panel = null;
+    }
   }
 
   void _deleteKey() {
     if (_ui.mode == ToolMode.grid) {
       _deleteSelectedGuide();
     } else if (_ui.mode == ToolMode.move) {
-      _editor.deleteSelected();
+      unawaited(_confirmDeleteLayers(_editor.topLevelSelection));
     }
   }
 
@@ -448,7 +534,7 @@ class _EditorPageState extends State<EditorPage> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_saveAndExit());
+        if (!didPop) unawaited(_requestClose());
       },
       child: EditorScope(
         controller: _editor,
@@ -496,13 +582,15 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   late final TopBarActions _topBarActions = TopBarActions(
-    back: () => unawaited(_saveAndExit()),
+    back: () => unawaited(_requestClose()),
     rename: () => unawaited(_renameDocument()),
     save: _openSaveSheet,
     exportImage: () => unawaited(showExportSheet(context, _editor)),
     resizeCanvas: () => unawaited(_resizeCanvas()),
     exportProject: () => unawaited(_exportProject()),
     editLayer: _editSelected,
+    deleteSelection: () =>
+        unawaited(_confirmDeleteLayers(_editor.topLevelSelection)),
   );
 
   void _editSelected() {
@@ -533,6 +621,8 @@ class _EditorPageState extends State<EditorPage> {
           angles: s.snapAngles,
         ),
         showRulers: s.showRulers,
+        rulerUnit: s.rulerUnit,
+        guideColor: s.guideColor,
         controller: _canvas,
         onTap: _onCanvasTap,
       ),

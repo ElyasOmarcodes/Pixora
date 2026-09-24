@@ -2,8 +2,6 @@ import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:characters/characters.dart';
-
 import 'package:flutter/painting.dart';
 
 import '../model/layer.dart';
@@ -41,8 +39,15 @@ class TextLayoutCache {
   static const _maxEntries = 64;
   final LinkedHashMap<int, TextLayoutEntry> _cache = LinkedHashMap();
 
+  /// Bumped whenever cached layouts become stale (a font finished
+  /// loading), so bitmap caches built from them are rebuilt too.
+  static int generation = 0;
+
   /// Forgets all layouts (e.g. after a font finished loading).
-  void clear() => _cache.clear();
+  void clear() {
+    _cache.clear();
+    generation++;
+  }
 
   /// Padding around glyphs so strokes and italics are not clipped.
   static double paddingFor(TextLayer l) =>
@@ -99,11 +104,11 @@ class TextLayoutCache {
   }
 }
 
-/// One glyph cluster placed on a curve.
+/// One vertical strip of a line placed on a curve.
 class _Placed {
   const _Placed(this.box, this.pos, this.angle);
 
-  /// Cluster box in the straight layout.
+  /// Strip (clip) box in the straight layout.
   final Rect box;
 
   /// Centre of the cluster on the curve (relative to the layer centre).
@@ -145,6 +150,8 @@ class TextLayoutEntry {
     ];
     TextStyle style(Paint? foreground) => TextStyle(
       fontFamily: l.fontFamily == 'System' ? null : l.fontFamily,
+      // Letters missing from the chosen font (Pashto ګ ښ ځ ډ …).
+      fontFamilyFallback: const ['Vazirmatn', 'Noto Naskh Arabic'],
       fontSize: l.fontSize,
       fontWeight: FontWeight.values[((l.fontWeight ~/ 100) - 1).clamp(0, 8)],
       fontVariations: [FontVariation('wght', l.fontWeight.toDouble())],
@@ -200,47 +207,59 @@ class TextLayoutEntry {
       return TextLayoutEntry._(l, fill, stroke, Size(w, h), null, Offset.zero);
     }
 
-    // Curved: place every grapheme cluster on concentric arcs.
+    // Curved: cut every line into thin, slightly overlapping vertical
+    // strips and bend each onto concentric arcs. Whole lines are painted
+    // (clipped per strip), so joined Arabic-script letters stay connected
+    // and bend smoothly instead of breaking apart letter by letter.
     final w = fill.width, h = fill.height;
     final sign = l.curve.sign;
     final r0 = w / (l.curve.abs() * math.pi / 180);
+    final lines = fill.computeLineMetrics();
+    final strip = (l.fontSize / 10).clamp(2.0, 14.0);
+    final overlap = strip * 0.2;
     final placed = <_Placed>[];
     var bounds = Rect.zero;
     var first = true;
-    var offset = 0;
-    for (final g in text.characters) {
-      final start = offset;
-      offset += g.length;
-      if (g.trim().isEmpty) continue;
-      final boxes = fill.getBoxesForSelection(
-        TextSelection(baseOffset: start, extentOffset: offset),
-      );
-      if (boxes.isEmpty) continue;
-      var box = boxes.first.toRect();
-      for (final b in boxes.skip(1)) {
-        box = box.expandToInclude(b.toRect());
-      }
-      final dx = box.center.dx - w / 2, dy = box.center.dy - h / 2;
-      final theta = dx / r0;
-      final r = r0 - sign * dy;
-      final pos = Offset(
-        r * math.sin(theta),
-        sign * r0 - sign * r * math.cos(theta),
-      );
-      final angle = sign * theta;
-      placed.add(_Placed(box, pos, angle));
-      // Rotated cluster corners for the bounds.
-      final c = math.cos(angle), s = math.sin(angle);
-      final hw = box.width / 2, hh = box.height / 2;
-      for (final (x, y) in [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)]) {
-        final p = pos + Offset(x * c - y * s, x * s + y * c);
-        if (first) {
-          bounds = Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy);
+    for (var li = 0; li < lines.length; li++) {
+      final m = lines[li];
+      if (m.width <= 0) continue;
+      final top = m.baseline - m.ascent, bottom = m.baseline + m.descent;
+      // Vertical clip: halfway to the neighbouring lines, generous at the
+      // outer edges for diacritics and strokes.
+      final clipTop = li == 0
+          ? top - l.fontSize * 0.5
+          : (top + lines[li - 1].baseline + lines[li - 1].descent) / 2;
+      final clipBottom = li == lines.length - 1
+          ? bottom + l.fontSize * 0.5
+          : (bottom + lines[li + 1].baseline - lines[li + 1].ascent) / 2;
+      final n = math.max(1, (m.width / strip).ceil());
+      final sw = m.width / n;
+      for (var k = 0; k < n; k++) {
+        final x0 = m.left + k * sw;
+        final box = Rect.fromLTRB(
+          x0 - overlap,
+          clipTop,
+          x0 + sw + overlap,
+          clipBottom,
+        );
+        final dx = box.center.dx - w / 2, dy = box.center.dy - h / 2;
+        final theta = dx / r0;
+        final r = r0 - sign * dy;
+        final pos = Offset(
+          r * math.sin(theta),
+          sign * r0 - sign * r * math.cos(theta),
+        );
+        final angle = sign * theta;
+        placed.add(_Placed(box, pos, angle));
+        final c = math.cos(angle), sn = math.sin(angle);
+        // Glyph extent (not the generous clip) for the bounds.
+        final hw = box.width / 2;
+        final gt = top - box.center.dy, gb = bottom - box.center.dy;
+        for (final (x, y) in [(-hw, gt), (hw, gt), (hw, gb), (-hw, gb)]) {
+          final p = pos + Offset(x * c - y * sn, x * sn + y * c);
+          final pr = Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy);
+          bounds = first ? pr : bounds.expandToInclude(pr);
           first = false;
-        } else {
-          bounds = bounds.expandToInclude(
-            Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy),
-          );
         }
       }
     }
@@ -286,7 +305,6 @@ class TextLayoutEntry {
     // Each cluster: clip the straight layout to the cluster and paint it
     // rotated onto the arc. Painting whole lines keeps Arabic-script joins
     // and shaping intact.
-    final grow = l.strokeWidth / 2 + 0.6;
     void pass(TextPainter p) {
       for (final g in placed) {
         canvas
@@ -296,8 +314,8 @@ class TextLayoutEntry {
           ..clipRect(
             Rect.fromCenter(
               center: Offset.zero,
-              width: g.box.width + grow * 2,
-              height: g.box.height + l.fontSize,
+              width: g.box.width,
+              height: g.box.height,
             ),
           );
         p.paint(canvas, -g.box.center);

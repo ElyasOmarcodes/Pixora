@@ -154,42 +154,93 @@ class _MovePanelState extends State<MovePanel> {
   }
 }
 
-/// Puts the selection at a spot on the canvas (3×3 grid), fits or fills
-/// the canvas, and changes the stacking order.
+/// Puts the selection at a spot on the canvas (3×3 pad shaped like the
+/// canvas), fits or fills the canvas, and aligns multiple layers.
 class PositionPanel extends StatelessWidget {
   const PositionPanel({super.key, required this.editor, required this.layer});
   final EditorController editor;
   final Layer layer;
 
+  static const _spots = [
+    [Alignment.topLeft, Alignment.topCenter, Alignment.topRight],
+    [Alignment.centerLeft, Alignment.center, Alignment.centerRight],
+    [Alignment.bottomLeft, Alignment.bottomCenter, Alignment.bottomRight],
+  ];
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final ids = _ids(editor, layer);
     final single = ids.length == 1;
-    final i = editor.document.indexOf(layer.id);
-    final top = editor.document.siblingsOf(layer.id).length - 1;
+    final doc = editor.document;
+    // Pad keeps the canvas proportions.
+    final aspect = (doc.width / doc.height).clamp(0.5, 2.0);
+    const padMax = 148.0;
+    final padW = aspect >= 1 ? padMax : padMax * aspect;
+    final padH = aspect >= 1 ? padMax / aspect : padMax;
 
-    Widget cell(Alignment a) => InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () {
-        HapticFeedback.selectionClick();
-        editor.placeOnCanvas(ids, a);
-      },
-      child: Container(
-        margin: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: scheme.onSurface.withValues(alpha: 0.05),
+    Widget spot(Alignment a) => Expanded(
+      child: Padding(
+        padding: const EdgeInsets.all(3),
+        child: Material(
+          color: a == Alignment.center
+              ? scheme.primary.withValues(alpha: 0.16)
+              : scheme.primary.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {
+              HapticFeedback.selectionClick();
+              editor.placeOnCanvas(ids, a);
+            },
+            child: Align(
+              alignment: a,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(3.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
-        alignment: a,
-        padding: const EdgeInsets.all(7),
-        child: Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(4),
+      ),
+    );
+
+    Widget action(IconData icon, String label, VoidCallback onTap) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Material(
+        color: scheme.onSurface.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(PixTokens.radiusM),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(PixTokens.radiusM),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(icon, size: 22, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -199,110 +250,61 @@ class PositionPanel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              // Physical positions, also in RTL.
               Directionality(
                 textDirection: TextDirection.ltr,
                 child: Container(
-                  width: 150,
-                  height: 150,
+                  width: padW,
+                  height: padH,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(PixTokens.radiusM),
                     border: Border.all(
                       color: scheme.outlineVariant,
                       width: 1.5,
                     ),
-                    borderRadius: BorderRadius.circular(PixTokens.radiusM),
                   ),
-                  child: GridView.count(
-                    crossAxisCount: 3,
-                    physics: const NeverScrollableScrollPhysics(),
+                  child: Column(
                     children: [
-                      for (final a in const [
-                        Alignment.topLeft,
-                        Alignment.topCenter,
-                        Alignment.topRight,
-                        Alignment.centerLeft,
-                        Alignment.center,
-                        Alignment.centerRight,
-                        Alignment.bottomLeft,
-                        Alignment.bottomCenter,
-                        Alignment.bottomRight,
-                      ])
-                        cell(a),
+                      for (final row in _spots)
+                        Expanded(
+                          child: Row(children: [for (final a in row) spot(a)]),
+                        ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      l.placeOnCanvas,
-                      style: Theme.of(context).textTheme.labelLarge,
+                    action(
+                      Icons.fit_screen_rounded,
+                      l.fitCanvas,
+                      () => editor.fitToCanvas(ids),
                     ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => editor.fitToCanvas(ids),
-                      icon: const Icon(Icons.fit_screen_rounded),
-                      label: Text(l.fitCanvas),
+                    action(
+                      Icons.fullscreen_rounded,
+                      l.fillCanvas,
+                      () => editor.fitToCanvas(ids, cover: true),
                     ),
-                    const SizedBox(height: 6),
-                    OutlinedButton.icon(
-                      onPressed: () => editor.fitToCanvas(ids, cover: true),
-                      icon: const Icon(Icons.fullscreen_rounded),
-                      label: Text(l.fillCanvas),
-                    ),
-                    if (single) ...[
-                      const SizedBox(height: 6),
-                      OutlinedButton.icon(
-                        onPressed: () => editor.resetTransform(layer.id),
-                        icon: const Icon(Icons.center_focus_strong_rounded),
-                        label: Text(l.reset),
+                    if (single)
+                      action(
+                        Icons.center_focus_strong_rounded,
+                        l.reset,
+                        () => editor.resetTransform(layer.id),
                       ),
-                    ],
                   ],
                 ),
               ),
             ],
           ),
-        ),
-        PanelLabel(l.layerOrder),
-        TileRow(
-          children: [
-            PanelTile(
-              icon: Icons.flip_to_front_rounded,
-              label: l.toFront,
-              onTap: single && i < top
-                  ? () => editor.arrange(layer.id, LayerArrange.front)
-                  : null,
-            ),
-            PanelTile(
-              icon: Icons.arrow_upward_rounded,
-              label: l.forward,
-              onTap: single && i < top
-                  ? () => editor.arrange(layer.id, LayerArrange.forward)
-                  : null,
-            ),
-            PanelTile(
-              icon: Icons.arrow_downward_rounded,
-              label: l.backward,
-              onTap: single && i > 0
-                  ? () => editor.arrange(layer.id, LayerArrange.backward)
-                  : null,
-            ),
-            PanelTile(
-              icon: Icons.flip_to_back_rounded,
-              label: l.toBack,
-              onTap: single && i > 0
-                  ? () => editor.arrange(layer.id, LayerArrange.back)
-                  : null,
-            ),
-          ],
         ),
         if (!single) ...[
           PanelLabel(l.align),

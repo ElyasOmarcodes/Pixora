@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../units/units.dart';
+
 /// Accent colors the user can choose from.
 const List<Color> kAccentColors = [
   Color(0xFF3D7BFF), // Pixora blue
@@ -133,6 +135,26 @@ class AppSettings extends ChangeNotifier {
     v == null
         ? _prefs.remove(_kStorageRoot)
         : _prefs.setString(_kStorageRoot, v);
+    notifyListeners();
+  }
+
+  static const _kRulerUnit = 'rulerUnit';
+  static const _kGuideColor = 'guideColor';
+
+  /// Units shown on the rulers.
+  MeasureUnit get rulerUnit => MeasureUnit.values.firstWhere(
+    (u) => u.name == _prefs.getString(_kRulerUnit),
+    orElse: () => MeasureUnit.px,
+  );
+  set rulerUnit(MeasureUnit v) {
+    _prefs.setString(_kRulerUnit, v.name);
+    notifyListeners();
+  }
+
+  /// Colour of ruler guides.
+  Color get guideColor => Color(_prefs.getInt(_kGuideColor) ?? 0xFF00C2FF);
+  set guideColor(Color v) {
+    _prefs.setInt(_kGuideColor, v.toARGB32());
     notifyListeners();
   }
 

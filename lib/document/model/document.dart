@@ -22,6 +22,7 @@ class PixDocument {
     this.background,
     List<Layer> layers = const [],
     CanvasGuides? guides,
+    this.dpi = 72,
   }) : id = id ?? newId('doc'),
        layers = List.unmodifiable(layers),
        guides = guides ?? CanvasGuides.none;
@@ -42,6 +43,9 @@ class PixDocument {
   /// Grid and ruler guides (layout aids; never rendered into exports).
   final CanvasGuides guides;
 
+  /// Resolution for print units (cm, mm, inches): pixels per inch.
+  final double dpi;
+
   Size get size => Size(width, height);
   Rect get bounds => Offset.zero & size;
   Offset get center => Offset(width / 2, height / 2);
@@ -54,6 +58,7 @@ class PixDocument {
     bool clearBackground = false,
     List<Layer>? layers,
     CanvasGuides? guides,
+    double? dpi,
   }) => PixDocument(
     id: id,
     name: name ?? this.name,
@@ -62,6 +67,7 @@ class PixDocument {
     background: clearBackground ? null : (background ?? this.background),
     layers: layers ?? this.layers,
     guides: guides ?? this.guides,
+    dpi: dpi ?? this.dpi,
   );
 
   // ---------------------------------------------------------------- queries
@@ -231,6 +237,7 @@ class PixDocument {
     if (background != null) 'background': background!.toJson(),
     'layers': [for (final l in layers) l.toJson()],
     if (!guides.isEmpty) 'guides': guides.toJson(),
+    if (dpi != 72) 'dpi': dpi,
   };
 
   static PixDocument fromJson(Json m) => PixDocument(
@@ -246,6 +253,7 @@ class PixDocument {
         if (l is Map) ?Layer.fromJson(readMap(l)),
     ],
     guides: m['guides'] == null ? null : CanvasGuides.fromJson(m['guides']),
+    dpi: readDouble(m['dpi'], 72).clamp(1, 9600).toDouble(),
   );
 
   @override
@@ -257,6 +265,7 @@ class PixDocument {
       other.height == height &&
       other.background == background &&
       other.guides == guides &&
+      other.dpi == dpi &&
       listEquals(other.layers, layers);
 
   @override
@@ -267,6 +276,7 @@ class PixDocument {
     height,
     background,
     guides,
+    dpi,
     Object.hashAll(layers),
   );
 }

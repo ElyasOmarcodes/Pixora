@@ -363,5 +363,63 @@
   "threeD": "3D",
   "style": "Style",
   "spacing": "Spacing",
-  "shareImage": "Share image"
+  "shareImage": "Share image",
+  "add": "Add",
+  "allFonts": "All fonts",
+  "clearGuidesConfirm": "Clear all guides?",
+  "clearMaskConfirm": "Clear this mask?",
+  "closeProjectTitle": "Save your changes?",
+  "closeProjectBody": "You changed this project. Keep the changes before closing?",
+  "saveAndClose": "Save & close",
+  "dontSave": "Don't save",
+  "undoHint": "You can undo this afterwards.",
+  "guideColor": "Guide color",
+  "newGuide": "New guide",
+  "vertical": "Vertical",
+  "horizontal": "Horizontal",
+  "resolution": "Resolution",
+  "rulerHint": "Drag from a ruler to add a guide; drag a guide off the canvas to remove it.",
+  "rulersGuides": "Rulers & guides",
+  "showRulers": "Show rulers",
+  "units": "Units",
+  "deleteLayerTitle": "Delete “{name}”?",
+  "@deleteLayerTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteFontTitle": "Remove the font “{name}”?",
+  "@deleteFontTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteLayersTitle": "Delete {count} layers?",
+  "@deleteLayersTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "guidesCount": "{count} guides",
+  "@guidesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sizeLimit": "Size must be 1–{max} px",
+  "@sizeLimit": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  }
 }

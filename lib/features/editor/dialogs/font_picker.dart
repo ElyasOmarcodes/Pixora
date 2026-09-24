@@ -1,33 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/app_scope.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../core/fonts/font_catalog.dart';
 import '../../../document/render/text_layout.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui/widgets/confirm_dialog.dart';
 
-/// Opens the font picker. Returns the chosen family, or null if cancelled.
+/// Opens the full-page font picker. Returns the chosen family, or null.
 Future<String?> showFontPicker(
   BuildContext context, {
   required String current,
   String sample = '',
-}) => showDialog<String>(
-  context: context,
-  builder: (_) => _FontPicker(current: current, sample: sample),
+}) => Navigator.of(context).push<String>(
+  PageRouteBuilder(
+    fullscreenDialog: true,
+    transitionDuration: PixTokens.medium,
+    reverseTransitionDuration: PixTokens.fast,
+    pageBuilder: (_, _, _) => _FontPickerPage(current: current, sample: sample),
+    transitionsBuilder: (_, a, _, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: a, curve: Curves.easeOut),
+      child: SlideTransition(
+        position: Tween(
+          begin: const Offset(0, 0.06),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: a, curve: PixTokens.emphasized)),
+        child: child,
+      ),
+    ),
+  ),
 );
 
 enum _Tab { pixora, mine, recent, favorites }
 
-class _FontPicker extends StatefulWidget {
-  const _FontPicker({required this.current, required this.sample});
+class _FontPickerPage extends StatefulWidget {
+  const _FontPickerPage({required this.current, required this.sample});
   final String current;
   final String sample;
 
   @override
-  State<_FontPicker> createState() => _FontPickerState();
+  State<_FontPickerPage> createState() => _FontPickerPageState();
 }
 
-class _FontPickerState extends State<_FontPicker> {
+class _FontPickerPageState extends State<_FontPickerPage> {
   late String _selected = widget.current;
   _Tab _tab = _Tab.pixora;
   FontScript? _script;
@@ -36,16 +52,15 @@ class _FontPickerState extends State<_FontPicker> {
   String get _sample {
     final t = widget.sample.trim().replaceAll('\n', ' ');
     if (t.isEmpty) return 'پیکسورا Pixora';
-    return t.length > 32 ? '${t.substring(0, 32)}…' : t;
+    return t.length > 40 ? '${t.substring(0, 40)}…' : t;
   }
 
   List<String> _families(FontCatalog c) {
-    final all = <String>[
-      for (final f in FontCatalog.bundled)
-        if (_script == null || f.script == _script) f.family,
-    ];
     final list = switch (_tab) {
-      _Tab.pixora => all,
+      _Tab.pixora => [
+        for (final f in FontCatalog.bundled)
+          if (_script == null || f.script == _script) f.family,
+      ],
       _Tab.mine => [for (final f in c.userFonts) f.family],
       _Tab.recent => c.recent.where(c.isAvailable).toList(),
       _Tab.favorites => c.favorites.where(c.isAvailable).toList(),
@@ -56,102 +71,88 @@ class _FontPickerState extends State<_FontPicker> {
         : list.where((f) => f.toLowerCase().contains(q)).toList();
   }
 
+  void _apply(FontCatalog catalog, String family) {
+    catalog.markUsed(family);
+    Navigator.pop(context, family);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final catalog = AppScope.of(context).fonts;
-    final size = MediaQuery.sizeOf(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final columns = width >= 1000 ? 4 : (width >= 640 ? 3 : 2);
 
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 520,
-          maxHeight: size.height * 0.9,
-        ),
-        child: ListenableBuilder(
-          listenable: catalog,
-          builder: (context, _) {
-            final families = _families(catalog);
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Live preview.
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        scheme.primary.withValues(alpha: 0.14),
-                        scheme.tertiary.withValues(alpha: 0.10),
-                      ],
+    return ListenableBuilder(
+      listenable: catalog,
+      builder: (context, _) {
+        final families = _families(catalog);
+        final showImport = _tab == _Tab.mine;
+        return Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          body: CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                expandedHeight: 210,
+                backgroundColor: scheme.surface,
+                surfaceTintColor: Colors.transparent,
+                leading: IconButton(
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+                title: Text(
+                  l.font,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                actions: [
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 12),
+                    child: FilledButton.icon(
+                      onPressed: () => _apply(catalog, _selected),
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: Text(l.apply),
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      Text(
-                        _sample,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        textDirection: detectTextDirection(_sample),
-                        style: TextStyle(
-                          fontFamily: _selected == 'System' ? null : _selected,
-                          fontSize: 34,
-                          height: 1.35,
-                          color: scheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _selected,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                ],
+                flexibleSpace: FlexibleSpaceBar(
+                  collapseMode: CollapseMode.pin,
+                  background: _Preview(sample: _sample, family: _selected),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-                  child: SegmentedButton<_Tab>(
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    segments: [
-                      ButtonSegment(
-                        value: _Tab.pixora,
-                        label: Text(l.fontsApp),
-                      ),
-                      ButtonSegment(value: _Tab.mine, label: Text(l.fontsMine)),
-                      ButtonSegment(
-                        value: _Tab.recent,
-                        icon: const Icon(Icons.history_rounded, size: 18),
-                        tooltip: l.fontsRecent,
-                      ),
-                      ButtonSegment(
-                        value: _Tab.favorites,
-                        icon: const Icon(Icons.favorite_rounded, size: 18),
-                        tooltip: l.fontsFavorites,
-                      ),
-                    ],
-                    selected: {_tab},
-                    onSelectionChanged: (s) => setState(() => _tab = s.first),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
+              ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _TabsHeader(
+                  height: 124,
+                  child: Container(
+                    color: theme.scaffoldBackgroundColor,
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                    child: Column(
+                      children: [
+                        _TabBar(
+                          selected: _tab,
+                          labels: {
+                            _Tab.pixora: (
+                              Icons.auto_awesome_rounded,
+                              l.fontsApp,
+                            ),
+                            _Tab.mine: (
+                              Icons.folder_special_rounded,
+                              l.fontsMine,
+                            ),
+                            _Tab.recent: (Icons.history_rounded, l.fontsRecent),
+                            _Tab.favorites: (
+                              Icons.favorite_rounded,
+                              l.fontsFavorites,
+                            ),
+                          },
+                          onChanged: (t) => setState(() => _tab = t),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
                           onChanged: (v) => setState(() => _query = v),
                           decoration: InputDecoration(
                             isDense: true,
@@ -160,31 +161,20 @@ class _FontPickerState extends State<_FontPicker> {
                             filled: true,
                             fillColor: scheme.onSurface.withValues(alpha: 0.05),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(18),
                               borderSide: BorderSide.none,
                             ),
                           ),
                         ),
-                      ),
-                      if (_tab == _Tab.mine) ...[
-                        const SizedBox(width: 8),
-                        FilledButton.tonalIcon(
-                          onPressed: () async {
-                            final added = await catalog.import();
-                            if (added.isNotEmpty && mounted) {
-                              setState(() => _selected = added.first);
-                            }
-                          },
-                          icon: const Icon(Icons.upload_file_rounded),
-                          label: Text(l.importFont),
-                        ),
                       ],
-                    ],
+                    ),
                   ),
                 ),
-                if (_tab == _Tab.pixora)
-                  SizedBox(
-                    height: 44,
+              ),
+              if (_tab == _Tab.pixora)
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 48,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -197,7 +187,7 @@ class _FontPickerState extends State<_FontPicker> {
                           Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 4,
-                              vertical: 4,
+                              vertical: 6,
                             ),
                             child: ChoiceChip(
                               label: Text(label),
@@ -208,81 +198,251 @@ class _FontPickerState extends State<_FontPicker> {
                       ],
                     ),
                   ),
-                Flexible(
-                  child: families.isEmpty
-                      ? _Empty(
-                          icon: switch (_tab) {
-                            _Tab.mine => Icons.font_download_off_rounded,
-                            _Tab.recent => Icons.history_rounded,
-                            _Tab.favorites => Icons.favorite_border_rounded,
-                            _Tab.pixora => Icons.search_off_rounded,
-                          },
-                          text: switch (_tab) {
-                            _Tab.mine => l.noUserFonts,
-                            _ => l.nothingHereYet,
-                          },
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                          itemCount: families.length,
-                          itemBuilder: (context, i) {
-                            final f = families[i];
-                            final user = catalog.userFonts
-                                .where((u) => u.family == f)
-                                .firstOrNull;
-                            return _FontTile(
-                              family: f,
-                              sample: _sample,
-                              selected: f == _selected,
-                              favorite: catalog.isFavorite(f),
-                              onTap: () => setState(() => _selected = f),
-                              onDoubleTap: () => _apply(catalog, f),
-                              onFavorite: () => catalog.toggleFavorite(f),
-                              onDelete: user == null
-                                  ? null
-                                  : () => catalog.remove(user),
-                            );
-                          },
-                        ),
                 ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(12),
+              if (families.isEmpty && !showImport)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _Empty(
+                    icon: switch (_tab) {
+                      _Tab.recent => Icons.history_rounded,
+                      _Tab.favorites => Icons.favorite_border_rounded,
+                      _ => Icons.search_off_rounded,
+                    },
+                    text: l.nothingHereYet,
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 32),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 1.35,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      childCount: families.length + (showImport ? 1 : 0),
+                      (context, i) {
+                        if (showImport && i == 0) {
+                          return _ImportCard(
+                            hint: families.isEmpty ? l.noUserFonts : null,
+                            label: l.importFont,
+                            onTap: () async {
+                              final added = await catalog.import();
+                              if (added.isNotEmpty && mounted) {
+                                setState(() => _selected = added.first);
+                              }
+                            },
+                          );
+                        }
+                        final f = families[i - (showImport ? 1 : 0)];
+                        final user = catalog.userFonts
+                            .where((u) => u.family == f)
+                            .firstOrNull;
+                        return _FontCard(
+                          family: f,
+                          sample: _sample,
+                          selected: f == _selected,
+                          favorite: catalog.isFavorite(f),
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selected = f);
+                          },
+                          onDoubleTap: () => _apply(catalog, f),
+                          onFavorite: () => catalog.toggleFavorite(f),
+                          onDelete: user == null
+                              ? null
+                              : () async {
+                                  if (await showConfirmDialog(
+                                    context,
+                                    title: l.deleteFontTitle(f),
+                                  )) {
+                                    await catalog.remove(user);
+                                  }
+                                },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _Preview extends StatelessWidget {
+  const _Preview({required this.sample, required this.family});
+  final String sample;
+  final String family;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
+          colors: [
+            scheme.primary.withValues(alpha: 0.20),
+            scheme.tertiary.withValues(alpha: 0.14),
+            scheme.surface,
+          ],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 96, 24, 18),
+      alignment: Alignment.center,
+      child: AnimatedSwitcher(
+        duration: PixTokens.fast,
+        child: Column(
+          key: ValueKey(family),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                sample,
+                maxLines: 1,
+                textDirection: detectTextDirection(sample),
+                style: TextStyle(
+                  fontFamily: family == 'System' ? null : family,
+                  fontFamilyFallback: FontCatalog.fallback,
+                  fontSize: 40,
+                  height: 1.3,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                family,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TabBar extends StatelessWidget {
+  const _TabBar({
+    required this.selected,
+    required this.labels,
+    required this.onChanged,
+  });
+  final _Tab selected;
+  final Map<_Tab, (IconData, String)> labels;
+  final ValueChanged<_Tab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      height: 46,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: scheme.onSurface.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          for (final e in labels.entries)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(e.key),
+                child: AnimatedContainer(
+                  duration: PixTokens.fast,
+                  curve: PixTokens.curve,
+                  decoration: BoxDecoration(
+                    color: e.key == selected
+                        ? scheme.surface
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: e.key == selected
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(l.cancel),
-                        ),
+                      Icon(
+                        e.value.$1,
+                        size: 16,
+                        color: e.key == selected
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => _apply(catalog, _selected),
-                          child: Text(l.apply),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          e.value.$2,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: e.key == selected
+                                ? FontWeight.w800
+                                : FontWeight.w500,
+                            color: e.key == selected
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ),
+        ],
       ),
     );
   }
-
-  void _apply(FontCatalog catalog, String family) {
-    catalog.markUsed(family);
-    Navigator.pop(context, family);
-  }
 }
 
-class _FontTile extends StatelessWidget {
-  const _FontTile({
+class _TabsHeader extends SliverPersistentHeaderDelegate {
+  _TabsHeader({required this.child, required this.height});
+  final Widget child;
+  final double height;
+
+  @override
+  double get minExtent => height;
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlaps) =>
+      child;
+
+  @override
+  bool shouldRebuild(_TabsHeader old) => true;
+}
+
+class _FontCard extends StatelessWidget {
+  const _FontCard({
     required this.family,
     required this.sample,
     required this.selected,
@@ -306,69 +466,173 @@ class _FontTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final fontFamily = family == 'System' ? null : family;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Material(
+    return AnimatedContainer(
+      duration: PixTokens.fast,
+      curve: PixTokens.curve,
+      decoration: BoxDecoration(
         color: selected
-            ? scheme.primary.withValues(alpha: 0.12)
-            : scheme.onSurface.withValues(alpha: 0.035),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PixTokens.radiusM),
-          side: BorderSide(
-            color: selected ? scheme.primary : Colors.transparent,
-            width: 1.5,
-          ),
+            ? scheme.primary.withValues(alpha: 0.10)
+            : scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: selected ? scheme.primary : scheme.outlineVariant,
+          width: selected ? 2 : 1,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: selected ? 0.08 : 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
         child: InkWell(
-          borderRadius: BorderRadius.circular(PixTokens.radiusM),
+          borderRadius: BorderRadius.circular(20),
           onTap: onTap,
           onDoubleTap: onDoubleTap,
-          child: Padding(
-            padding: const EdgeInsetsDirectional.fromSTEB(16, 8, 4, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        sample,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textDirection: detectTextDirection(sample),
-                        style: TextStyle(
-                          fontFamily: fontFamily,
-                          fontSize: 22,
-                          height: 1.3,
-                          color: scheme.onSurface,
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            sample,
+                            maxLines: 1,
+                            textDirection: detectTextDirection(sample),
+                            style: TextStyle(
+                              fontFamily: family == 'System' ? null : family,
+                              fontFamilyFallback: FontCatalog.fallback,
+                              fontSize: 26,
+                              height: 1.3,
+                              color: scheme.onSurface,
+                            ),
+                          ),
                         ),
                       ),
-                      Text(
-                        family,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    ),
+                    Text(
+                      family,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: selected
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                        fontWeight: selected ? FontWeight.w800 : null,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                if (onDelete != null)
-                  IconButton(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
-                  ),
-                IconButton(
+              ),
+              PositionedDirectional(
+                top: 2,
+                end: 2,
+                child: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 20,
                   onPressed: onFavorite,
                   icon: Icon(
                     favorite
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    color: favorite ? const Color(0xFFFF5A7A) : null,
+                    color: favorite
+                        ? const Color(0xFFFF5A7A)
+                        : scheme.onSurfaceVariant.withValues(alpha: 0.6),
                   ),
                 ),
-              ],
-            ),
+              ),
+              if (onDelete != null)
+                PositionedDirectional(
+                  top: 2,
+                  start: 2,
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 20,
+                    onPressed: onDelete,
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              if (selected)
+                PositionedDirectional(
+                  bottom: 8,
+                  end: 8,
+                  child: CircleAvatar(
+                    radius: 10,
+                    backgroundColor: scheme.primary,
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 14,
+                      color: scheme.onPrimary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportCard extends StatelessWidget {
+  const _ImportCard({required this.label, required this.onTap, this.hint});
+  final String label;
+  final String? hint;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.primary.withValues(alpha: 0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: scheme.primary.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: scheme.primary,
+                child: Icon(Icons.add_rounded, color: scheme.onPrimary),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                '.ttf · .otf',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -387,10 +651,18 @@ class _Empty extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 44, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 10),
+          Container(
+            width: 84,
+            height: 84,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 40, color: scheme.primary),
+          ),
+          const SizedBox(height: 14),
           Text(
             text,
             textAlign: TextAlign.center,

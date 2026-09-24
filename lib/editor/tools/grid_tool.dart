@@ -358,7 +358,12 @@ class GridTool extends EditorTool {
 }
 
 /// Paints the grid and ruler guides (all tools).
-void paintGuides(Canvas canvas, PixDocument doc, CanvasViewport vp) {
+void paintGuides(
+  Canvas canvas,
+  PixDocument doc,
+  CanvasViewport vp, {
+  Color guideColor = const Color(0xFF00C2FF),
+}) {
   final g = doc.guides;
   final clip = Rect.fromPoints(
     vp.toScreen(Offset.zero),
@@ -382,7 +387,7 @@ void paintGuides(Canvas canvas, PixDocument doc, CanvasViewport vp) {
     }
   }
   final guide = Paint()
-    ..color = const Color(0xFF00C2FF)
+    ..color = guideColor
     ..strokeWidth = 1.2;
   for (final ref in GuideGeometry.all(doc).where((r) => !r.isGrid)) {
     final (a, b) = GuideGeometry.segment(doc, ref);

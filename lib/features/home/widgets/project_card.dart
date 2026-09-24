@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../ui/widgets/confirm_dialog.dart';
+
 import '../../../app/app_scope.dart';
 import '../../../app/theme/app_theme.dart';
 import '../../../l10n/app_localizations.dart';
@@ -51,27 +53,12 @@ class _ProjectCardState extends State<ProjectCard> {
           await deliverProjectFile(context, platform, bytes, summary.name);
         }
       case _Menu.delete:
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l.deleteProjectTitle),
-            content: Text(l.deleteProjectBody),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(l.cancel),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error,
-                ),
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(l.delete),
-              ),
-            ],
-          ),
+        final ok = await showConfirmDialog(
+          context,
+          title: l.deleteProjectTitle,
+          message: l.deleteProjectBody,
         );
-        if (ok ?? false) await repo.delete(summary.id);
+        if (ok) await repo.delete(summary.id);
     }
   }
 

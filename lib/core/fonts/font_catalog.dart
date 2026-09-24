@@ -31,6 +31,9 @@ class FontCatalog extends ChangeNotifier {
 
   static const String defaultFamily = 'Vazirmatn';
 
+  /// Used for letters a font lacks (e.g. Pashto ګ ښ ځ in Arabic fonts).
+  static const List<String> fallback = ['Vazirmatn', 'Noto Naskh Arabic'];
+
   static const List<BundledFont> bundled = [
     BundledFont('Vazirmatn', FontScript.arabic),
     BundledFont('Lalezar', FontScript.arabic),

@@ -17,6 +17,7 @@ enum ToolPanel {
   shapeStyle,
   grid,
   snap,
+  rulers,
   move,
   position,
   size,

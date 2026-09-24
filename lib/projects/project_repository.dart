@@ -22,6 +22,9 @@ class ProjectRepository extends ChangeNotifier {
 
   Future<StoredProject?> load(String id) => _store.load(id);
 
+  Future<bool> exists(String id) async =>
+      (await _store.list()).any((s) => s.id == id);
+
   Future<Uint8List?> _thumbnailOf(String id) async => (await _store.list())
       .where((s) => s.id == id)
       .map((s) => s.thumbnail)
@@ -84,6 +87,7 @@ class ProjectRepository extends ChangeNotifier {
     background: src.background,
     layers: src.layers,
     guides: src.guides,
+    dpi: src.dpi,
   );
 
   /// Saves [doc] as a brand-new project (new id, [name]) and returns its id.

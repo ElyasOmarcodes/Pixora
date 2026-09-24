@@ -718,7 +718,7 @@ class _RowActions extends StatelessWidget {
           btn(
             Icons.delete_outline_rounded,
             l.delete,
-            () => editor.deleteLayer(layer.id),
+            () => commands.deleteLayers([layer.id]),
             color: scheme.error,
           ),
         ],
@@ -960,7 +960,7 @@ class _LayerThumbPainter extends CustomPainter {
       ..translate(size.width / 2, size.height / 2)
       ..scale(fit)
       ..translate(-box.center.dx, -box.center.dy);
-    editor.renderer.paintLayer(canvas, plain);
+    editor.viewRenderer(fit * 2).paintLayer(canvas, plain);
     canvas.restore();
   }
 
@@ -1051,7 +1051,9 @@ class _ActionBar extends StatelessWidget {
               action(
                 Icons.delete_outline_rounded,
                 l.delete,
-                sel.isEmpty ? null : e.deleteSelected,
+                sel.isEmpty
+                    ? null
+                    : () => commands.deleteLayers(e.topLevelSelection),
               ),
               _MoreMenu(editor: e, commands: commands, onRename: onRename),
             ],
