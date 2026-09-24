@@ -7,6 +7,7 @@ import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/pressable.dart';
 import '../editor_scope.dart';
+import 'layer_actions.dart';
 
 /// One entry in the dock: either opens a panel or runs an action.
 class DockItem {
@@ -38,8 +39,11 @@ class ContextDock extends StatelessWidget {
     required this.onAddImage,
     required this.onEditText,
     required this.onResizeCanvas,
+    required this.commands,
     this.vertical = false,
   });
+
+  final LayerCommands commands;
 
   final EditorController editor;
   final EditorUiState ui;
@@ -65,6 +69,33 @@ class ContextDock extends StatelessWidget {
           l.canvasSize,
           onTap: onResizeCanvas,
         ),
+      ];
+    }
+    if (editor.hasMultiSelection) {
+      return [
+        DockItem(
+          Icons.create_new_folder_rounded,
+          l.group,
+          onTap: () => editor.groupSelected(name: l.group),
+        ),
+        DockItem(Icons.open_with_rounded, l.arrange, panel: ToolPanel.arrange),
+        DockItem(
+          Icons.call_merge_rounded,
+          l.merge,
+          onTap: () => commands.runAsync(editor.mergeSelected),
+        ),
+        DockItem(
+          Icons.copy_all_rounded,
+          l.duplicate,
+          onTap: editor.duplicateSelected,
+        ),
+        DockItem(
+          Icons.delete_outline_rounded,
+          l.delete,
+          onTap: editor.deleteSelected,
+          destructive: true,
+        ),
+        DockItem(Icons.deselect_rounded, l.deselect, onTap: editor.deselect),
       ];
     }
     final common = [
@@ -96,6 +127,15 @@ class ContextDock extends StatelessWidget {
         DockItem(Icons.category_rounded, l.shape, panel: ToolPanel.shapeStyle),
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
         DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
+        ...common,
+        DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
+      ],
+      GroupLayer g => [
+        DockItem(
+          Icons.folder_off_rounded,
+          l.ungroup,
+          onTap: () => editor.ungroup(g.id),
+        ),
         ...common,
         DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),
       ],
@@ -153,7 +193,7 @@ class ContextDock extends StatelessWidget {
             ),
           ),
           child: KeyedSubtree(
-            key: ValueKey(layer?.kind),
+            key: ValueKey(editor.hasMultiSelection ? 'multi' : layer?.kind),
             child: SizedBox(
               height: vertical ? null : 76,
               width: vertical ? 84 : null,

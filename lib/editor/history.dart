@@ -4,7 +4,9 @@ import '../document/model/document.dart';
 class HistoryEntry {
   const HistoryEntry(this.document, this.selection, this.label);
   final PixDocument document;
-  final String? selection;
+
+  /// Selected layer ids, primary (most recently selected) last.
+  final List<String> selection;
 
   /// Human-readable description of the edit that led *away* from this state
   /// (shown as "Undo <label>").

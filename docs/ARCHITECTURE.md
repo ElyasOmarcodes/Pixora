@@ -25,10 +25,57 @@ lib/
   l10n/           ARB translations (ps, fa, ar, ur, en, es, fr, tr)
 ```
 
+## 0. Where things are stored
+
+| Platform | Projects (`.pixora` files)              | Exported images            |
+|----------|-----------------------------------------|----------------------------|
+| Android  | `Documents/Pixora/Projects` (falls back to the app folder if Documents isn't writable) | Gallery › Pixora album |
+| iOS      | Files › On My iPhone › Pixora › Projects | Photos › Pixora album     |
+| Windows / macOS / Linux | `Documents/Pixora/Projects` (movable in Settings) | `Documents/Pixora/Exports` |
+
+Settings › Storage shows the real paths. Projects saved by 0.1 (folder per
+project in the app's private storage) are converted to `.pixora` files on
+first launch.
+
+### The `.pixora` file
+
+A ZIP container, like OpenRaster (`.ora`), Krita (`.kra`) and OpenDocument:
+
+```
+mimetype          application/vnd.pixora.project+zip   (first, uncompressed)
+document.xml      the whole layer tree and every property
+assets/<id>.png   original image bytes, stored without recompression
+thumbnail.png     preview
+```
+
+**Why XML and not JSON (or PSD):** PSD is a proprietary binary format, so
+there is no "Photoshop language" to adopt. The open layered formats use XML
+for exactly this job — a deep, ordered tree of elements with attributes —
+and so do SVG and ODF. It is readable in any text editor, diff-friendly,
+and never holds binary data (that lives next to it in the ZIP), so even
+large projects keep a small, fast-to-parse document. The XML mirrors the
+model generically (`lib/projects/pixora_format.dart`): maps become
+elements, scalars attributes, lists child elements; new model fields are
+saved automatically and older readers ignore what they don't know.
+
+### Opening `.pixora` files from the OS
+
+| Platform | How |
+|----------|-----|
+| Android  | `VIEW`/`SEND` intent filters → `MainActivity.kt` → `pixora/open_file` channel |
+| iOS      | `CFBundleDocumentTypes` + exported UTI `com.pixora.project` → `AppDelegate.swift` scene delegate → channel |
+| macOS    | Document types in `Info.plist` → `application(_:open:)` → channel |
+| Windows  | The installer (`windows/installer/pixora.iss`) registers `.pixora`; the path arrives in `main(args)` |
+| Linux    | `install.sh` registers the MIME type and `.desktop` entry; the path arrives in `main(args)` |
+
+The Dart side (`PlatformServices.initFileOpening`) imports the file into the
+library (as a copy if a project with the same id exists) and opens it.
+
 ## 1. The document is immutable data
 
-`PixDocument` holds canvas size, background and an ordered list of `Layer`s.
-`Layer` is a **sealed** class (`RasterLayer`, `TextLayer`, `ShapeLayer`);
+`PixDocument` holds canvas size, background and an ordered tree of `Layer`s.
+`Layer` is a **sealed** class (`RasterLayer`, `TextLayer`, `ShapeLayer`,
+`GroupLayer`);
 adding a kind (group, adjustment layer, vector path, smart object…) is a new
 subclass, and the compiler then flags every `switch` that must handle it.
 
@@ -37,8 +84,15 @@ effects) live in `LayerProps`, so tools that don't care about the layer kind
 never need to.
 
 All lookups/replacements go through `PixDocument` methods (`layerById`,
-`replaceLayer`, `insertLayer`, `moveLayerTo` …). When groups arrive, only
-those methods learn tree traversal.
+`parentOf`, `siblingsOf`, `replaceLayer`, `insertLayer`, `moveLayer` …),
+which are the only code that walks the tree.
+
+Groups composite their children in isolation, then apply their own opacity,
+blend mode and effects. A group's transform is always identity; moving,
+scaling, rotating or flipping a group (or a multi-selection) applies one
+`Similarity` to every descendant (`layer_geometry.dart`). Layers with
+`clip = true` are clipping masks: they only show where the layer beneath
+them has pixels.
 
 Serialization is tolerant: missing fields get defaults, unknown layer kinds
 and effect types are skipped instead of crashing, and `formatVersion` allows
@@ -111,7 +165,8 @@ dialog, documents vs app-support directory…).
 
 ## Roadmap
 
-1. Layer groups, masks, clipping.
+1. Layer masks; "Pass Through" group mode; shader-based blend modes
+   (Linear Burn, Vivid/Linear/Pin Light, Hard Mix, Subtract, Divide).
 2. Brush / eraser / selection / crop tools.
 3. Curves, levels, HSL per channel, vignette, sharpen (shaders).
 4. Stickers, more fonts (downloadable), text on path, text background.

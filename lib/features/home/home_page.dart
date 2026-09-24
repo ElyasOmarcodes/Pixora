@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../core/platform/platform_services.dart';
 import '../../app/theme/app_theme.dart';
 import '../../document/assets/asset_store.dart';
 import '../../document/model/document.dart';
@@ -44,6 +45,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   late final _services = AppScope.of(context);
   Future<List<ProjectSummary>>? _projects;
+  StreamSubscription<PickedFile>? _openSub;
+  bool _editorOpen = false;
 
   @override
   void didChangeDependencies() {
@@ -51,21 +54,59 @@ class _HomePageState extends State<HomePage> {
     if (_projects == null) {
       _services.projects.addListener(_reload);
       _reload();
+      _openSub = _services.platform.openedFiles.listen(_openExternal);
+      // Files the app was launched with ("Open with", double-click).
+      final pending = _services.platform.takePendingOpenedFiles();
+      if (pending.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _openExternal(pending.first),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
+    unawaited(_openSub?.cancel());
     _services.projects.removeListener(_reload);
     super.dispose();
+  }
+
+  /// Imports a `.pixora` file handed over by the OS or picked by the user
+  /// and opens it.
+  Future<void> _openExternal(PickedFile file) async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final project = await _services.projects.importArchive(file.bytes);
+      if (!mounted) return;
+      if (_editorOpen) {
+        // Close the current editor first; it saves on the way out.
+        Navigator.of(context).popUntil((r) => r.isFirst);
+      }
+      await _openEditor(project);
+    } on FormatException {
+      messenger.showSnackBar(SnackBar(content: Text(l.invalidProject)));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('${l.invalidProject}: $e')),
+      );
+    }
+  }
+
+  Future<void> _importProject() async {
+    final file = await _services.platform.pickProjectFile();
+    if (file != null) await _openExternal(file);
   }
 
   void _reload() => setState(() => _projects = _services.projects.list());
 
   Future<void> _openEditor(StoredProject project) async {
+    _editorOpen = true;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => EditorPage(project: project)),
     );
+    _editorOpen = false;
   }
 
   void _createBlank(
@@ -160,6 +201,12 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     const Spacer(),
+                    IconButton(
+                      tooltip: l.importProject,
+                      onPressed: _importProject,
+                      icon: const Icon(Icons.file_open_rounded),
+                    ),
+                    const SizedBox(width: 4),
                     IconButton.filledTonal(
                       tooltip: l.settings,
                       onPressed: () => Navigator.of(context).push(

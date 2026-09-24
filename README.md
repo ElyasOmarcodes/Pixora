@@ -59,6 +59,8 @@ flutter test                # ازموينې
 - **Action API** — every editor command is a named, JSON-schema-described `EditorAction`. It is the foundation for macros, scripting and the planned in-app **AI agent** (`lib/ai/agent_bridge.dart`).
 - **Pluggable tools** (`EditorTool`) — transform today; brush, eraser, selection and crop plug in without touching the canvas.
 - **Platform services** chosen at compile time (conditional imports) and at runtime (`PlatformInfo`): files vs. browser storage, share sheet vs. save dialog.
+- **Photoshop-style layers** — groups, clipping masks, merge down/selected/visible, flatten, rasterize, multi-selection, search & filters, color-coded layer kinds, per-type quick-edit menus, Photoshop keyboard shortcuts.
+- **`.pixora` project files** — a ZIP with an XML document and the original images; stored in a visible `Pixora` folder, importable/exportable, and opened by double-click / "Open with" on every platform.
 - **Adaptive UI** — bottom dock + floating layers on phones, tool rail + side panel on tablets/desktops, full RTL support.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design and the roadmap.

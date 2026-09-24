@@ -13,13 +13,13 @@ import 'panel_common.dart';
 PixFill? _fillOf(Layer l) => switch (l) {
   TextLayer t => t.fill,
   ShapeLayer s => s.fill,
-  RasterLayer _ => null,
+  RasterLayer _ || GroupLayer _ => null,
 };
 
 Layer _withFill(Layer l, PixFill f) => switch (l) {
   TextLayer t => t.copyWith(fill: f),
   ShapeLayer s => s.copyWith(fill: f),
-  RasterLayer r => r,
+  RasterLayer _ || GroupLayer _ => l,
 };
 
 /// Fill color or gradient for text and shapes.
@@ -77,12 +77,12 @@ class StrokePanel extends StatelessWidget {
     final (width, color) = switch (layer) {
       TextLayer t => (t.strokeWidth, t.strokeColor),
       ShapeLayer s => (s.strokeWidth, s.strokeColor),
-      RasterLayer _ => (0.0, Colors.black),
+      RasterLayer _ || GroupLayer _ => (0.0, Colors.black),
     };
     Layer apply(Layer x, {double? w, Color? c}) => switch (x) {
       TextLayer t => t.copyWith(strokeWidth: w, strokeColor: c),
       ShapeLayer s => s.copyWith(strokeWidth: w, strokeColor: c),
-      RasterLayer r => r,
+      RasterLayer _ || GroupLayer _ => x,
     };
     final maxWidth = layer is TextLayer
         ? (layer as TextLayer).fontSize * 0.4

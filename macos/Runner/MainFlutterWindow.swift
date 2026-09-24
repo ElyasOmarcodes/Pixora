@@ -9,6 +9,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    OpenFileBridge.shared.attach(flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

@@ -7,17 +7,22 @@ import 'core/settings/app_settings.dart';
 import 'editor/actions/action_registry.dart';
 import 'projects/project_repository.dart';
 
-Future<void> main() async {
+/// [args] carries files passed on the command line — how Windows and Linux
+/// hand over a double-clicked `.pixora` file.
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final platform = PlatformServices.create();
-  final settings = AppSettings.load();
-  final store = platform.openProjectStore();
+  final settings = await AppSettings.load();
+  final store = await platform.openProjectStore(
+    customRoot: settings.storageRoot,
+  );
+  await platform.initFileOpening(args);
 
   final services = AppServices(
-    settings: await settings,
+    settings: settings,
     platform: platform,
-    projects: ProjectRepository(await store),
+    projects: ProjectRepository(store),
     actions: ActionRegistry(),
   );
 

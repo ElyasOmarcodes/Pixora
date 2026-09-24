@@ -9,24 +9,46 @@ import 'platform_services.dart';
 PlatformServices createPlatformServices(PlatformInfo info) =>
     WebPlatformServices(info);
 
-/// Browser build (mainly for previews and quick tests).
+/// Browser build (mainly for previews and quick tests). Projects live in
+/// memory; use "Export project file" to keep them.
 class WebPlatformServices extends PlatformServices {
   WebPlatformServices(super.info);
 
   final MemoryProjectStore _store = MemoryProjectStore();
 
   @override
-  Future<ProjectStore> openProjectStore() async => _store;
+  Future<ProjectStore> openProjectStore({String? customRoot}) async => _store;
 
   @override
-  Future<PickedImage?> pickImage() async {
-    final file = await FilePicker.pickFile(type: FileType.image);
+  StorageInfo get storage => const StorageInfo(
+    projectsPath: 'Browser memory',
+    exportDestination: ExportDestination.download,
+  );
+
+  Future<PickedFile?> _pick(FileType type) async {
+    final file = await FilePicker.pickFile(type: type);
     if (file == null) return null;
-    return PickedImage(file.name, await file.readAsBytes());
+    return PickedFile(file.name, await file.readAsBytes());
   }
 
   @override
-  Future<SaveOutcome> saveFile(
+  Future<PickedFile?> pickImage() => _pick(FileType.image);
+
+  @override
+  Future<PickedFile?> pickProjectFile() => _pick(FileType.any);
+
+  @override
+  Future<ExportResult> exportImage(
+    Uint8List bytes,
+    String fileName,
+    String mimeType,
+  ) async {
+    final r = await saveFileAs(bytes, fileName, mimeType);
+    return ExportResult(r, ExportDestination.download);
+  }
+
+  @override
+  Future<SaveOutcome> saveFileAs(
     Uint8List bytes,
     String fileName,
     String mimeType,

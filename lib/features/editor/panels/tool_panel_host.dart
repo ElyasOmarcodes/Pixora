@@ -44,14 +44,10 @@ class ToolPanelHost extends StatelessWidget {
         editor: editor,
         layer: layer,
       ),
-      ToolPanel.fill when layer is! RasterLayer => FillPanel(
-        editor: editor,
-        layer: layer,
-      ),
-      ToolPanel.stroke when layer is! RasterLayer => StrokePanel(
-        editor: editor,
-        layer: layer,
-      ),
+      ToolPanel.fill when layer is TextLayer || layer is ShapeLayer =>
+        FillPanel(editor: editor, layer: layer),
+      ToolPanel.stroke when layer is TextLayer || layer is ShapeLayer =>
+        StrokePanel(editor: editor, layer: layer),
       ToolPanel.shadow => ShadowPanel(editor: editor, layer: layer),
       ToolPanel.adjust => AdjustPanel(editor: editor, layer: layer),
       ToolPanel.filters => FiltersPanel(editor: editor, layer: layer),

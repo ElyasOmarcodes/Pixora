@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app_scope.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/platform/platform_services.dart';
 import '../../core/settings/app_settings.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
 
-const String kAppVersion = '0.1.0';
+const String kAppVersion = '0.2.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -138,6 +140,7 @@ class SettingsPage extends StatelessWidget {
                       ),
                   ],
                 ),
+                const _StorageSection(),
                 _Section(
                   title: l.exportSection,
                   children: [
@@ -267,6 +270,115 @@ class _LanguagePicker extends StatelessWidget {
           for (final (code, name) in kLanguages) tile(code, name),
         ],
       ),
+    );
+  }
+}
+
+/// Where projects and exported images are kept, with the option to move
+/// the Pixora folder on desktops.
+class _StorageSection extends StatefulWidget {
+  const _StorageSection();
+
+  @override
+  State<_StorageSection> createState() => _StorageSectionState();
+}
+
+class _StorageSectionState extends State<_StorageSection> {
+  bool _busy = false;
+
+  Future<void> _setRoot(String? path) async {
+    final services = AppScope.of(context);
+    setState(() => _busy = true);
+    try {
+      final store = await services.platform.openProjectStore(customRoot: path);
+      services.settings.storageRoot = path;
+      services.projects.setStore(store);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final services = AppScope.of(context);
+    final info = services.platform.storage;
+    final theme = Theme.of(context);
+
+    Widget pathTile(
+      IconData icon,
+      String title,
+      String value, {
+      bool copyable = true,
+    }) => ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: SelectableText(
+        value,
+        textDirection: TextDirection.ltr,
+        style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+      ),
+      trailing: copyable
+          ? IconButton(
+              tooltip: l.copyPath,
+              icon: const Icon(Icons.copy_rounded, size: 20),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: value));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text(l.pathCopied)));
+              },
+            )
+          : null,
+    );
+
+    return _Section(
+      title: l.storage,
+      children: [
+        pathTile(
+          Icons.folder_special_rounded,
+          l.projectsFolder,
+          info.projectsPath,
+        ),
+        switch (info.exportDestination) {
+          ExportDestination.gallery => pathTile(
+            Icons.photo_library_rounded,
+            l.exportsFolder,
+            l.galleryAlbum,
+            copyable: false,
+          ),
+          ExportDestination.folder => pathTile(
+            Icons.image_rounded,
+            l.exportsFolder,
+            info.exportsPath ?? '',
+          ),
+          ExportDestination.download => const SizedBox.shrink(),
+        },
+        if (info.canChangeFolder)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          final path = await services.platform.pickFolder();
+                          if (path != null) await _setRoot(path);
+                        },
+                  icon: const Icon(Icons.drive_folder_upload_rounded),
+                  label: Text(l.changeFolder),
+                ),
+                if (!info.isDefault)
+                  TextButton(
+                    onPressed: _busy ? null : () => _setRoot(null),
+                    child: Text(l.resetFolder),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -19,6 +19,10 @@ on:
       version:
         description: 'Version to release (e.g. 0.2.0)'
         required: true
+      publish:
+        description: 'Publish a GitHub Release (off = build and upload artifacts only)'
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -124,13 +128,23 @@ jobs:
         with: { channel: stable, flutter-version: '${{ env.FLUTTER_VERSION }}', cache: true }
       - run: flutter pub get
       - run: flutter build windows --release --obfuscate --split-debug-info=build/symbols/windows --tree-shake-icons
-      - name: Package (max compression)
+      - name: Package portable zip (max compression)
         shell: bash
         run: |
           V="${VERSION#v}"
           mkdir -p dist
           cd build/windows/x64/runner/Release
           7z a -tzip -mx=9 -mm=Deflate64 "../../../../../dist/Pixora-$V-windows-x64.zip" . > /dev/null
+      - name: Build installer (registers .pixora files)
+        shell: pwsh
+        run: |
+          $v = "$env:VERSION".TrimStart('v')
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress | Out-Null
+          }
+          & $iscc "/DAppVersion=$v" "/DSourceDir=$pwd\build\windows\x64\runner\Release" "/DOutputDir=$pwd\dist" windows\installer\pixora.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with: { name: windows, path: dist/*, compression-level: 0 }
 
@@ -147,8 +161,11 @@ jobs:
       - name: Package (xz -9)
         run: |
           V="${VERSION#v}"
-          mkdir -p dist
-          tar -C build/linux/x64/release -cf - bundle | xz -9e -T0 > "dist/Pixora-$V-linux-x64.tar.xz"
+          mkdir -p dist stage/Pixora
+          cp -r build/linux/x64/release/bundle stage/Pixora/bundle
+          cp linux/packaging/* stage/Pixora/
+          cp assets/branding/icon.png stage/Pixora/pixora.png
+          tar -C stage -cf - Pixora | xz -9e -T0 > "dist/Pixora-$V-linux-x64.tar.xz"
       - uses: actions/upload-artifact@v4
         with: { name: linux, path: dist/*, compression-level: 0 }
 
@@ -171,6 +188,7 @@ jobs:
 
   release:
     needs: [android, ios, macos, windows, linux, web]
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -198,9 +216,10 @@ jobs:
             | Android (most phones) | `*-android-arm64-v8a.apk` |
             | Android (older 32-bit phones) | `*-android-armeabi-v7a.apk` |
             | Android (Google Play) | `*-android.aab` |
-            | Windows 10/11 | `*-windows-x64.zip` — unzip and run `pixora.exe` |
+            | Windows 10/11 (recommended) | `*-windows-x64-setup.exe` — installs Pixora and opens `.pixora` files on double-click |
+            | Windows 10/11 (portable) | `*-windows-x64.zip` — unzip and run `pixora.exe` |
             | macOS | `*-macos.dmg` |
-            | Linux | `*-linux-x64.tar.xz` |
+            | Linux | `*-linux-x64.tar.xz` — extract and run `./install.sh` |
             | iOS | `*-ios-unsigned.ipa` — must be signed (e.g. AltStore / Sideloadly) before installing |
             | Web | `*-web.zip` |
           files: dist/*

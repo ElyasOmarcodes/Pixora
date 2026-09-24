@@ -64,7 +64,7 @@ class LayerEffect {
       enabled: readBool(json['enabled'], true),
       params: {
         for (final e in raw.entries)
-          if (e.value is num) e.key: e.value as num,
+          if (parseScalar(e.value) case final num v) e.key: v,
       },
     );
   }

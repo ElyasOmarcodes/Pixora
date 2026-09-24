@@ -8,9 +8,10 @@ import '../../../l10n/app_localizations.dart';
 import '../../../projects/project_store.dart';
 import '../../../ui/widgets/checkerboard.dart';
 import '../../../ui/widgets/soft_card.dart';
+import '../../../projects/project_share.dart';
 import 'text_prompt.dart';
 
-enum _Menu { rename, duplicate, delete }
+enum _Menu { rename, duplicate, export, delete }
 
 class ProjectCard extends StatefulWidget {
   const ProjectCard({super.key, required this.summary, required this.onOpen});
@@ -43,6 +44,12 @@ class _ProjectCardState extends State<ProjectCard> {
         }
       case _Menu.duplicate:
         await repo.duplicate(summary.id, nameSuffix: l.copySuffix);
+      case _Menu.export:
+        final platform = AppScope.of(context).platform;
+        final bytes = await repo.exportArchive(summary.id);
+        if (bytes != null && context.mounted) {
+          await deliverProjectFile(context, platform, bytes, summary.name);
+        }
       case _Menu.delete:
         final ok = await showDialog<bool>(
           context: context,
@@ -162,6 +169,13 @@ class _ProjectCardState extends State<ProjectCard> {
                       child: ListTile(
                         leading: const Icon(Icons.copy_rounded),
                         title: Text(l.duplicate),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: _Menu.export,
+                      child: ListTile(
+                        leading: const Icon(Icons.inventory_2_rounded),
+                        title: Text(l.exportProject),
                       ),
                     ),
                     PopupMenuItem(

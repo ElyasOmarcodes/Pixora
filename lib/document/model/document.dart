@@ -11,9 +11,6 @@ import 'layer.dart';
 ///
 /// Immutable. The editor keeps a history of these values; every edit is a
 /// function `PixDocument -> PixDocument`. Layers are ordered bottom → top.
-///
-/// All lookups and replacements go through the methods here so that when
-/// nested groups arrive only this class needs to learn tree traversal.
 @immutable
 class PixDocument {
   PixDocument({
@@ -27,8 +24,8 @@ class PixDocument {
        layers = List.unmodifiable(layers);
 
   /// Bumped whenever the on-disk format changes incompatibly; readers
-  /// migrate older files forward in [fromJson].
-  static const int formatVersion = 1;
+  /// migrate older files forward in [fromJson]. 2 = groups + clipping.
+  static const int formatVersion = 2;
 
   final String id;
   final String name;
@@ -60,30 +57,111 @@ class PixDocument {
   );
 
   // ---------------------------------------------------------------- queries
+  //
+  // The layer stack is a tree (groups contain layers). Every lookup and
+  // structural edit goes through these methods so the rest of the app never
+  // walks the tree by hand.
 
-  Layer? layerById(String? id) {
-    if (id == null) return null;
-    for (final l in layers) {
+  Layer? layerById(String? id) => id == null ? null : _find(layers, id);
+
+  static Layer? _find(List<Layer> list, String id) {
+    for (final l in list) {
       if (l.id == id) return l;
+      if (l is GroupLayer) {
+        final hit = _find(l.children, id);
+        if (hit != null) return hit;
+      }
     }
     return null;
   }
 
-  int indexOf(String id) => layers.indexWhere((l) => l.id == id);
+  bool contains(String id) => layerById(id) != null;
+
+  /// The group directly containing [id], or null for top-level layers.
+  GroupLayer? parentOf(String id) => _parent(layers, id, null);
+
+  static GroupLayer? _parent(List<Layer> list, String id, GroupLayer? owner) {
+    for (final l in list) {
+      if (l.id == id) return owner;
+      if (l is GroupLayer) {
+        final hit = _parent(l.children, id, l);
+        if (hit != null) return hit;
+      }
+    }
+    return null;
+  }
+
+  /// Groups enclosing [id], innermost first.
+  List<GroupLayer> ancestorsOf(String id) {
+    final out = <GroupLayer>[];
+    var p = parentOf(id);
+    while (p != null) {
+      out.add(p);
+      p = parentOf(p.id);
+    }
+    return out;
+  }
+
+  /// The list [id] lives in (its parent's children or the top level).
+  List<Layer> siblingsOf(String id) => parentOf(id)?.children ?? layers;
+
+  /// Index of [id] among its siblings (bottom = 0), or -1.
+  int indexOf(String id) => siblingsOf(id).indexWhere((l) => l.id == id);
+
+  /// Every layer in paint order (bottom → top); a group precedes its
+  /// children.
+  List<Layer> get allLayers {
+    final out = <Layer>[];
+    void walk(List<Layer> list) {
+      for (final l in list) {
+        out.add(l);
+        if (l is GroupLayer) walk(l.children);
+      }
+    }
+
+    walk(layers);
+    return out;
+  }
+
+  /// Visible and not hidden by a collapsed-visibility ancestor.
+  bool isEffectivelyVisible(String id) {
+    final l = layerById(id);
+    if (l == null || !l.props.visible) return false;
+    return ancestorsOf(id).every((g) => g.props.visible);
+  }
+
+  /// Locked itself or inside a locked group.
+  bool isEffectivelyLocked(String id) {
+    final l = layerById(id);
+    if (l == null) return false;
+    return l.props.locked || ancestorsOf(id).any((g) => g.props.locked);
+  }
 
   /// Every asset id referenced by the layers (used to garbage-collect).
   Set<String> get referencedAssets => {
-    for (final l in layers)
+    for (final l in allLayers)
       if (l is RasterLayer) l.assetId,
   };
 
   // ----------------------------------------------------------- transforms
 
+  static List<Layer> _mapTree(List<Layer> list, Layer? Function(Layer) f) {
+    final out = <Layer>[];
+    for (final l in list) {
+      var next = f(l);
+      if (next is GroupLayer) {
+        next = next.copyWith(children: _mapTree(next.children, f));
+      }
+      if (next != null) out.add(next);
+    }
+    return out;
+  }
+
   PixDocument replaceLayer(Layer layer) {
-    final i = indexOf(layer.id);
-    if (i < 0) return this;
-    final next = [...layers]..[i] = layer;
-    return copyWith(layers: next);
+    if (!contains(layer.id)) return this;
+    return copyWith(
+      layers: _mapTree(layers, (l) => l.id == layer.id ? layer : l),
+    );
   }
 
   PixDocument updateLayer(String id, Layer Function(Layer l) f) {
@@ -91,29 +169,48 @@ class PixDocument {
     return l == null ? this : replaceLayer(f(l));
   }
 
-  /// Inserts [layer] at [index] (defaults to the top of the stack).
-  PixDocument insertLayer(Layer layer, [int? index]) {
-    final next = [...layers];
-    next.insert((index ?? next.length).clamp(0, next.length), layer);
-    return copyWith(layers: next);
+  /// Applies [f] to every layer in the tree (e.g. to scale the whole design).
+  PixDocument mapLayers(Layer Function(Layer l) f) =>
+      copyWith(layers: _mapTree(layers, f));
+
+  PixDocument removeLayer(String id) =>
+      copyWith(layers: _mapTree(layers, (l) => l.id == id ? null : l));
+
+  PixDocument removeLayers(Set<String> ids) =>
+      copyWith(layers: _mapTree(layers, (l) => ids.contains(l.id) ? null : l));
+
+  /// Inserts [layer] into [parentId] (null = top level) at [index]
+  /// (defaults to the top of that list).
+  PixDocument insertLayer(Layer layer, {String? parentId, int? index}) {
+    List<Layer> insertInto(List<Layer> list) {
+      final next = [...list];
+      next.insert((index ?? next.length).clamp(0, next.length), layer);
+      return next;
+    }
+
+    if (parentId == null) return copyWith(layers: insertInto(layers));
+    final parent = layerById(parentId);
+    if (parent is! GroupLayer) return copyWith(layers: insertInto(layers));
+    return replaceLayer(parent.copyWith(children: insertInto(parent.children)));
   }
 
-  PixDocument removeLayer(String id) => copyWith(
-    layers: [
-      for (final l in layers)
-        if (l.id != id) l,
-    ],
-  );
-
-  /// Moves a layer to [newIndex] in the bottom→top list.
-  PixDocument moveLayerTo(String id, int newIndex) {
-    final i = indexOf(id);
-    if (i < 0) return this;
-    final next = [...layers];
-    final l = next.removeAt(i);
-    next.insert(newIndex.clamp(0, next.length), l);
-    return copyWith(layers: next);
+  /// Moves [id] into [parentId] (null = top level) at [index] of that list
+  /// (index counted after the layer has been removed from its old place).
+  PixDocument moveLayer(String id, {String? parentId, required int index}) {
+    final l = layerById(id);
+    if (l == null || id == parentId) return this;
+    // A group can't be moved into itself or one of its descendants.
+    if (parentId != null &&
+        l is GroupLayer &&
+        ancestorsOf(parentId).any((g) => g.id == id)) {
+      return this;
+    }
+    return removeLayer(id).insertLayer(l, parentId: parentId, index: index);
   }
+
+  /// Moves a layer to [newIndex] among its current siblings.
+  PixDocument moveLayerTo(String id, int newIndex) =>
+      moveLayer(id, parentId: parentOf(id)?.id, index: newIndex);
 
   // ------------------------------------------------------------- json
 

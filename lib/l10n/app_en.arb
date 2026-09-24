@@ -175,5 +175,57 @@
         "type": "int"
       }
     }
+  },
+  "group": "Group",
+  "ungroup": "Ungroup",
+  "newGroup": "New group",
+  "merge": "Merge",
+  "mergeDown": "Merge down",
+  "mergeVisible": "Merge visible",
+  "flatten": "Flatten image",
+  "rasterize": "Rasterize",
+  "clippingMask": "Clipping mask",
+  "selectAll": "Select all",
+  "deselect": "Deselect",
+  "searchLayers": "Search layers…",
+  "filterAll": "All",
+  "hidden": "Hidden",
+  "locked": "Locked",
+  "noMatches": "No matching layers",
+  "quickEdit": "Quick edit",
+  "selectMode": "Select",
+  "moveOut": "Move out of group",
+  "showOnly": "Show only this",
+  "replaceImage": "Replace image",
+  "storage": "Storage",
+  "projectsFolder": "Projects folder",
+  "exportsFolder": "Exported images",
+  "changeFolder": "Change folder",
+  "resetFolder": "Use default folder",
+  "copyPath": "Copy path",
+  "pathCopied": "Path copied",
+  "galleryAlbum": "Gallery › Pixora album",
+  "importProject": "Import project",
+  "exportProject": "Export project file",
+  "invalidProject": "This is not a valid Pixora project file",
+  "savedToGallery": "Saved to your gallery (Pixora album)",
+  "saveAs": "Save as…",
+  "working": "Working…",
+  "openFile": "Open file",
+  "selectedCount": "{count} selected",
+  "@selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "savedToFolder": "Saved to {path}",
+  "@savedToFolder": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -44,6 +44,7 @@ class AppSettings extends ChangeNotifier {
   static const _kSnap = 'snap';
   static const _kExportFormat = 'exportFormat';
   static const _kExportQuality = 'exportQuality';
+  static const _kStorageRoot = 'storageRoot';
 
   /// `null` follows the system language.
   Locale? get locale {
@@ -100,6 +101,15 @@ class AppSettings extends ChangeNotifier {
       (_prefs.getInt(_kExportQuality) ?? 92).clamp(50, 100);
   set exportQuality(int v) {
     _prefs.setInt(_kExportQuality, v);
+    notifyListeners();
+  }
+
+  /// Custom Pixora folder (desktop only); null = default location.
+  String? get storageRoot => _prefs.getString(_kStorageRoot);
+  set storageRoot(String? v) {
+    v == null
+        ? _prefs.remove(_kStorageRoot)
+        : _prefs.setString(_kStorageRoot, v);
     notifyListeners();
   }
 

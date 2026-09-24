@@ -1,7 +1,7 @@
 name: pixora
 description: "Pixora — a layered, cross-platform photo & graphic editor."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.13.4
@@ -18,6 +18,9 @@ dependencies:
   share_plus: ^13.3.0
   image: ^4.10.1
   cupertino_icons: ^1.0.9
+  archive: ^4.3.0
+  xml: ^7.0.1
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:

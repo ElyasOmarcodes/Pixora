@@ -1,7 +1,7 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 
 import '../../../app/app_scope.dart';
@@ -65,7 +65,9 @@ class _ExportSheetState extends State<_ExportSheet> {
   double _scale = 1;
   bool _busy = false;
 
-  Future<void> _run({required bool share}) async {
+  /// [mode]: 'save' = default place (gallery / Pixora folder), 'share',
+  /// or 'saveAs' = choose a location.
+  Future<void> _run(String mode) async {
     final l = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
@@ -82,20 +84,44 @@ class _ExportSheetState extends State<_ExportSheet> {
       final safe = doc.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
       final name = '${safe.isEmpty ? 'pixora' : safe}.$_format';
       final mime = _format == 'png' ? 'image/png' : 'image/jpeg';
-      if (share) {
-        await _services.platform.share(bytes, name, mime);
-        nav.pop();
-      } else {
-        final outcome = await _services.platform.saveFile(bytes, name, mime);
-        if (outcome == SaveOutcome.cancelled) return;
-        nav.pop();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              outcome == SaveOutcome.saved ? l.exportDone : l.exportFailed,
+      final platform = _services.platform;
+      switch (mode) {
+        case 'share':
+          await platform.share(bytes, name, mime);
+          nav.pop();
+        case 'saveAs':
+          final outcome = await platform.saveFileAs(bytes, name, mime);
+          if (outcome == SaveOutcome.cancelled) return;
+          nav.pop();
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                outcome == SaveOutcome.saved ? l.exportDone : l.exportFailed,
+              ),
             ),
-          ),
-        );
+          );
+        default:
+          final r = await platform.exportImage(bytes, name, mime);
+          nav.pop();
+          final msg = r.outcome != SaveOutcome.saved
+              ? l.exportFailed
+              : switch (r.destination) {
+                  ExportDestination.gallery => l.savedToGallery,
+                  ExportDestination.folder => l.savedToFolder(r.location ?? ''),
+                  ExportDestination.download => l.exportDone,
+                };
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              action: r.location == null
+                  ? null
+                  : SnackBarAction(
+                      label: l.copyPath,
+                      onPressed: () =>
+                          Clipboard.setData(ClipboardData(text: r.location!)),
+                    ),
+            ),
+          );
       }
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('${l.exportFailed}: $e')));
@@ -110,7 +136,11 @@ class _ExportSheetState extends State<_ExportSheet> {
     final theme = Theme.of(context);
     final doc = widget.editor.document;
     final w = (doc.width * _scale).round(), h = (doc.height * _scale).round();
-    final shareFirst = _services.platform.prefersShare;
+    final platform = _services.platform;
+    final saveLabel = switch (platform.storage.exportDestination) {
+      ExportDestination.gallery => l.galleryAlbum,
+      _ => l.saveToDevice,
+    };
 
     final saveBtn = _busy
         ? const Center(
@@ -193,24 +223,35 @@ class _ExportSheetState extends State<_ExportSheet> {
           if (saveBtn != null)
             saveBtn
           else
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: _button(
-                    primary: !shareFirst,
-                    onPressed: () => _run(share: false),
-                    icon: Icons.download_rounded,
-                    label: l.saveToDevice,
-                  ),
+                FilledButton.icon(
+                  onPressed: () => _run('save'),
+                  icon: const Icon(Icons.download_rounded),
+                  label: Text(saveLabel),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _button(
-                    primary: shareFirst,
-                    onPressed: () => _run(share: true),
-                    icon: Icons.ios_share_rounded,
-                    label: l.share,
-                  ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _run('share'),
+                        icon: const Icon(Icons.ios_share_rounded),
+                        label: Text(l.share),
+                      ),
+                    ),
+                    if (!platform.info.isWeb) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _run('saveAs'),
+                          icon: const Icon(Icons.save_as_rounded),
+                          label: Text(l.saveAs),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -218,21 +259,4 @@ class _ExportSheetState extends State<_ExportSheet> {
       ),
     );
   }
-
-  Widget _button({
-    required bool primary,
-    required VoidCallback onPressed,
-    required IconData icon,
-    required String label,
-  }) => primary
-      ? FilledButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(label),
-        )
-      : OutlinedButton.icon(
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(label),
-        );
 }

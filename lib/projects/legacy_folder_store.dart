@@ -6,6 +6,9 @@ import '../core/utils/json.dart';
 import '../document/model/document.dart';
 import 'project_store.dart';
 
+/// Reader for the folder-per-project layout used by Pixora 0.1, kept so
+/// existing projects can be migrated to `.pixora` files on first launch.
+///
 /// Stores each project in its own folder:
 ///
 /// ```
@@ -16,8 +19,8 @@ import 'project_store.dart';
 ///
 /// Writes go to a temporary file first and are then renamed, so a crash
 /// mid-save never corrupts a project.
-class FileProjectStore implements ProjectStore {
-  FileProjectStore(this.root);
+class LegacyFolderStore implements ProjectStore {
+  LegacyFolderStore(this.root);
 
   final Directory root;
 

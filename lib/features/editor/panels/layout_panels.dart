@@ -9,12 +9,10 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import 'panel_common.dart';
 
-String blendLabel(PixBlendMode m) {
-  final n = m.name;
-  return n[0].toUpperCase() +
-      n.substring(1).replaceAllMapped(RegExp('[A-Z]'), (x) => ' ${x[0]}');
-}
-
+/// Opacity, blend mode (grouped like Photoshop) and clipping mask.
+///
+/// On desktop, hovering a blend mode previews it on the canvas; clicking
+/// applies it.
 class OpacityPanel extends StatelessWidget {
   const OpacityPanel({super.key, required this.editor, required this.layer});
   final EditorController editor;
@@ -23,6 +21,47 @@ class OpacityPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final current = layer.props.blendMode;
+    final chips = <Widget>[];
+    BlendCategory? lastCategory;
+    for (final m in PixBlendMode.values) {
+      if (lastCategory != null && m.category != lastCategory) {
+        chips.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+            child: VerticalDivider(width: 1, color: theme.dividerColor),
+          ),
+        );
+      }
+      lastCategory = m.category;
+      chips.add(
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: MouseRegion(
+            onEnter: (_) {
+              if (m != current) {
+                editor.previewLayer(
+                  layer.id,
+                  (x) => x.update((p) => p.copyWith(blendMode: m)),
+                );
+              }
+            },
+            onExit: (_) => editor.cancelPreview(),
+            child: ChoiceChip(
+              label: Text(m.label, textDirection: TextDirection.ltr),
+              selected: current == m,
+              onSelected: (_) => editor.updateProps(
+                layer.id,
+                (p) => p.copyWith(blendMode: m),
+                label: 'blend',
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -46,32 +85,26 @@ class OpacityPanel extends StatelessWidget {
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            children: [
-              for (final m in PixBlendMode.values)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ChoiceChip(
-                    label: Text(
-                      blendLabel(m),
-                      textDirection: TextDirection.ltr,
-                    ),
-                    selected: layer.props.blendMode == m,
-                    onSelected: (_) => editor.updateProps(
-                      layer.id,
-                      (p) => p.copyWith(blendMode: m),
-                      label: 'blend',
-                    ),
-                  ),
-                ),
-            ],
+            children: chips,
           ),
         ),
-        const SizedBox(height: 8),
+        SwitchListTile.adaptive(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+          secondary: const Icon(Icons.subdirectory_arrow_right_rounded),
+          title: Text(l.clippingMask),
+          value: layer.props.clip,
+          onChanged: (_) => editor.toggleClip(layer.id),
+        ),
+        const SizedBox(height: 4),
       ],
     );
   }
 }
 
+/// Stacking order, flip/rotate and alignment. With several layers
+/// selected, flip/rotate treat them as one unit and alignment lines them
+/// up with each other.
 class ArrangePanel extends StatelessWidget {
   const ArrangePanel({super.key, required this.editor, required this.layer});
   final EditorController editor;
@@ -81,8 +114,14 @@ class ArrangePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final id = layer.id;
+    final ids = editor.topLevelSelection.isEmpty
+        ? [id]
+        : editor.topLevelSelection;
+    final single = ids.length == 1;
     final i = editor.document.indexOf(id);
-    final top = editor.document.layers.length - 1;
+    final top = editor.document.siblingsOf(id).length - 1;
+    VoidCallback? order(bool enabled, LayerArrange a) =>
+        single && enabled ? () => editor.arrange(id, a) : null;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -92,33 +131,27 @@ class ArrangePanel extends StatelessWidget {
             PanelTile(
               icon: Icons.flip_to_front_rounded,
               label: l.toFront,
-              onTap: i < top
-                  ? () => editor.arrange(id, LayerArrange.front)
-                  : null,
+              onTap: order(i < top, LayerArrange.front),
             ),
             PanelTile(
               icon: Icons.arrow_upward_rounded,
               label: l.forward,
-              onTap: i < top
-                  ? () => editor.arrange(id, LayerArrange.forward)
-                  : null,
+              onTap: order(i < top, LayerArrange.forward),
             ),
             PanelTile(
               icon: Icons.arrow_downward_rounded,
               label: l.backward,
-              onTap: i > 0
-                  ? () => editor.arrange(id, LayerArrange.backward)
-                  : null,
+              onTap: order(i > 0, LayerArrange.backward),
             ),
             PanelTile(
               icon: Icons.flip_to_back_rounded,
               label: l.toBack,
-              onTap: i > 0 ? () => editor.arrange(id, LayerArrange.back) : null,
+              onTap: order(i > 0, LayerArrange.back),
             ),
             PanelTile(
               icon: Icons.flip_rounded,
               label: l.flipH,
-              onTap: () => editor.flip(id, horizontal: true),
+              onTap: () => editor.flipLayers(ids, horizontal: true),
             ),
             PanelTile(
               iconWidget: const RotatedBox(
@@ -127,61 +160,57 @@ class ArrangePanel extends StatelessWidget {
               ),
               icon: null,
               label: l.flipV,
-              onTap: () => editor.flip(id, horizontal: false),
+              onTap: () => editor.flipLayers(ids, horizontal: false),
             ),
             PanelTile(
               icon: Icons.rotate_90_degrees_cw_rounded,
               label: l.rotate,
-              onTap: () => editor.updateProps(
-                id,
-                (p) => p.copyWith(
-                  transform: p.transform.copyWith(
-                    rotation: p.transform.rotation + math.pi / 2,
-                  ),
-                ),
-                label: 'rotate',
-              ),
+              onTap: () => editor.rotateLayers(ids, math.pi / 2),
             ),
           ],
         ),
         PanelLabel(l.align),
         TileRow(
           children: [
-            PanelTile(
-              icon: Icons.align_horizontal_left_rounded,
-              label: l.alignLeft,
-              onTap: () => editor.align(id, LayerAlign.left),
-            ),
-            PanelTile(
-              icon: Icons.align_horizontal_center_rounded,
-              label: l.alignCenter,
-              onTap: () => editor.align(id, LayerAlign.centerH),
-            ),
-            PanelTile(
-              icon: Icons.align_horizontal_right_rounded,
-              label: l.alignRight,
-              onTap: () => editor.align(id, LayerAlign.right),
-            ),
-            PanelTile(
-              icon: Icons.align_vertical_top_rounded,
-              label: l.alignTop,
-              onTap: () => editor.align(id, LayerAlign.top),
-            ),
-            PanelTile(
-              icon: Icons.align_vertical_center_rounded,
-              label: l.alignMiddle,
-              onTap: () => editor.align(id, LayerAlign.centerV),
-            ),
-            PanelTile(
-              icon: Icons.align_vertical_bottom_rounded,
-              label: l.alignBottom,
-              onTap: () => editor.align(id, LayerAlign.bottom),
-            ),
-            PanelTile(
-              icon: Icons.center_focus_strong_rounded,
-              label: l.reset,
-              onTap: () => editor.resetTransform(id),
-            ),
+            for (final (icon, label, a) in [
+              (
+                Icons.align_horizontal_left_rounded,
+                l.alignLeft,
+                LayerAlign.left,
+              ),
+              (
+                Icons.align_horizontal_center_rounded,
+                l.alignCenter,
+                LayerAlign.centerH,
+              ),
+              (
+                Icons.align_horizontal_right_rounded,
+                l.alignRight,
+                LayerAlign.right,
+              ),
+              (Icons.align_vertical_top_rounded, l.alignTop, LayerAlign.top),
+              (
+                Icons.align_vertical_center_rounded,
+                l.alignMiddle,
+                LayerAlign.centerV,
+              ),
+              (
+                Icons.align_vertical_bottom_rounded,
+                l.alignBottom,
+                LayerAlign.bottom,
+              ),
+            ])
+              PanelTile(
+                icon: icon,
+                label: label,
+                onTap: () => editor.alignLayers(ids, a),
+              ),
+            if (single)
+              PanelTile(
+                icon: Icons.center_focus_strong_rounded,
+                label: l.reset,
+                onTap: () => editor.resetTransform(id),
+              ),
           ],
         ),
         const SizedBox(height: 8),

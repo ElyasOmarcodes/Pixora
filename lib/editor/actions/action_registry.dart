@@ -71,7 +71,12 @@ Json _layerSummary(Layer l) => {
     final b = layerDocumentBounds(l);
     return [b.left, b.top, b.width, b.height].map((v) => v.round()).toList();
   }(),
+  if (l.props.clip) 'clipped': true,
+  if (l.props.blendMode != PixBlendMode.normal)
+    'blend_mode': l.props.blendMode.name,
   if (l is TextLayer) 'text': l.text,
+  if (l is GroupLayer)
+    'children': [for (final c in l.children) _layerSummary(c)],
 };
 
 const _layerId = ActionParam(
@@ -209,12 +214,77 @@ final List<EditorAction> _builtIns = [
   EditorAction(
     name: 'layer.select',
     description:
-        'Selects a layer (or clears the selection when layer_id is omitted).',
-    params: const [ActionParam('layer_id', ActionParamType.string)],
+        'Selects one layer, several layers (layer_ids), or clears the '
+        'selection when neither is given.',
+    params: const [
+      ActionParam('layer_id', ActionParamType.string),
+      ActionParam(
+        'layer_ids',
+        ActionParamType.object,
+        description: 'Array of layer ids to select together.',
+      ),
+    ],
     run: (e, a) {
-      e.select(a.optString('layer_id'));
-      return e.selectedId;
+      final many = a.raw['layer_ids'];
+      if (many is List) {
+        e.selectMany([for (final id in many) '$id']);
+      } else {
+        e.select(a.optString('layer_id'));
+      }
+      return e.selectedIds;
     },
+  ),
+  EditorAction(
+    name: 'layer.group',
+    description: 'Puts the selected layers into a new group; returns its id.',
+    params: const [ActionParam('name', ActionParamType.string)],
+    run: (e, a) => e.groupSelected(name: a.optString('name') ?? 'Group')?.id,
+  ),
+  EditorAction(
+    name: 'layer.ungroup',
+    description: 'Replaces a group with its children.',
+    params: const [_layerId],
+    run: (e, a) {
+      e.ungroup(_layer(e, a).id);
+      return null;
+    },
+  ),
+  EditorAction(
+    name: 'layer.set_clipping',
+    description:
+        'Turns a layer into a clipping mask of the layer below it (or back).',
+    params: const [
+      _layerId,
+      ActionParam('clip', ActionParamType.boolean, required: true),
+    ],
+    run: (e, a) {
+      final l = _layer(e, a);
+      if (l.props.clip != (a.optBool('clip') ?? true)) e.toggleClip(l.id);
+      return null;
+    },
+  ),
+  EditorAction(
+    name: 'layer.merge_down',
+    description: 'Merges a layer with the one below it into pixels.',
+    params: const [_layerId],
+    run: (e, a) async => (await e.mergeDown(_layer(e, a).id))?.id,
+  ),
+  EditorAction(
+    name: 'layer.merge_selected',
+    description: 'Merges the selected layers into one raster layer.',
+    run: (e, a) async => (await e.mergeSelected())?.id,
+  ),
+  EditorAction(
+    name: 'layer.rasterize',
+    description: 'Converts a text, shape or group layer to pixels.',
+    params: const [_layerId],
+    run: (e, a) async => (await e.rasterizeLayer(_layer(e, a).id))?.id,
+  ),
+  EditorAction(
+    name: 'document.flatten',
+    description:
+        'Flattens all visible layers into one; hidden layers are discarded.',
+    run: (e, a) async => (await e.flatten())?.id,
   ),
   EditorAction(
     name: 'layer.delete',

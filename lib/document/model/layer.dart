@@ -9,7 +9,7 @@ import 'effect.dart';
 import 'fill.dart';
 import 'layer_transform.dart';
 
-enum LayerKind { raster, text, shape }
+enum LayerKind { raster, text, shape, group }
 
 /// Properties every layer has, regardless of its kind.
 @immutable
@@ -22,6 +22,7 @@ class LayerProps {
     this.opacity = 1,
     this.blendMode = PixBlendMode.normal,
     this.transform = const LayerTransform(),
+    this.clip = false,
     List<LayerEffect> effects = const [],
   }) : id = id ?? newId('ly'),
        effects = List.unmodifiable(effects);
@@ -36,6 +37,10 @@ class LayerProps {
   final PixBlendMode blendMode;
   final LayerTransform transform;
 
+  /// Clipping mask: when true the layer only shows where the nearest
+  /// non-clipped layer beneath it (its base) has pixels.
+  final bool clip;
+
   /// Applied in order. See `EffectRegistry` for what each type does.
   final List<LayerEffect> effects;
 
@@ -47,6 +52,7 @@ class LayerProps {
     double? opacity,
     PixBlendMode? blendMode,
     LayerTransform? transform,
+    bool? clip,
     List<LayerEffect>? effects,
   }) => LayerProps(
     id: id ?? this.id,
@@ -56,6 +62,7 @@ class LayerProps {
     opacity: opacity ?? this.opacity,
     blendMode: blendMode ?? this.blendMode,
     transform: transform ?? this.transform,
+    clip: clip ?? this.clip,
     effects: effects ?? this.effects,
   );
 
@@ -66,6 +73,7 @@ class LayerProps {
     if (locked) 'locked': true,
     if (opacity != 1) 'opacity': opacity,
     if (blendMode != PixBlendMode.normal) 'blend': blendMode.name,
+    if (clip) 'clip': true,
     'transform': transform.toJson(),
     if (effects.isNotEmpty) 'effects': [for (final e in effects) e.toJson()],
   };
@@ -78,6 +86,7 @@ class LayerProps {
     opacity: readDouble(m['opacity'], 1).clamp(0.0, 1.0),
     blendMode: readEnum(PixBlendMode.values, m['blend'], PixBlendMode.normal),
     transform: LayerTransform.fromJson(m['transform']),
+    clip: readBool(m['clip']),
     effects: [
       for (final e in readList(m['effects']))
         if (e is Map) LayerEffect.fromJson(readMap(e)),
@@ -94,6 +103,7 @@ class LayerProps {
       other.opacity == opacity &&
       other.blendMode == blendMode &&
       other.transform == transform &&
+      other.clip == clip &&
       listEquals(other.effects, effects);
 
   @override
@@ -105,6 +115,7 @@ class LayerProps {
     opacity,
     blendMode,
     transform,
+    clip,
     Object.hashAll(effects),
   );
 }
@@ -153,6 +164,7 @@ sealed class Layer {
       'raster' => RasterLayer.fromJson(props, m),
       'text' => TextLayer.fromJson(props, m),
       'shape' => ShapeLayer.fromJson(props, m),
+      'group' => GroupLayer.fromJson(props, m),
       _ => null,
     };
   }
@@ -455,4 +467,67 @@ final class ShapeLayer extends Layer {
     cornerRadius,
     sides,
   );
+}
+
+/// A folder of layers. Children are ordered bottom → top like the document.
+///
+/// A group composites its children in isolation and then applies its own
+/// opacity, blend mode, effects and clipping to the result (Photoshop's
+/// behaviour for groups not set to "Pass Through"). The group's own
+/// transform is always identity: moving a group moves its children.
+final class GroupLayer extends Layer {
+  GroupLayer(
+    super.props, {
+    List<Layer> children = const [],
+    this.expanded = true,
+  }) : children = List.unmodifiable(children);
+
+  final List<Layer> children;
+
+  /// UI state for the layers panel, persisted so a project reopens as left.
+  final bool expanded;
+
+  @override
+  LayerKind get kind => LayerKind.group;
+
+  @override
+  GroupLayer withProps(LayerProps props) =>
+      GroupLayer(props, children: children, expanded: expanded);
+
+  GroupLayer copyWith({List<Layer>? children, bool? expanded}) => GroupLayer(
+    props,
+    children: children ?? this.children,
+    expanded: expanded ?? this.expanded,
+  );
+
+  @override
+  Layer cloneWithNewId({String? name}) =>
+      (super.cloneWithNewId(name: name) as GroupLayer).copyWith(
+        children: [for (final c in children) c.cloneWithNewId()],
+      );
+
+  @override
+  Json contentToJson() => {
+    if (!expanded) 'expanded': false,
+    'children': [for (final c in children) c.toJson()],
+  };
+
+  static GroupLayer fromJson(LayerProps props, Json m) => GroupLayer(
+    props.copyWith(transform: const LayerTransform()),
+    expanded: readBool(m['expanded'], true),
+    children: [
+      for (final c in readList(m['children']))
+        if (c is Map) ?Layer.fromJson(readMap(c)),
+    ],
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is GroupLayer &&
+      other.props == props &&
+      other.expanded == expanded &&
+      listEquals(other.children, children);
+
+  @override
+  int get hashCode => Object.hash(props, expanded, Object.hashAll(children));
 }

@@ -17,10 +17,21 @@ int readInt(Object? v, [int fallback = 0]) {
   return fallback;
 }
 
-bool readBool(Object? v, [bool fallback = false]) => v is bool ? v : fallback;
+bool readBool(Object? v, [bool fallback = false]) {
+  if (v is bool) return v;
+  if (v is String) {
+    if (v == 'true' || v == '1') return true;
+    if (v == 'false' || v == '0') return false;
+  }
+  return fallback;
+}
 
-String readString(Object? v, [String fallback = '']) =>
-    v is String ? v : fallback;
+String readString(Object? v, [String fallback = '']) => switch (v) {
+  String s => s,
+  num n => n.toString(),
+  bool b => b.toString(),
+  _ => fallback,
+};
 
 Json readMap(Object? v) => v is Map
     ? v.map((k, value) => MapEntry(k.toString(), value))
@@ -38,7 +49,17 @@ Color readColor(Object? v, [Color fallback = const Color(0xFF000000)]) {
   return fallback;
 }
 
-int writeColor(Color c) => c.toARGB32();
+/// Colors are stored as `#AARRGGBB` so project files stay human-readable.
+String writeColor(Color c) =>
+    '#${c.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()}';
+
+/// Parses a scalar that may arrive as a string (XML) into a number, if it
+/// looks like one. Colors written as `#AARRGGBB` become ARGB ints.
+Object? parseScalar(Object? v) {
+  if (v is! String) return v;
+  if (v.startsWith('#')) return readColor(v).toARGB32();
+  return num.tryParse(v) ?? v;
+}
 
 T readEnum<T extends Enum>(List<T> values, Object? v, T fallback) {
   if (v is String) {

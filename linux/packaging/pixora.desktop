@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Pixora
+Comment=Layered photo and graphic editor
+Exec=pixora %f
+Icon=pixora
+Terminal=false
+Categories=Graphics;RasterGraphics;2DGraphics;
+MimeType=application/vnd.pixora.project+zip;
