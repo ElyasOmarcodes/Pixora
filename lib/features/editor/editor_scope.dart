@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../editor/editor_controller.dart';
 import '../../editor/tools/mask_tool.dart';
+import '../../editor/tools/pen_tool.dart';
 
 /// Which contextual tool panel is open.
 enum ToolPanel {
@@ -27,6 +28,9 @@ enum ToolPanel {
   curve,
   textBackground,
   spacing,
+  pen,
+  line,
+  iconStyle,
   glow,
   bevel,
   extrude,
@@ -45,6 +49,9 @@ enum ToolMode {
 
   /// Paint the selected layer's mask.
   mask,
+
+  /// Draw / edit bezier paths.
+  pen,
 }
 
 /// Editor UI state that is not part of the document (and therefore not
@@ -56,6 +63,9 @@ class EditorUiState extends ChangeNotifier {
 
   /// Mask brush settings (shared by the mask panel and canvas tool).
   final MaskBrush maskBrush = MaskBrush();
+
+  /// Pen editing state (vector paths and bezier masks).
+  final PenState penState = PenState();
 
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;
@@ -73,7 +83,9 @@ class EditorUiState extends ChangeNotifier {
     // The mask panel drives the mask tool.
     if (p == ToolPanel.mask) {
       _mode = ToolMode.mask;
-    } else if (_mode == ToolMode.mask) {
+    } else if (p == ToolPanel.pen) {
+      _mode = ToolMode.pen;
+    } else if (_mode == ToolMode.mask || _mode == ToolMode.pen) {
       _mode = ToolMode.move;
       maskBrush.clearPen();
     }
@@ -83,6 +95,7 @@ class EditorUiState extends ChangeNotifier {
   @override
   void dispose() {
     maskBrush.dispose();
+    penState.dispose();
     super.dispose();
   }
 

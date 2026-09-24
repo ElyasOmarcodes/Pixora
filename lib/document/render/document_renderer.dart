@@ -15,6 +15,7 @@ import 'color_matrix.dart';
 import 'layer_cache.dart';
 import 'shape_paths.dart';
 import 'text_layout.dart';
+import 'vector_paths.dart';
 
 /// Size of a layer's local box (before its transform is applied).
 Size layerLocalSize(Layer layer) => layerLocalRect(layer).size;
@@ -32,6 +33,8 @@ Rect layerLocalRect(Layer layer) {
       return centred(s.width, s.height);
     }(),
     ShapeLayer l => centred(l.width, l.height),
+    IconLayer l => centred(l.width, l.height),
+    PathLayer l => pathLayerRect(l),
     GroupLayer g => unionBounds(g.children),
   };
 }
@@ -554,7 +557,7 @@ class DocumentRenderer {
 
   /// Draws one mask stroke inside a mask layer (hide = erase, show = paint).
   static void paintMaskStroke(Canvas canvas, MaskStroke s) {
-    if (s.points.isEmpty) return;
+    if (s.points.isEmpty && s.contour == null) return;
     final paint = Paint()
       ..isAntiAlias = true
       ..color = const Color(0xFFFFFFFF)
@@ -566,6 +569,12 @@ class DocumentRenderer {
         BlurStyle.normal,
         math.max(0.5, s.width * s.softness * 0.35),
       );
+    }
+    if (s.contour != null) {
+      final c = s.contour!;
+      if (c.nodes.length < 2) return;
+      canvas.drawPath(contourPath(c.copyWith(closed: true)), paint);
+      return;
     }
     if (s.shape == MaskShape.area) {
       if (s.points.length < 3) return;
@@ -618,6 +627,23 @@ class DocumentRenderer {
         );
       case TextLayer l:
         TextLayoutCache.instance.paint(canvas, l);
+      case IconLayer l:
+        final path = iconPath(l);
+        final b = path.getBounds();
+        canvas.drawPath(path, l.fill.applyTo(Paint()..isAntiAlias = true, b));
+        if (l.strokeWidth > 0) {
+          canvas.drawPath(
+            path,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = l.strokeWidth
+              ..strokeJoin = StrokeJoin.round
+              ..color = l.strokeColor
+              ..isAntiAlias = true,
+          );
+        }
+      case PathLayer l:
+        paintPathLayer(canvas, l);
       case ShapeLayer l:
         final path = buildShapePath(l);
         final bounds = path.getBounds();

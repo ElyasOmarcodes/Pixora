@@ -247,6 +247,31 @@ class ContextDock extends StatelessWidget {
         div,
         ...effects,
       ],
+      IconLayer i => [
+        DockItem(
+          Icons.find_replace_rounded,
+          l.changeIcon,
+          onTap: () => commands.changeIcon(i),
+        ),
+        ...basics,
+        div,
+        DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
+        DockItem(Icons.style_rounded, l.style, panel: ToolPanel.iconStyle),
+        ...look,
+        div,
+        DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
+        ...effects,
+      ],
+      PathLayer _ => [
+        DockItem(Icons.draw_rounded, l.editPath, panel: ToolPanel.pen),
+        ...basics,
+        div,
+        DockItem(Icons.line_style_rounded, l.lineStyle, panel: ToolPanel.line),
+        DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
+        ...look,
+        div,
+        ...effects,
+      ],
       GroupLayer g => [
         DockItem(
           Icons.folder_off_rounded,

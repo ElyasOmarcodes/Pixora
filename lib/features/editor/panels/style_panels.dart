@@ -14,12 +14,18 @@ import 'panel_common.dart';
 PixFill? _fillOf(Layer l) => switch (l) {
   TextLayer t => t.fill,
   ShapeLayer s => s.fill,
+  IconLayer i => i.fill,
+  PathLayer p => p.fill ?? PixFill.color(p.strokeColor),
   RasterLayer _ || GroupLayer _ => null,
 };
 
 Layer _withFill(Layer l, PixFill f) => switch (l) {
   TextLayer t => t.copyWith(fill: f),
   ShapeLayer s => s.copyWith(fill: f),
+  IconLayer i => i.copyWith(fill: f),
+  // Open lines take the colour as their stroke.
+  PathLayer p =>
+    p.fill == null ? p.copyWith(strokeColor: f.primary) : p.copyWith(fill: f),
   RasterLayer _ || GroupLayer _ => l,
 };
 
@@ -168,11 +174,15 @@ class StrokePanel extends StatelessWidget {
     final (width, color) = switch (layer) {
       TextLayer t => (t.strokeWidth, t.strokeColor),
       ShapeLayer s => (s.strokeWidth, s.strokeColor),
+      IconLayer i => (i.strokeWidth, i.strokeColor),
+      PathLayer p => (p.strokeWidth, p.strokeColor),
       RasterLayer _ || GroupLayer _ => (0.0, Colors.black),
     };
     Layer apply(Layer x, {double? w, Color? c}) => switch (x) {
       TextLayer t => t.copyWith(strokeWidth: w, strokeColor: c),
       ShapeLayer s => s.copyWith(strokeWidth: w, strokeColor: c),
+      IconLayer i => i.copyWith(strokeWidth: w, strokeColor: c),
+      PathLayer p => p.copyWith(strokeWidth: w, strokeColor: c),
       RasterLayer _ || GroupLayer _ => x,
     };
     final maxWidth = layer is TextLayer

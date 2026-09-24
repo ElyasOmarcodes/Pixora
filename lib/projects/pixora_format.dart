@@ -153,11 +153,12 @@ abstract final class PixoraFormat {
     'yLines': 'y',
     'mask': 'stroke',
     'spans': 'span',
+    'contours': 'contour',
   };
 
   /// Keys written as child text elements instead of attributes (free text
   /// that may be long or multi-line).
-  static const Set<String> _textElements = {'text'};
+  static const Set<String> _textElements = {'text', 'd', 'nodes'};
 
   static String documentToXml(
     PixDocument doc, {

@@ -18,6 +18,7 @@ import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
 import '../document/render/document_renderer.dart';
 import '../document/render/layer_cache.dart';
+import '../document/render/vector_paths.dart';
 import 'history.dart';
 
 /// Signature of a document edit. Every change to a document is expressed as
@@ -584,7 +585,110 @@ class EditorController extends ChangeNotifier {
     );
   }
 
+  // ------------------------------------------------------- icons & paths
+
+  /// Adds an icon (path data kept in the project) at the canvas centre.
+  IconLayer addIcon(
+    String iconName,
+    String pathData, {
+    IconStyle style = IconStyle.outlined,
+    bool filled = false,
+    int weight = 400,
+    String name = 'Icon',
+    Color? color,
+  }) {
+    final size = (_unit * 0.3).roundToDouble();
+    final layer = IconLayer(
+      LayerProps(
+        name: _nextName(name),
+        transform: LayerTransform(
+          x: _document.center.dx,
+          y: _document.center.dy,
+        ),
+      ),
+      iconName: iconName,
+      pathData: pathData,
+      style: style,
+      filled: filled,
+      weight: weight,
+      width: size,
+      height: size,
+      fill: color == null ? null : PixFill.color(color),
+    );
+    apply('add_icon', (d) => _insertAtCursor(d, layer), select: layer.id);
+    return layer;
+  }
+
+  /// Swaps the icon of an icon layer, keeping size, colours and effects.
+  void replaceIcon(
+    String id,
+    String iconName,
+    String pathData, {
+    IconStyle style = IconStyle.outlined,
+    bool filled = false,
+    int weight = 400,
+  }) => updateLayer(
+    id,
+    (l) => l is IconLayer
+        ? l.copyWith(
+            iconName: iconName,
+            pathData: pathData,
+            style: style,
+            filled: filled,
+            weight: weight,
+          )
+        : l,
+    label: 'replace_icon',
+  );
+
+  /// Adds a vector path layer at the canvas centre ([contours] in local
+  /// coordinates around the origin) and selects it.
+  PathLayer addPath(PathLayer template, {String name = 'Vector'}) {
+    final layer = template.withProps(
+      template.props.copyWith(
+        name: _nextName(name),
+        transform: LayerTransform(
+          x: _document.center.dx,
+          y: _document.center.dy,
+        ),
+      ),
+    );
+    apply('add_path', (d) => _insertAtCursor(d, layer), select: layer.id);
+    return layer;
+  }
+
+  /// Re-centres a path layer's nodes on its origin without moving it on
+  /// the canvas (keeps handles and rotation centred after editing).
+  void normalizePath(String id) {
+    final l = _document.layerById(id);
+    if (l is! PathLayer || l.contours.every((c) => c.nodes.isEmpty)) return;
+    final c = pathLayerPath(l).getBounds().center;
+    if (c.distance < 0.01) return;
+    final t = l.props.transform;
+    final shift = t.toDocument(c) - t.toDocument(Offset.zero);
+    _silent(
+      (d) => d.updateLayer(
+        id,
+        (x) => (x as PathLayer).copyWith(
+          props: x.props.copyWith(
+            transform: t.copyWith(x: t.x + shift.dx, y: t.y + shift.dy),
+          ),
+          contours: [
+            for (final k in x.contours)
+              k.copyWith(nodes: [for (final n in k.nodes) n.shifted(-c)]),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------- mask
+
+  void addMaskStrokes(String id, List<MaskStroke> strokes) => updateProps(
+    id,
+    (p) => p.copyWith(mask: [...p.mask, ...strokes], maskEnabled: true),
+    label: 'mask',
+  );
 
   void addMaskStroke(String id, MaskStroke stroke, {bool live = false}) =>
       updateProps(
@@ -615,6 +719,7 @@ class EditorController extends ChangeNotifier {
               points: s.points,
               width: s.width,
               softness: s.softness,
+              contour: s.contour,
             ),
         ],
         maskEnabled: true,

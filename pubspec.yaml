@@ -1,7 +1,7 @@
 name: pixora
 description: "Pixora — a layered, cross-platform photo & graphic editor."
 publish_to: 'none'
-version: 0.5.1+7
+version: 0.6.0+8
 
 environment:
   sdk: ^3.13.4
@@ -22,6 +22,7 @@ dependencies:
   xml: ^7.0.1
   gal: ^2.3.3
   characters: ^1.4.0
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -32,6 +33,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - assets/icons/
   fonts:
     - family: Vazirmatn
       fonts:

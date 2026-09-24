@@ -8,6 +8,9 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/confirm_dialog.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../editor_scope.dart';
+import '../pen_targets.dart';
+import 'vector_panels.dart';
+import '../../../document/render/document_renderer.dart';
 import 'panel_common.dart';
 
 /// Layer mask: hide or reveal parts of the layer with a brush, lasso or
@@ -18,10 +21,43 @@ class MaskPanel extends StatelessWidget {
     required this.editor,
     required this.ui,
     required this.layer,
+    required this.maskPen,
   });
   final EditorController editor;
   final EditorUiState ui;
   final Layer layer;
+  final MaskPenTarget maskPen;
+
+  /// Turns the pen outline(s) into mask strokes: hide what is inside, or
+  /// keep only what is inside.
+  void _applyPen({required bool hideInside}) {
+    final soft = ui.maskBrush.softness;
+    final shapes = [
+      for (final c in maskPen.contours)
+        if (c.nodes.length >= 3) c.copyWith(closed: true),
+    ];
+    if (shapes.isEmpty) return;
+    final r = layerLocalRect(layer).inflate(100000);
+    editor.addMaskStrokes(layer.id, [
+      if (!hideInside)
+        MaskStroke(
+          mode: MaskMode.hide,
+          shape: MaskShape.area,
+          points: [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft],
+        ),
+      for (final c in shapes)
+        MaskStroke(
+          mode: hideInside ? MaskMode.hide : MaskMode.show,
+          shape: MaskShape.area,
+          points: const [],
+          contour: c,
+          softness: soft,
+        ),
+    ]);
+    maskPen.clear();
+    ui.penState.reset();
+    ui.penState.target = maskPen;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,37 +154,56 @@ class MaskPanel extends StatelessWidget {
             format: (v) => '${(v * 100).round()}%',
             onChanged: (v) => brush.softness = v,
           ),
-          if (brush.kind == MaskToolKind.pen)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: brush.penPoints.length >= 3
-                          ? () => MaskTool.applyPen(editor, brush)
-                          : null,
-                      icon: const Icon(Icons.check_rounded),
-                      label: Text(l.applyShape),
+          if (brush.kind == MaskToolKind.pen) ...[
+            PenPanel(state: ui.penState, onDone: () {}, compact: true),
+            ListenableBuilder(
+              listenable: maskPen,
+              builder: (context, _) => Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: maskPen.hasShape
+                            ? () => _applyPen(hideInside: true)
+                            : null,
+                        icon: const Icon(Icons.auto_fix_normal_rounded),
+                        label: Text(
+                          l.hideInside,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    tooltip: l.undo,
-                    onPressed: brush.penPoints.isEmpty
-                        ? null
-                        : brush.undoPenPoint,
-                    icon: const Icon(Icons.undo_rounded),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton.filledTonal(
-                    tooltip: l.cancel,
-                    onPressed: brush.penPoints.isEmpty ? null : brush.clearPen,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: maskPen.hasShape
+                            ? () => _applyPen(hideInside: false)
+                            : null,
+                        icon: const Icon(Icons.crop_free_rounded),
+                        label: Text(
+                          l.keepInside,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton.filledTonal(
+                      tooltip: l.cancel,
+                      onPressed: maskPen.contours.isEmpty
+                          ? null
+                          : () {
+                              maskPen.clear();
+                              ui.penState.reset();
+                              ui.penState.target = maskPen;
+                            },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
               ),
             ),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
             child: Text(

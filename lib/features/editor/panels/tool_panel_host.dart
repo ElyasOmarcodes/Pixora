@@ -13,6 +13,20 @@ import 'mask_panel.dart';
 import 'style_panels.dart';
 import 'text_panels.dart';
 import 'transform_panels.dart';
+import 'vector_panels.dart';
+import '../pen_targets.dart';
+
+/// Page-level actions panels need.
+class PanelHooks {
+  const PanelHooks({
+    required this.addIcon,
+    required this.startPen,
+    required this.maskPen,
+  });
+  final VoidCallback addIcon;
+  final VoidCallback startPen;
+  final MaskPenTarget maskPen;
+}
 
 /// Shows the open [ToolPanel] with a soft size/fade transition. Panels that
 /// don't fit the current selection close themselves.
@@ -21,12 +35,16 @@ class ToolPanelHost extends StatelessWidget {
     super.key,
     required this.editor,
     required this.ui,
+    required this.hooks,
     this.maxHeight = 320,
   });
 
   final EditorController editor;
   final EditorUiState ui;
   final double maxHeight;
+
+  /// Actions panels hand back to the editor page.
+  final PanelHooks hooks;
 
   Widget? _panelFor(ToolPanel? p, Layer? layer) {
     switch (p) {
@@ -35,7 +53,11 @@ class ToolPanelHost extends StatelessWidget {
       case ToolPanel.addShape:
         return AddShapePanel(
           editor: editor,
-          onAdded: () => ui.panel = ToolPanel.shapeStyle,
+          onAdded: () => ui.panel = editor.selectedLayer is PathLayer
+              ? ToolPanel.line
+              : ToolPanel.shapeStyle,
+          onIcons: hooks.addIcon,
+          onPen: hooks.startPen,
         );
       case ToolPanel.background:
         return BackgroundPanel(editor: editor);
@@ -70,7 +92,24 @@ class ToolPanelHost extends StatelessWidget {
       ToolPanel.position => PositionPanel(editor: editor, layer: layer),
       ToolPanel.size => SizePanel(editor: editor, layer: layer),
       ToolPanel.rotate => RotatePanel(editor: editor, layer: layer),
-      ToolPanel.mask => MaskPanel(editor: editor, ui: ui, layer: layer),
+      ToolPanel.mask => MaskPanel(
+        editor: editor,
+        ui: ui,
+        layer: layer,
+        maskPen: hooks.maskPen,
+      ),
+      ToolPanel.pen when layer is PathLayer => PenPanel(
+        state: ui.penState,
+        onDone: () => ui.panel = ToolPanel.line,
+      ),
+      ToolPanel.line when layer is PathLayer => LinePanel(
+        editor: editor,
+        layer: layer,
+      ),
+      ToolPanel.iconStyle when layer is IconLayer => IconStylePanel(
+        editor: editor,
+        layer: layer,
+      ),
       ToolPanel.glow => GlowPanel(editor: editor, layer: layer),
       ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
       ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),

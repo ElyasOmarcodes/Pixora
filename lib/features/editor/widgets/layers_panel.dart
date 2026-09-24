@@ -458,6 +458,10 @@ class _LayerRow extends StatelessWidget {
         commands.openPanel(ToolPanel.adjust);
       case ShapeLayer _:
         commands.openPanel(ToolPanel.shapeStyle);
+      case IconLayer i:
+        commands.changeIcon(i);
+      case PathLayer _:
+        commands.openPanel(ToolPanel.pen);
       case GroupLayer g:
         editor.setExpanded(g.id, !g.expanded);
     }

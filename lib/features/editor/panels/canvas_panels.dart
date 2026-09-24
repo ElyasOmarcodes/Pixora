@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../document/model/fill.dart';
-import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../projects/canvas_presets.dart';
@@ -9,35 +8,6 @@ import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../../../ui/widgets/pressable.dart';
 import 'panel_common.dart';
-
-/// Pick a shape to add.
-class AddShapePanel extends StatelessWidget {
-  const AddShapePanel({super.key, required this.editor, required this.onAdded});
-  final EditorController editor;
-  final VoidCallback onAdded;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return TileRow(
-      children: [
-        for (final k in ShapeKind.values)
-          PanelTile(
-            icon: shapeIcon(k),
-            label: shapeLabel(l, k),
-            onTap: () {
-              editor.addShape(
-                k,
-                name: l.shape,
-                color: Theme.of(context).colorScheme.primary,
-              );
-              onAdded();
-            },
-          ),
-      ],
-    );
-  }
-}
 
 /// Solid / gradient / transparent background of the canvas.
 class BackgroundPanel extends StatelessWidget {

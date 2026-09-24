@@ -12,6 +12,8 @@ abstract final class LayerStyle {
     LayerKind.raster => const Color(0xFF16B38A),
     LayerKind.shape => const Color(0xFFFF8A3D),
     LayerKind.group => const Color(0xFF9B6BFF),
+    LayerKind.icon => const Color(0xFFE84393),
+    LayerKind.path => const Color(0xFF0FB9B1),
   };
 
   static IconData icon(LayerKind k) => switch (k) {
@@ -19,6 +21,8 @@ abstract final class LayerStyle {
     LayerKind.raster => Icons.image_rounded,
     LayerKind.shape => Icons.category_rounded,
     LayerKind.group => Icons.folder_rounded,
+    LayerKind.icon => Icons.emoji_symbols_rounded,
+    LayerKind.path => Icons.draw_rounded,
   };
 
   static String label(AppLocalizations l, LayerKind k) => switch (k) {
@@ -26,6 +30,8 @@ abstract final class LayerStyle {
     LayerKind.raster => l.image,
     LayerKind.shape => l.shape,
     LayerKind.group => l.group,
+    LayerKind.icon => l.icon,
+    LayerKind.path => l.vector,
   };
 }
 

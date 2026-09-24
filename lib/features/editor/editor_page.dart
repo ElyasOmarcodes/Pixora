@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,10 @@ import '../../editor/tools/grid_tool.dart';
 import '../../editor/tools/mask_tool.dart';
 import '../../core/fonts/font_catalog.dart';
 import 'dialogs/font_picker.dart';
+import 'dialogs/icon_picker.dart';
+import 'pen_targets.dart';
+import '../../core/icons/icon_catalog.dart';
+import '../../editor/tools/pen_tool.dart';
 import 'dialogs/text_dialog.dart';
 import 'dialogs/close_dialog.dart';
 import '../../ui/widgets/confirm_dialog.dart';
@@ -57,13 +62,119 @@ class _EditorPageState extends State<EditorPage> {
   final HandTool _handTool = HandTool();
   final GridTool _gridTool = GridTool();
   late final MaskTool _maskTool = MaskTool(_ui.maskBrush);
+  late final PenTool _penTool = PenTool(_ui.penState);
+  late final MaskPenTarget _maskPen = MaskPenTarget(_editor);
+  late final PanelHooks _hooks = PanelHooks(
+    addIcon: () => unawaited(_addIcon()),
+    startPen: _startPen,
+    maskPen: _maskPen,
+  );
 
   EditorTool get _tool => switch (_ui.mode) {
     ToolMode.move => _moveTool,
     ToolMode.hand => _handTool,
     ToolMode.grid => _gridTool,
-    ToolMode.mask => _maskTool,
+    ToolMode.mask =>
+      _ui.maskBrush.kind == MaskToolKind.pen ? _penTool : _maskTool,
+    ToolMode.pen => _penTool,
   };
+
+  /// Points the pen at what it should edit: the selected vector layer in
+  /// pen mode, the mask outline in mask-pen mode. Leaving the pen tidies
+  /// the path (re-centred) or removes an empty one.
+  void _syncPen() {
+    final pen = _ui.penState;
+    final p = _ui.panel;
+    if (p == ToolPanel.pen) {
+      final l = _editor.selectedLayer;
+      if (l is PathLayer) {
+        final t = pen.target;
+        if (t is! PathLayerPenTarget || t.id != l.id) {
+          _finishPen();
+          pen.reset();
+          pen.target = PathLayerPenTarget(_editor, l.id);
+          pen.active = l.contours.isEmpty ? 0 : l.contours.length - 1;
+        }
+      }
+    } else if (p == ToolPanel.mask && _ui.maskBrush.kind == MaskToolKind.pen) {
+      if (pen.target != _maskPen) {
+        _finishPen();
+        pen.reset();
+        pen.target = _maskPen;
+      }
+    } else if (pen.target != null) {
+      _finishPen();
+      pen.reset();
+      _maskPen.clear();
+    }
+    // The canvas tool may have changed (mask brush ↔ mask pen).
+    if (mounted) setState(() {});
+  }
+
+  void _finishPen() {
+    final t = _ui.penState.target;
+    if (t is! PathLayerPenTarget) return;
+    final l = _editor.document.layerById(t.id);
+    if (l is! PathLayer) return;
+    if (l.contours.every((c) => c.nodes.length < 2)) {
+      _editor.deleteLayers([l.id]);
+    } else {
+      _editor.normalizePath(l.id);
+    }
+  }
+
+  Future<void> _addIcon() async {
+    final l = AppLocalizations.of(context);
+    final color = Theme.of(context).colorScheme.primary;
+    final pick = await showIconPicker(context);
+    if (pick == null) return;
+    _editor.addIcon(
+      pick.name,
+      pick.pathData,
+      style: pick.style,
+      filled: pick.filled,
+      weight: pick.weight,
+      name: l.icon,
+      color: color,
+    );
+    _ui.panel = ToolPanel.fill;
+  }
+
+  Future<void> _changeIcon(IconLayer layer) async {
+    final pick = await showIconPicker(
+      context,
+      current: IconPick(
+        name: layer.iconName,
+        pathData: layer.pathData,
+        style: layer.style,
+        filled: layer.filled,
+        weight: layer.weight,
+      ),
+    );
+    if (pick == null) return;
+    _editor.replaceIcon(
+      layer.id,
+      pick.name,
+      pick.pathData,
+      style: pick.style,
+      filled: pick.filled,
+      weight: pick.weight,
+    );
+  }
+
+  void _startPen() {
+    final l = AppLocalizations.of(context);
+    final unit = math.min(_editor.document.width, _editor.document.height);
+    _editor.addPath(
+      PathLayer(
+        LayerProps(name: l.vector),
+        strokeColor: Theme.of(context).colorScheme.primary,
+        strokeWidth: math.max(2, unit * 0.01),
+      ),
+      name: l.vector,
+    );
+    _ui.panel = ToolPanel.pen;
+  }
 
   Timer? _saveTimer;
   int _savedRevision = -1;
@@ -81,6 +192,8 @@ class _EditorPageState extends State<EditorPage> {
     _editor = EditorController(document: widget.project.document)
       ..assets.addAll(widget.project.assets)
       ..addListener(_onEditorChanged);
+    _ui.addListener(_syncPen);
+    _ui.maskBrush.addListener(_syncPen);
     for (final id in widget.project.document.referencedAssets) {
       unawaited(_editor.assets.decode(id));
     }
@@ -95,6 +208,9 @@ class _EditorPageState extends State<EditorPage> {
   void dispose() {
     _saveTimer?.cancel();
     _editor.removeListener(_onEditorChanged);
+    _ui.removeListener(_syncPen);
+    _ui.maskBrush.removeListener(_syncPen);
+    _maskPen.dispose();
     _editor.dispose();
     _ui.dispose();
     _canvas.dispose();
@@ -113,6 +229,7 @@ class _EditorPageState extends State<EditorPage> {
           p == ToolPanel.grid ||
           p == ToolPanel.snap ||
           p == ToolPanel.rulers ||
+          p == ToolPanel.pen ||
           (p == ToolPanel.background && _editor.selectedId == null);
       if (!keep) _ui.panel = null;
     }
@@ -442,6 +559,7 @@ class _EditorPageState extends State<EditorPage> {
     pickFont: _pickFont,
     replaceImage: _replaceImage,
     deleteLayers: (ids) => unawaited(_confirmDeleteLayers(ids)),
+    changeIcon: (l) => unawaited(_changeIcon(l)),
     runAsync: (job) => runWithProgress(context, job),
   );
 
@@ -628,6 +746,10 @@ class _EditorPageState extends State<EditorPage> {
         unawaited(_replaceImage(r));
       case ShapeLayer():
         _ui.panel = ToolPanel.shapeStyle;
+      case final IconLayer i:
+        unawaited(_changeIcon(i));
+      case PathLayer():
+        _ui.panel = ToolPanel.pen;
       case GroupLayer() || null:
         _ui.showLayers = true;
     }
@@ -734,6 +856,7 @@ class _EditorPageState extends State<EditorPage> {
                 editor: _editor,
                 ui: _ui,
                 maxHeight: size.height * 0.36,
+                hooks: _hooks,
               ),
               _dock(),
             ],
@@ -836,7 +959,12 @@ class _EditorPageState extends State<EditorPage> {
                   child: LayersPanel(editor: _editor, commands: _commands),
                 ),
                 const Divider(height: 1),
-                ToolPanelHost(editor: _editor, ui: _ui, maxHeight: 440),
+                ToolPanelHost(
+                  editor: _editor,
+                  ui: _ui,
+                  maxHeight: 440,
+                  hooks: _hooks,
+                ),
               ],
             ),
           ),

@@ -21,8 +21,12 @@ class LayerCommands {
     required this.pickFont,
     required this.replaceImage,
     required this.deleteLayers,
+    required this.changeIcon,
     required this.runAsync,
   });
+
+  /// Opens the icon browser to swap an icon layer's icon.
+  final void Function(IconLayer layer) changeIcon;
 
   final void Function(ToolPanel panel) openPanel;
   final void Function(TextLayer layer) editText;
@@ -171,6 +175,43 @@ List<QuickAction> quickActionsFor(
       panel(Icons.category_rounded, l.shape, ToolPanel.shapeStyle),
       panel(Icons.palette_rounded, l.color, ToolPanel.fill),
       panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
+      shadow,
+      blend,
+      center,
+      rotate,
+      flipH,
+      clip,
+      duplicate,
+      toFront,
+      toBack,
+      rename,
+      rasterize,
+      delete,
+    ],
+    IconLayer i => [
+      QuickAction(
+        Icons.find_replace_rounded,
+        l.changeIcon,
+        () => cmd.changeIcon(i),
+      ),
+      panel(Icons.palette_rounded, l.color, ToolPanel.fill),
+      panel(Icons.style_rounded, l.style, ToolPanel.iconStyle),
+      shadow,
+      blend,
+      center,
+      rotate,
+      flipH,
+      clip,
+      duplicate,
+      toFront,
+      toBack,
+      rename,
+      rasterize,
+      delete,
+    ],
+    PathLayer _ => [
+      panel(Icons.draw_rounded, l.editPath, ToolPanel.pen),
+      panel(Icons.line_style_rounded, l.lineStyle, ToolPanel.line),
       shadow,
       blend,
       center,

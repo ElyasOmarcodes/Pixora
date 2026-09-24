@@ -11,7 +11,10 @@ import 'layer_transform.dart';
 import 'mask.dart';
 import 'text_span_style.dart';
 
-enum LayerKind { raster, text, shape, group }
+part 'layer_icon.dart';
+part 'layer_path.dart';
+
+enum LayerKind { raster, text, shape, group, icon, path }
 
 /// Properties every layer has, regardless of its kind.
 @immutable
@@ -193,6 +196,8 @@ sealed class Layer {
       'text' => TextLayer.fromJson(props, m),
       'shape' => ShapeLayer.fromJson(props, m),
       'group' => GroupLayer.fromJson(props, m),
+      'icon' => IconLayer.fromJson(props, m),
+      'path' => PathLayer.fromJson(props, m),
       _ => null,
     };
   }
@@ -512,7 +517,25 @@ final class TextLayer extends Layer {
   );
 }
 
-enum ShapeKind { rectangle, ellipse, triangle, star, polygon, heart, line }
+enum ShapeKind {
+  rectangle,
+  ellipse,
+  triangle,
+  star,
+  polygon,
+  heart,
+  line,
+  diamond,
+  parallelogram,
+  trapezoid,
+  cross,
+  crescent,
+  speechBubble,
+  blockArrow,
+  chevron,
+  gear,
+  frame,
+}
 
 @immutable
 final class ShapeLayer extends Layer {
@@ -526,7 +549,9 @@ final class ShapeLayer extends Layer {
     this.strokeColor = const Color(0xFF000000),
     this.cornerRadius = 0,
     this.sides = 5,
-  }) : fill = fill ?? PixFill.white;
+    Map<String, double> params = const {},
+  }) : fill = fill ?? PixFill.white,
+       params = Map.unmodifiable(params);
 
   final ShapeKind shape;
   final double width;
@@ -540,6 +565,12 @@ final class ShapeLayer extends Layer {
 
   /// Points for stars, sides for polygons.
   final int sides;
+
+  /// Per-shape options (sweep, inner radius, roundness, tail…); see
+  /// `shapeParams` for what each shape understands. Missing = default.
+  final Map<String, double> params;
+
+  double param(String key, double fallback) => params[key] ?? fallback;
 
   @override
   LayerKind get kind => LayerKind.shape;
@@ -557,6 +588,7 @@ final class ShapeLayer extends Layer {
     Color? strokeColor,
     double? cornerRadius,
     int? sides,
+    Map<String, double>? params,
   }) => ShapeLayer(
     props ?? this.props,
     shape: shape ?? this.shape,
@@ -567,7 +599,11 @@ final class ShapeLayer extends Layer {
     strokeColor: strokeColor ?? this.strokeColor,
     cornerRadius: cornerRadius ?? this.cornerRadius,
     sides: sides ?? this.sides,
+    params: params ?? this.params,
   );
+
+  ShapeLayer withParam(String key, double value) =>
+      copyWith(params: {...params, key: value});
 
   @override
   Json contentToJson() => {
@@ -578,7 +614,11 @@ final class ShapeLayer extends Layer {
     if (strokeWidth > 0) 'strokeWidth': strokeWidth,
     if (strokeWidth > 0) 'strokeColor': writeColor(strokeColor),
     if (cornerRadius > 0) 'radius': cornerRadius,
-    if (shape == ShapeKind.star || shape == ShapeKind.polygon) 'sides': sides,
+    if (shape == ShapeKind.star ||
+        shape == ShapeKind.polygon ||
+        shape == ShapeKind.gear)
+      'sides': sides,
+    if (params.isNotEmpty) 'params': params,
   };
 
   static ShapeLayer fromJson(LayerProps props, Json m) => ShapeLayer(
@@ -591,6 +631,10 @@ final class ShapeLayer extends Layer {
     strokeColor: readColor(m['strokeColor']),
     cornerRadius: readDouble(m['radius']),
     sides: readInt(m['sides'], 5).clamp(3, 64),
+    params: {
+      for (final e in readMap(m['params']).entries)
+        if (parseScalar(e.value) case final num v) e.key: v.toDouble(),
+    },
   );
 
   @override
@@ -604,7 +648,8 @@ final class ShapeLayer extends Layer {
       other.strokeWidth == strokeWidth &&
       other.strokeColor == strokeColor &&
       other.cornerRadius == cornerRadius &&
-      other.sides == sides;
+      other.sides == sides &&
+      mapEquals(other.params, params);
 
   @override
   int get hashCode => Object.hash(
@@ -617,6 +662,7 @@ final class ShapeLayer extends Layer {
     strokeColor,
     cornerRadius,
     sides,
+    Object.hashAll(params.entries.map((e) => Object.hash(e.key, e.value))),
   );
 }
 

@@ -165,14 +165,14 @@ String shapeLabel(AppLocalizations l, ShapeKind k) => switch (k) {
   ShapeKind.polygon => l.shapePolygon,
   ShapeKind.heart => l.shapeHeart,
   ShapeKind.line => l.shapeLine,
-};
-
-IconData shapeIcon(ShapeKind k) => switch (k) {
-  ShapeKind.rectangle => Icons.crop_square_rounded,
-  ShapeKind.ellipse => Icons.circle_outlined,
-  ShapeKind.triangle => Icons.change_history_rounded,
-  ShapeKind.star => Icons.star_outline_rounded,
-  ShapeKind.polygon => Icons.hexagon_outlined,
-  ShapeKind.heart => Icons.favorite_outline_rounded,
-  ShapeKind.line => Icons.horizontal_rule_rounded,
+  ShapeKind.diamond => l.shapeDiamond,
+  ShapeKind.parallelogram => l.shapeParallelogram,
+  ShapeKind.trapezoid => l.shapeTrapezoid,
+  ShapeKind.cross => l.shapeCross,
+  ShapeKind.crescent => l.shapeCrescent,
+  ShapeKind.speechBubble => l.shapeSpeechBubble,
+  ShapeKind.blockArrow => l.shapeBlockArrow,
+  ShapeKind.chevron => l.shapeChevron,
+  ShapeKind.gear => l.shapeGear,
+  ShapeKind.frame => l.shapeFrame,
 };
