@@ -12,7 +12,7 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   /// Finder "Open" / double-click on a `.pixora` file.
-  func application(_ application: NSApplication, open urls: [URL]) {
+  override func application(_ application: NSApplication, open urls: [URL]) {
     for url in urls {
       OpenFileBridge.shared.deliver(url)
     }
