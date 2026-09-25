@@ -284,59 +284,6 @@ class GlowPanel extends StatelessWidget {
 }
 
 /// Photoshop-style Bevel & Emboss.
-class BevelPanel extends StatelessWidget {
-  const BevelPanel({super.key, required this.editor, required this.layer});
-  final EditorController editor;
-  final Layer layer;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final effect = editor.effectOf(layer.id, 'bevel');
-    final style = (effect?.number('style', 0) ?? 0).round();
-    return EffectEditor(
-      editor: editor,
-      layer: layer,
-      type: 'bevel',
-      title: l.bevelEmboss,
-      header: SizedBox(
-        height: 48,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          children: [
-            for (final (i, label) in [
-              (0, l.innerBevel),
-              (1, l.outerBevel),
-              (2, l.emboss),
-              (3, l.pillowEmboss),
-            ])
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: ChoiceChip(
-                  label: Text(label),
-                  selected: style == i,
-                  onSelected: (_) =>
-                      editor.setEffectParam(layer.id, 'bevel', 'style', i),
-                ),
-              ),
-          ],
-        ),
-      ),
-      controls: [
-        FxSlider('depth', l.depth),
-        FxSlider('size', l.size),
-        FxSlider('soften', l.soften),
-        FxSlider('angle', l.lightAngle, format: fxDegrees),
-        FxSlider('highlightOpacity', l.highlight),
-        FxColor('highlight', l.highlightColor),
-        FxSlider('shadowOpacity', l.shade),
-        FxColor('shadowColor', l.shadeColor),
-      ],
-    );
-  }
-}
-
 /// 3D: extrusion depth and colour plus perspective tilt.
 class Extrude3DPanel extends StatelessWidget {
   const Extrude3DPanel({super.key, required this.editor, required this.layer});

@@ -461,16 +461,55 @@ class EffectRegistry {
         ),
       ),
     );
+    // Bevel & Emboss: drawn by the renderer's bevel engine (a Photoshop
+    // height-map bevel); these are its settings and defaults.
     register(
-      EffectDefinition(
+      const EffectDefinition(
         type: 'bevel',
         category: EffectCategory.style,
-        params: const [
-          EffectParam.number('style', min: 0, max: 3, defaultValue: 0, step: 1),
-          EffectParam.number('depth', min: 1, max: 60, defaultValue: 6),
-          EffectParam.number('size', min: 0, max: 60, defaultValue: 6),
-          EffectParam.number('soften', min: 0, max: 30, defaultValue: 0),
-          EffectParam.number('angle', min: 0, max: 360, defaultValue: 225),
+        params: [
+          EffectParam.number('v', min: 2, max: 2, defaultValue: 2, step: 1),
+          EffectParam.number('style', min: 0, max: 4, defaultValue: 0, step: 1),
+          EffectParam.number(
+            'technique',
+            min: 0,
+            max: 2,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number('depth', min: 1, max: 1000, defaultValue: 100),
+          EffectParam.number(
+            'direction',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number('size', min: 0, max: 250, defaultValue: 5),
+          EffectParam.number('soften', min: 0, max: 16, defaultValue: 0),
+          EffectParam.number('angle', min: -180, max: 180, defaultValue: 120),
+          EffectParam.number('altitude', min: 0, max: 90, defaultValue: 30),
+          EffectParam.number(
+            'gloss',
+            min: 0,
+            max: 11,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number(
+            'antiAlias',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number(
+            'highlightMode',
+            min: 0,
+            max: 16,
+            defaultValue: 5,
+            step: 1,
+          ),
           EffectParam.color('highlight', defaultValue: Color(0xFFFFFFFF)),
           EffectParam.number(
             'highlightOpacity',
@@ -478,35 +517,67 @@ class EffectRegistry {
             max: 1,
             defaultValue: 0.75,
           ),
+          EffectParam.number(
+            'shadowMode',
+            min: 0,
+            max: 16,
+            defaultValue: 2,
+            step: 1,
+          ),
           EffectParam.color('shadowColor', defaultValue: Color(0xFF000000)),
           EffectParam.number(
             'shadowOpacity',
             min: 0,
             max: 1,
-            defaultValue: 0.6,
+            defaultValue: 0.75,
+          ),
+          EffectParam.number(
+            'contourOn',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number(
+            'contour',
+            min: 0,
+            max: 11,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number(
+            'contourRange',
+            min: 1,
+            max: 100,
+            defaultValue: 50,
+          ),
+          EffectParam.number(
+            'textureOn',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number(
+            'textureScale',
+            min: 1,
+            max: 1000,
+            defaultValue: 100,
+          ),
+          EffectParam.number(
+            'textureDepth',
+            min: -1000,
+            max: 1000,
+            defaultValue: 100,
+          ),
+          EffectParam.number(
+            'textureInvert',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
           ),
         ],
-        bevel: (e) => BevelSpec(
-          style: BevelStyle.values[e.number('style', 0).round().clamp(0, 3)],
-          depth: e.number('depth', 6),
-          size: e.number('size', 6),
-          soften: e.number('soften', 0),
-          angle: e.number('angle', 225) * 3.141592653589793 / 180,
-          highlight: withOpacity(
-            e,
-            'highlight',
-            const Color(0xFFFFFFFF),
-            'highlightOpacity',
-            0.75,
-          ),
-          shadow: withOpacity(
-            e,
-            'shadowColor',
-            const Color(0xFF000000),
-            'shadowOpacity',
-            0.6,
-          ),
-        ),
       ),
     );
     register(

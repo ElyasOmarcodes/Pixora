@@ -25,12 +25,19 @@ class LayerEffect {
   final String type;
   final bool enabled;
 
-  /// Parameter values: `num` for scalar params, `int` ARGB for colors.
+  /// Parameter values: `num` for scalar params, `int` ARGB for colors,
+  /// `String` for ids (patterns).
   final Map<String, Object> params;
 
   double number(String key, double fallback) {
     final v = params[key];
     return v is num ? v.toDouble() : fallback;
+  }
+
+  /// A text param (e.g. a pattern id), or [fallback].
+  String? string(String key, [String? fallback]) {
+    final v = params[key];
+    return v is String ? v : fallback;
   }
 
   Color color(String key, Color fallback) {
@@ -64,7 +71,9 @@ class LayerEffect {
       enabled: readBool(json['enabled'], true),
       params: {
         for (final e in raw.entries)
-          if (parseScalar(e.value) case final num v) e.key: v,
+          if (parseScalar(e.value) case final Object v
+              when v is num || v is String)
+            e.key: v,
       },
     );
   }

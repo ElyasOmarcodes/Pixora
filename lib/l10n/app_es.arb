@@ -551,5 +551,22 @@
   "deletePattern": "¿Eliminar este motivo?",
   "strokeOutside": "Fuera",
   "strokeCenter": "Centro",
-  "strokeInside": "Dentro"
+  "strokeInside": "Dentro",
+  "bevelStructure": "Estructura",
+  "bevelShading": "Sombreado",
+  "bevelContour": "Contorno",
+  "bevelTexture": "Textura",
+  "bevelContourHint": "Da forma al perfil del bisel",
+  "bevelTextureHint": "Graba un motivo en la superficie",
+  "strokeEmboss": "Relieve de trazo",
+  "strokeEmbossHint": "Añade un trazo a la capa para ver el relieve",
+  "techSmooth": "Suavizar",
+  "techChiselHard": "Cincel duro",
+  "techChiselSoft": "Cincel suave",
+  "dirUp": "Arriba",
+  "dirDown": "Abajo",
+  "altitude": "Altitud",
+  "glossContour": "Contorno de brillo",
+  "antiAliased": "Suavizado",
+  "contourRange": "Rango"
 }

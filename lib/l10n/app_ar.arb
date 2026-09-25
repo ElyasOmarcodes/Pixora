@@ -551,5 +551,22 @@
   "deletePattern": "حذف هذا النقش؟",
   "strokeOutside": "خارج",
   "strokeCenter": "وسط",
-  "strokeInside": "داخل"
+  "strokeInside": "داخل",
+  "bevelStructure": "البنية",
+  "bevelShading": "التظليل",
+  "bevelContour": "الكفاف",
+  "bevelTexture": "الملمس",
+  "bevelContourHint": "يشكل مقطع النتوء",
+  "bevelTextureHint": "ينقش نمطًا على السطح",
+  "strokeEmboss": "نقش الحد",
+  "strokeEmbossHint": "أضف حدًا للطبقة لرؤية نقش الحد",
+  "techSmooth": "ناعم",
+  "techChiselHard": "إزميل صلب",
+  "techChiselSoft": "إزميل ناعم",
+  "dirUp": "أعلى",
+  "dirDown": "أسفل",
+  "altitude": "الارتفاع",
+  "glossContour": "كفاف اللمعان",
+  "antiAliased": "تنعيم الحواف",
+  "contourRange": "النطاق"
 }

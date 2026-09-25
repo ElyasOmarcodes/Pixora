@@ -551,5 +551,22 @@
   "deletePattern": "Bu desen silinsin mi?",
   "strokeOutside": "Dış",
   "strokeCenter": "Orta",
-  "strokeInside": "İç"
+  "strokeInside": "İç",
+  "bevelStructure": "Yapı",
+  "bevelShading": "Gölgelendirme",
+  "bevelContour": "Kontur",
+  "bevelTexture": "Doku",
+  "bevelContourHint": "Eğimin profilini şekillendirir",
+  "bevelTextureHint": "Yüzeye desen kabartır",
+  "strokeEmboss": "Kontur kabartma",
+  "strokeEmbossHint": "Görmek için katmana kontur ekleyin",
+  "techSmooth": "Yumuşak",
+  "techChiselHard": "Sert keski",
+  "techChiselSoft": "Yumuşak keski",
+  "dirUp": "Yukarı",
+  "dirDown": "Aşağı",
+  "altitude": "Yükseklik",
+  "glossContour": "Parlaklık konturu",
+  "antiAliased": "Kenar yumuşatma",
+  "contourRange": "Aralık"
 }

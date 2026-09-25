@@ -551,5 +551,22 @@
   "deletePattern": "Supprimer ce motif ?",
   "strokeOutside": "Extérieur",
   "strokeCenter": "Centre",
-  "strokeInside": "Intérieur"
+  "strokeInside": "Intérieur",
+  "bevelStructure": "Structure",
+  "bevelShading": "Ombrage",
+  "bevelContour": "Contour",
+  "bevelTexture": "Texture",
+  "bevelContourHint": "Façonne le profil du biseau",
+  "bevelTextureHint": "Gaufre un motif dans la surface",
+  "strokeEmboss": "Estampage du contour",
+  "strokeEmbossHint": "Ajoutez un contour au calque pour voir l’estampage",
+  "techSmooth": "Lisse",
+  "techChiselHard": "Ciseau dur",
+  "techChiselSoft": "Ciseau doux",
+  "dirUp": "Haut",
+  "dirDown": "Bas",
+  "altitude": "Altitude",
+  "glossContour": "Contour brillant",
+  "antiAliased": "Lissé",
+  "contourRange": "Étendue"
 }

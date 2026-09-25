@@ -551,5 +551,22 @@
   "deletePattern": "دا پټرن ړنګ شي؟",
   "strokeOutside": "بهر",
   "strokeCenter": "منځ",
-  "strokeInside": "دننه"
+  "strokeInside": "دننه",
+  "bevelStructure": "جوړښت",
+  "bevelShading": "رڼا او سیوری",
+  "bevelContour": "کونتور",
+  "bevelTexture": "بافت",
+  "bevelContourHint": "د بیول د څنډې بڼه ټاکي",
+  "bevelTextureHint": "پټرن په سطحه کې راوباسي",
+  "strokeEmboss": "د سټروک ایمبوس",
+  "strokeEmbossHint": "د سټروک ایمبوس لپاره لایر ته سټروک ورکړئ",
+  "techSmooth": "نرم",
+  "techChiselHard": "کلک تېز",
+  "techChiselSoft": "نرم تېز",
+  "dirUp": "پورته",
+  "dirDown": "ښکته",
+  "altitude": "لوړوالی",
+  "glossContour": "د ځلا کونتور",
+  "antiAliased": "نرمې څنډې",
+  "contourRange": "حد"
 }

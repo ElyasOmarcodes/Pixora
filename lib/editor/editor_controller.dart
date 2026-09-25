@@ -17,6 +17,7 @@ import '../document/model/layer_geometry.dart';
 import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
 import '../document/model/patterns.dart';
+import '../document/render/bevel_engine.dart';
 import '../document/render/text_layout.dart';
 import '../document/render/document_renderer.dart';
 import '../document/render/layer_cache.dart';
@@ -51,6 +52,13 @@ class EditorController extends ChangeNotifier {
       assets = assets ?? AssetStore() {
     this.assets.addListener(_onAssetsChanged);
     Patterns.addLookup(this.assets.imageOf);
+    BevelCache.instance.addListener(_onBevelReady);
+  }
+
+  /// A bevel finished computing in the background: repaint.
+  void _onBevelReady() {
+    paintRevision++;
+    notifyListeners();
   }
 
   final AssetStore assets;
@@ -256,6 +264,7 @@ class EditorController extends ChangeNotifier {
   void dispose() {
     assets.removeListener(_onAssetsChanged);
     Patterns.removeLookup(assets.imageOf);
+    BevelCache.instance.removeListener(_onBevelReady);
     rasterCache.clear();
     super.dispose();
   }

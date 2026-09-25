@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -10,6 +11,7 @@ import '../model/blend.dart';
 import '../model/document.dart';
 import '../model/layer.dart';
 import '../model/layer_stroke.dart';
+import 'bevel_engine.dart';
 import '../model/layer_transform.dart';
 import '../model/mask.dart';
 import 'brush_paint.dart';
@@ -227,10 +229,14 @@ class DocumentRenderer {
     var blur = 0.0;
     final shadows = <ShadowSpec>[];
     final inners = <ShadowSpec>[];
-    final bevels = <BevelSpec>[];
+    final bevels = <BevelParams>[];
     final extrudes = <ExtrudeSpec>[];
     for (final e in props.effects) {
       if (!e.enabled) continue;
+      if (e.type == 'bevel') {
+        bevels.add(BevelParams.of(e));
+        continue;
+      }
       final def = _fx[e.type];
       if (def == null) continue;
       final m = def.colorMatrix?.call(e);
@@ -240,7 +246,6 @@ class DocumentRenderer {
       blur += def.blurSigma?.call(e) ?? 0;
       if (def.shadow?.call(e) case final s?) shadows.add(s);
       if (def.inner?.call(e) case final s?) inners.add(s);
-      if (def.bevel?.call(e) case final b?) bevels.add(b);
       if (def.extrude?.call(e) case final x?) extrudes.add(x);
     }
     if (matrix != null && ColorMatrix.isIdentity(matrix)) matrix = null;
@@ -254,7 +259,7 @@ class DocumentRenderer {
       margin = math.max(margin, s.blur * 3 + s.offset.distance / ms);
     }
     for (final b in bevels) {
-      margin = math.max(margin, (b.depth + b.size + b.soften) * 2 / ms);
+      margin = math.max(margin, b.reach + 2);
     }
     for (final x in extrudes) {
       margin = math.max(margin, x.depth / ms + 4);
@@ -362,18 +367,7 @@ class DocumentRenderer {
         disposeStamp: stamp == null,
       );
     }
-    // Outer halves of bevels sit behind the content.
-    for (final b in bevels) {
-      if (b.style == BevelStyle.inner) continue;
-      final light = Offset(math.cos(b.angle), math.sin(b.angle));
-      final d = b.style == BevelStyle.outer ? b.depth : b.depth / 2;
-      final bl = b.size + b.soften;
-      silhouette(light * d, bl, b.highlight);
-      silhouette(-light * d, bl, b.shadow);
-    }
-
-    final hasInner =
-        inners.isNotEmpty || bevels.any((b) => b.style != BevelStyle.outer);
+    final hasInner = inners.isNotEmpty;
     // Fill opacity fades the layer's own pixels only. With "Blend interior
     // effects as group" the inner effects fade with them; otherwise they
     // keep full strength, clipped to the unfaded shape (Photoshop).
@@ -421,16 +415,6 @@ class DocumentRenderer {
       for (final s in inners) {
         inner(s.offset, s.blur, s.color, s.blend.engine);
       }
-      for (final b in bevels) {
-        if (b.style == BevelStyle.outer) continue;
-        final light = Offset(math.cos(b.angle), math.sin(b.angle));
-        final d = b.style == BevelStyle.inner ? b.depth : b.depth / 2;
-        final bl = b.size + b.soften;
-        // Pillow emboss lights the inner edge from the opposite side.
-        final dir = b.style == BevelStyle.pillow ? -light : light;
-        inner(-dir * d, bl, b.highlight);
-        inner(dir * d, bl, b.shadow);
-      }
     }
 
     final fadePaint = Paint()..color = Color.fromRGBO(0, 0, 0, fill);
@@ -466,12 +450,161 @@ class DocumentRenderer {
           ..blendMode = stroke!.blend.engine
           ..color = Color.fromRGBO(0, 0, 0, stroke.opacity.clamp(0.0, 1.0)),
       );
-      band.dispose();
     }
+
+    // Bevel & Emboss on top: shadow and highlight layers from the bevel
+    // engine, each with its own blend mode (computed in the background;
+    // the canvas repaints when they are ready).
+    for (final job in _bevelJobs(layer, pixelScale, shape, band)) {
+      final r = job.result;
+      if (r == null) continue;
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        r.shadow.width.toDouble(),
+        r.shadow.height.toDouble(),
+      );
+      final q = job.params;
+      canvas
+        ..drawImageRect(
+          r.shadow,
+          src,
+          r.rect,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..blendMode = q.shadowMode.engine
+            ..colorFilter = ColorFilter.mode(
+              q.shadow.withValues(alpha: q.shadow.a * q.shadowOpacity),
+              BlendMode.srcIn,
+            ),
+        )
+        ..drawImageRect(
+          r.highlight,
+          src,
+          r.rect,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..blendMode = q.highlightMode.engine
+            ..colorFilter = ColorFilter.mode(
+              q.highlight.withValues(alpha: q.highlight.a * q.highlightOpacity),
+              BlendMode.srcIn,
+            ),
+        );
+    }
+    band?.dispose();
 
     if (needsGroup) canvas.restore();
     canvas.restore();
     stamp?.dispose();
+  }
+
+  /// The bevels of [layer] with their cache keys, each already computed
+  /// or started now (from the layer's shape — or its stroke, for Stroke
+  /// Emboss — rendered at the bevel resolution).
+  List<_BevelJob> _bevelJobs(
+    Layer layer,
+    double pixelScale,
+    void Function(Canvas) shape,
+    _Stamp? band, {
+    bool start = true,
+  }) {
+    final jobs = <_BevelJob>[];
+    for (final e in layer.props.effects) {
+      if (!e.enabled || e.type != 'bevel') continue;
+      final p = BevelParams.of(e);
+      if (p.size <= 0) continue;
+      final emboss = p.kind == BevelKind.strokeEmboss;
+      if (emboss && band == null && start) continue;
+      final t = layer.props.transform;
+      final box = (emboss && band != null ? band.rect : layerLocalRect(layer))
+          .inflate(p.reach + 4);
+      if (box.isEmpty || !box.isFinite) continue;
+      // Power-of-two resolution buckets; capped for speed.
+      var res = 1.0;
+      final want = (pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs()))
+          .clamp(1 / 16, 8.0);
+      while (res < want) {
+        res *= 2;
+      }
+      while (res / 2 >= want) {
+        res /= 2;
+      }
+      // Capped by a box that does not depend on the stroke band being
+      // at hand, so every caller agrees on the key.
+      final capBox = layerLocalRect(layer)
+          .inflate(p.reach + (layer.props.stroke?.outside ?? 0) + 4);
+      res = math.min(res, 1536 / math.max(capBox.width, capBox.height));
+      final key = (_bevelShape(layer, emboss), p.computeKey, res);
+      final cache = BevelCache.instance;
+      var result = cache.lookup(key);
+      if (result == null && start && !cache.isPending(key)) {
+        final w = math.max(1, (box.width * res).ceil());
+        final h = math.max(1, (box.height * res).ceil());
+        final recorder = ui.PictureRecorder();
+        final c = Canvas(recorder)
+          ..scale(w / box.width, h / box.height)
+          ..translate(-box.left, -box.top);
+        if (emboss) {
+          band!.draw(c);
+        } else {
+          shape(c);
+        }
+        final pic = recorder.endRecording();
+        final alpha = pic.toImageSync(w, h);
+        pic.dispose();
+        unawaited(cache.request(key, alpha, box, res, p));
+        result = cache.lookup(key);
+      }
+      jobs.add(_BevelJob(key, p, result));
+    }
+    return jobs;
+  }
+
+  /// What a bevel's shape depends on: the layer without its placement and
+  /// its other effects.
+  static Layer _bevelShape(Layer l, bool withStroke) => l.withProps(
+    l.props.copyWith(
+      transform: const LayerTransform(),
+      opacity: 1,
+      blendMode: PixBlendMode.normal,
+      clip: false,
+      effects: const [],
+      fillOpacity: 1,
+      clearStroke: !withStroke,
+    ),
+  );
+
+  /// Computes every bevel [layers] need at [pixelScale] (export awaits
+  /// this before painting so no bevel is missing).
+  Future<void> prepareBevels(Iterable<Layer> layers, double pixelScale) async {
+    final waits = <Future<void>>[];
+    void walk(Iterable<Layer> list) {
+      for (final l in list) {
+        if (l is GroupLayer) {
+          walk(l.children);
+          continue;
+        }
+        if (!l.props.effects.any((e) => e.enabled && e.type == 'bevel')) {
+          continue;
+        }
+        void shape(Canvas c) => _paintMasked(c, l, const {}, null);
+        final stamp = l.props.stroke?.visible ?? false
+            ? _Stamp.of(l, shape, pixelScale)
+            : null;
+        final band = stamp == null
+            ? null
+            : (_vectorBand(l, l.props.stroke!, stamp, layerLocalRect(l)) ??
+                  stamp.strokeBand(l.props.stroke!, layerLocalRect(l)));
+        for (final job in _bevelJobs(l, pixelScale, shape, band)) {
+          waits.add(BevelCache.instance.wait(job.key));
+        }
+        band?.dispose();
+        stamp?.dispose();
+      }
+    }
+
+    walk(layers);
+    await Future.wait(waits);
   }
 
   /// Photoshop's stroke from the layer's vector outline: the outline drawn
@@ -562,6 +695,7 @@ class DocumentRenderer {
     for (final id in [...layer.props.maskAssets, ...layer.fillAssets]) {
       if (assets.imageOf(id) == null) return null;
     }
+
     final p = layer.props;
     final base = layer.withProps(
       p.copyWith(
@@ -589,6 +723,21 @@ class DocumentRenderer {
     if (rect.isEmpty || !rect.isFinite) return null;
     final longest = math.max(rect.width, rect.height);
     final s = math.min(bucket, 4096 / longest);
+    // A bevel still computing: paint directly until it is ready.
+    if (layer.props.effects.any((e) => e.enabled && e.type == 'bevel')) {
+      final jobs = _bevelJobs(
+        layer.withProps(
+          layer.props.copyWith(
+            transform: layer.props.transform.copyWith(x: 0, y: 0),
+          ),
+        ),
+        s,
+        (_) {},
+        null,
+        start: false,
+      );
+      if (jobs.any((j) => j.result == null)) return null;
+    }
     final w = math.max(1, (rect.width * s).ceil());
     final h = math.max(1, (rect.height * s).ceil());
     final recorder = ui.PictureRecorder();
@@ -992,6 +1141,7 @@ class DocumentRenderer {
     if (maxSide != null) s = math.min(s, maxSide / longest);
     final w = width ?? math.max(1, (doc.width * s).round());
     final h = height ?? math.max(1, (doc.height * s).round());
+    await prepareBevels(doc.layers, math.max(w / doc.width, h / doc.height));
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     if (matte != null) {
@@ -1033,6 +1183,13 @@ class DocumentRenderer {
     if (visible.isEmpty) return null;
     await assets.decodeAll({for (final l in visible) ...assetsOf(l)});
     var bounds = unionBounds(visible).inflate(_effectSpill(visible));
+    await prepareBevels(
+      visible,
+      math.min(
+        1.0,
+        maxSide / math.max(1, math.max(bounds.width, bounds.height)),
+      ),
+    );
     if (bounds.isEmpty) return null;
     bounds = Rect.fromLTRB(
       bounds.left.floorToDouble(),
@@ -1074,9 +1231,7 @@ class DocumentRenderer {
         if (def.extrude?.call(e) case final x?) {
           own = math.max(own, x.depth + 2);
         }
-        if (def.bevel?.call(e) case final b?) {
-          own = math.max(own, b.depth + b.size + b.soften);
-        }
+        if (e.type == 'bevel') own = math.max(own, BevelParams.of(e).reach);
       }
       // Shadows and glows start from the stroke's edge.
       final st = l.props.stroke;
@@ -1089,6 +1244,13 @@ class DocumentRenderer {
     }
     return spill;
   }
+}
+
+class _BevelJob {
+  _BevelJob(this.key, this.params, this.result);
+  final Object key;
+  final BevelParams params;
+  final BevelResult? result;
 }
 
 /// A layer's shape (content + mask) rendered once into a bitmap in its

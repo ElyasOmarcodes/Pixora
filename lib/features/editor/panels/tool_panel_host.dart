@@ -18,6 +18,7 @@ import 'vector_panels.dart';
 import '../pen_targets.dart';
 import '../../../editor/tools/select_tool.dart';
 import 'selection_panel.dart';
+import 'bevel_panel.dart';
 
 /// Page-level actions panels need.
 class PanelHooks {

@@ -636,5 +636,22 @@
   "deletePattern": "Delete this pattern?",
   "strokeOutside": "Outside",
   "strokeCenter": "Center",
-  "strokeInside": "Inside"
+  "strokeInside": "Inside",
+  "bevelStructure": "Structure",
+  "bevelShading": "Shading",
+  "bevelContour": "Contour",
+  "bevelTexture": "Texture",
+  "bevelContourHint": "Shapes the bevel’s profile",
+  "bevelTextureHint": "Embosses a pattern into the surface",
+  "strokeEmboss": "Stroke emboss",
+  "strokeEmbossHint": "Add a stroke to the layer to see Stroke emboss",
+  "techSmooth": "Smooth",
+  "techChiselHard": "Chisel hard",
+  "techChiselSoft": "Chisel soft",
+  "dirUp": "Up",
+  "dirDown": "Down",
+  "altitude": "Altitude",
+  "glossContour": "Gloss contour",
+  "antiAliased": "Anti-aliased",
+  "contourRange": "Range"
 }

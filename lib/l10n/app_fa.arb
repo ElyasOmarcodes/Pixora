@@ -551,5 +551,22 @@
   "deletePattern": "این الگو حذف شود؟",
   "strokeOutside": "بیرون",
   "strokeCenter": "مرکز",
-  "strokeInside": "داخل"
+  "strokeInside": "داخل",
+  "bevelStructure": "ساختار",
+  "bevelShading": "سایه‌روشن",
+  "bevelContour": "کانتور",
+  "bevelTexture": "بافت",
+  "bevelContourHint": "نیم‌رخ برجستگی را شکل می‌دهد",
+  "bevelTextureHint": "الگو را روی سطح برجسته می‌کند",
+  "strokeEmboss": "برجسته دورخط",
+  "strokeEmbossHint": "برای دیدن برجسته دورخط، به لایه دورخط بدهید",
+  "techSmooth": "نرم",
+  "techChiselHard": "حکاکی سخت",
+  "techChiselSoft": "حکاکی نرم",
+  "dirUp": "بالا",
+  "dirDown": "پایین",
+  "altitude": "ارتفاع",
+  "glossContour": "کانتور براقیت",
+  "antiAliased": "لبه‌های نرم",
+  "contourRange": "محدوده"
 }

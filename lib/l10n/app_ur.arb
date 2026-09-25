@@ -551,5 +551,22 @@
   "deletePattern": "یہ پیٹرن حذف کریں؟",
   "strokeOutside": "باہر",
   "strokeCenter": "درمیان",
-  "strokeInside": "اندر"
+  "strokeInside": "اندر",
+  "bevelStructure": "ساخت",
+  "bevelShading": "شیڈنگ",
+  "bevelContour": "کونٹور",
+  "bevelTexture": "بناوٹ",
+  "bevelContourHint": "بیول کی پروفائل بناتا ہے",
+  "bevelTextureHint": "سطح پر پیٹرن ابھارتا ہے",
+  "strokeEmboss": "اسٹروک ایمبوس",
+  "strokeEmbossHint": "اسٹروک ایمبوس کے لیے لیئر میں اسٹروک شامل کریں",
+  "techSmooth": "ہموار",
+  "techChiselHard": "سخت چھینی",
+  "techChiselSoft": "نرم چھینی",
+  "dirUp": "اوپر",
+  "dirDown": "نیچے",
+  "altitude": "بلندی",
+  "glossContour": "چمک کونٹور",
+  "antiAliased": "نرم کنارے",
+  "contourRange": "حد"
 }
