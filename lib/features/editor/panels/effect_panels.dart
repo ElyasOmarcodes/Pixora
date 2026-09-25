@@ -8,6 +8,8 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import 'panel_common.dart';
+import 'bevel_panel.dart' show ContourRow;
+import '../../../document/render/bevel_engine.dart' show ContourPreset;
 
 /// A control inside [EffectEditor].
 sealed class FxControl {
@@ -55,6 +57,16 @@ class FxSeed extends FxControl {
   const FxSeed(this.label, {this.key = 'seed'});
   final String key;
   final String label;
+}
+
+/// Any widget, given the effect's values and a setter.
+class FxCustom extends FxControl {
+  const FxCustom(this.builder);
+  final Widget Function(
+    double Function(String key) valueOf,
+    void Function(String key, Object value, {bool live}) set,
+  )
+  builder;
 }
 
 /// A section title between controls.
@@ -156,6 +168,8 @@ Widget buildFxControl(
       );
     case FxLabel lb:
       return PanelLabel(lb.label);
+    case FxCustom cu:
+      return cu.builder(valueOf, set);
   }
 }
 
@@ -329,7 +343,8 @@ class ShadowPanel extends StatelessWidget {
                 FxBlend(l.blendMode),
                 FxSlider('distance', l.distance),
                 FxSlider('angle', l.angle, format: fxDegrees),
-                FxSlider('blur', l.blur),
+                FxSlider('spread', l.choke, format: (v) => '${v.round()}%'),
+                FxSlider('blur', l.size),
                 FxSlider('opacity', l.opacity),
                 const FxColor('color'),
               ],
@@ -344,7 +359,8 @@ class ShadowPanel extends StatelessWidget {
                 FxBlend(l.blendMode),
                 FxSlider('dx', l.offsetX),
                 FxSlider('dy', l.offsetY),
-                FxSlider('blur', l.blur),
+                FxSlider('spread', l.spread, format: (v) => '${v.round()}%'),
+                FxSlider('blur', l.size),
                 FxSlider('opacity', l.opacity),
                 const FxColor('color'),
               ],
@@ -353,6 +369,10 @@ class ShadowPanel extends StatelessWidget {
   }
 }
 
+/// Photoshop's Outer / Inner Glow with every option: Structure (blend
+/// mode, opacity, noise, colour or gradient), Elements (technique,
+/// source, spread / choke, size) and Quality (contour, anti-aliased,
+/// range, jitter).
 class GlowPanel extends StatelessWidget {
   const GlowPanel({
     super.key,
@@ -367,20 +387,55 @@ class GlowPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    String px(double v) => '${v.round()} px';
+    String pct(double v) => '${v.round()}%';
     return _InOut(
       initialInner: initialInner,
-      builder: (context, inner) => EffectEditor(
-        key: ValueKey(inner),
-        editor: editor,
-        layer: layer,
-        type: inner ? 'innerGlow' : 'glow',
-        title: inner ? l.innerGlow : l.outerGlow,
-        controls: [
-          FxSlider('blur', l.size),
-          FxSlider('opacity', l.intensity),
-          const FxColor('color'),
-        ],
-      ),
+      builder: (context, inner) {
+        final type = inner ? 'innerGlow' : 'glow';
+        final e = editor.effectOf(layer.id, type);
+        final gradient = (e?.number('fill', 0) ?? 0) >= 1;
+        return EffectEditor(
+          key: ValueKey(inner),
+          editor: editor,
+          layer: layer,
+          type: type,
+          title: inner ? l.innerGlow : l.outerGlow,
+          controls: [
+            FxLabel(l.bevelStructure),
+            FxBlend(l.blendMode),
+            FxSlider('opacity', l.opacity),
+            FxSlider('noise', l.noise, format: pct),
+            FxChoice(
+              'fill',
+              [l.color, l.gradient],
+              icons: const [Icons.circle, Icons.gradient_rounded],
+            ),
+            const FxColor('color'),
+            if (gradient) ...[
+              const FxColor('color2'),
+              FxSlider('jitter', l.jitter, format: pct),
+            ],
+            FxLabel(l.elements),
+            FxChoice('technique', [l.softer, l.precise]),
+            if (inner) FxChoice('source', [l.sourceEdge, l.sourceCenter]),
+            FxSlider('spread', inner ? l.choke : l.spread, format: pct),
+            FxSlider('size', l.size, format: px),
+            FxLabel(l.glowQuality),
+            FxCustom(
+              (valueOf, set) => ContourRow(
+                value:
+                    ContourPreset.values[valueOf('contour')
+                        .round()
+                        .clamp(0, ContourPreset.values.length - 1)],
+                onChanged: (c) => set('contour', c.index),
+              ),
+            ),
+            FxToggle('antiAlias', l.antiAliased),
+            FxSlider('range', l.contourRange, format: pct),
+          ],
+        );
+      },
     );
   }
 }

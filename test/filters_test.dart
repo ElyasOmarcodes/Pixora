@@ -61,7 +61,9 @@ LayerEffect fx(String type, [Map<String, Object> p = const {}]) =>
 
 void main() {
   test('gaussian blur softens the edge both ways', () async {
-    final px = await render([fx('gaussianBlur', {'radius': 4})]);
+    final px = await render([
+      fx('gaussianBlur', {'radius': 4}),
+    ]);
     expect(px(50, 50).a, closeTo(1, 0.02));
     expect(px(30, 50).a, closeTo(0.5, 0.15));
     expect(px(25, 50).a, greaterThan(0.02));
@@ -83,7 +85,9 @@ void main() {
   });
 
   test('box blur is a linear ramp', () async {
-    final px = await render([fx('boxBlur', {'radius': 5})]);
+    final px = await render([
+      fx('boxBlur', {'radius': 5}),
+    ]);
     expect(px(30, 50).a, closeTo(0.5, 0.1));
     expect(px(27, 50).a, closeTo(0.23, 0.1));
     expect(px(50, 50).a, closeTo(1, 0.02));
@@ -183,7 +187,9 @@ void main() {
   });
 
   test('radial, tilt-shift and grain render', () async {
-    final spin = await render([fx('radialBlur', {'amount': 40})]);
+    final spin = await render([
+      fx('radialBlur', {'amount': 40}),
+    ]);
     // Corners of the square blur along circles around the centre.
     expect(spin(31, 31).a, lessThan(0.9));
     expect(spin(50, 50).a, closeTo(1, 0.02));
@@ -198,7 +204,9 @@ void main() {
     // Sharp in the middle band, blurred at the top edge.
     expect(tilt(30, 50).a, greaterThan(0.95));
     expect(tilt(50, 29).a, greaterThan(0.1));
-    final grain = await render([fx('filmGrain', {'amount': 60})]);
+    final grain = await render([
+      fx('filmGrain', {'amount': 60}),
+    ]);
     final values = {
       for (var x = 32; x < 68; x++) (grain(x, 50).r * 255).round(),
     };

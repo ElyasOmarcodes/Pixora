@@ -37,6 +37,7 @@ import '../../ui/layer_style.dart';
 import '../home/widgets/new_canvas_dialog.dart';
 import 'dialogs/crop_page.dart';
 import 'dialogs/effects_page.dart';
+import 'effects_catalog.dart';
 import '../home/widgets/text_prompt.dart';
 import 'editor_scope.dart';
 import 'panels/tool_panel_host.dart';
@@ -652,12 +653,27 @@ class _EditorPageState extends State<EditorPage> {
     changeIcon: (l) => unawaited(_changeIcon(l)),
     runAsync: (job) => runWithProgress(context, job),
     openEffects: (l) => unawaited(_openEffects(l.id)),
+    editEffect: (layerId, type, id) {
+      final (panel, inner) = panelForEffect(type);
+      _showEffectPanel(
+        layerId,
+        EffectsPageResult(
+          panel ?? ToolPanel.effect,
+          effectId: id,
+          inner: inner,
+        ),
+      );
+    },
   );
 
   /// The Layer effects page; what was picked opens in its panel.
   Future<void> _openEffects(String layerId) async {
     final r = await showEffectsPage(context, editor: _editor, layerId: layerId);
     if (r == null || !mounted) return;
+    _showEffectPanel(layerId, r);
+  }
+
+  void _showEffectPanel(String layerId, EffectsPageResult r) {
     _editor.select(layerId);
     if (!ScreenClass.of(context).isWide) _ui.showLayers = false;
     _ui

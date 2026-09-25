@@ -13,7 +13,9 @@ import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/layer_style.dart';
 import '../../../ui/widgets/checkerboard.dart';
+import '../../../document/model/effect.dart';
 import '../editor_scope.dart';
+import '../effects_catalog.dart';
 import 'layer_actions.dart';
 import 'mask_thumb.dart';
 
@@ -61,6 +63,9 @@ class _LayersPanelState extends State<LayersPanel> {
   LayerKind? _kind;
   final Set<_StateFilter> _states = {};
   String? _renamingId;
+
+  /// Layers whose effects list is folded (Photoshop shows it open).
+  final Set<String> _fxFolded = {};
 
   EditorController get e => widget.editor;
 
@@ -357,6 +362,10 @@ class _LayersPanelState extends State<LayersPanel> {
             ? e.document.layerById(r.parentId)?.props.name
             : null,
         renaming: _renamingId == r.layer.id,
+        fxOpen: !_fxFolded.contains(r.layer.id),
+        onToggleFx: () => setState(() {
+          if (!_fxFolded.remove(r.layer.id)) _fxFolded.add(r.layer.id);
+        }),
         onTap: () => _tap(r.layer, rows),
         onLongPress: () {
           HapticFeedback.mediumImpact();
@@ -411,6 +420,8 @@ class _LayerRow extends StatelessWidget {
     required this.reorderable,
     required this.breadcrumb,
     required this.renaming,
+    required this.fxOpen,
+    required this.onToggleFx,
     required this.onTap,
     required this.onLongPress,
     required this.onStartRename,
@@ -418,6 +429,8 @@ class _LayerRow extends StatelessWidget {
   });
 
   final int index;
+  final bool fxOpen;
+  final VoidCallback onToggleFx;
   final _Row row;
   final EditorController editor;
   final LayerCommands commands;
@@ -478,6 +491,8 @@ class _LayerRow extends StatelessWidget {
     final p = layer.props;
     final kindColor = LayerStyle.color(layer.kind);
     final dim = !p.visible;
+    final effects = listedEffects(layer);
+    final hasFx = effects.isNotEmpty || p.stroke != null;
 
     final leading = selectMode
         ? Checkbox(
@@ -575,6 +590,7 @@ class _LayerRow extends StatelessWidget {
               ),
             ),
           ),
+          if (hasFx) _FxBadge(open: fxOpen, dim: dim, onTap: onToggleFx),
           _MiniToggle(
             tooltip: p.locked ? l.unlock : l.lock,
             on: p.locked,
@@ -620,6 +636,20 @@ class _LayerRow extends StatelessWidget {
             child: Column(
               children: [
                 body,
+                AnimatedSize(
+                  duration: PixTokens.medium,
+                  curve: PixTokens.emphasized,
+                  alignment: Alignment.topCenter,
+                  child: hasFx && fxOpen
+                      ? _FxList(
+                          layer: layer,
+                          effects: effects,
+                          editor: editor,
+                          commands: commands,
+                          indent: row.depth * 14.0 + 40,
+                        )
+                      : const SizedBox(width: double.infinity),
+                ),
                 AnimatedSize(
                   duration: PixTokens.medium,
                   curve: PixTokens.emphasized,
@@ -768,6 +798,174 @@ class _Chevron extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Photoshop's "fx" mark on a layer row; folds the effects list.
+class _FxBadge extends StatelessWidget {
+  const _FxBadge({required this.open, required this.dim, required this.onTap});
+  final bool open;
+  final bool dim;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context);
+    return Tooltip(
+      message: l.effectsLabel,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 20,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'fx',
+                style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  color: scheme.primary.withValues(alpha: dim ? 0.45 : 1),
+                ),
+              ),
+              AnimatedRotation(
+                turns: open ? 0.5 : 0,
+                duration: PixTokens.fast,
+                child: Icon(
+                  Icons.expand_more_rounded,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The layer's effects under its row, like Photoshop: an "Effects" line
+/// that shows or hides them all, then one line per effect (eye to switch
+/// it, tap to edit it).
+class _FxList extends StatelessWidget {
+  const _FxList({
+    required this.layer,
+    required this.effects,
+    required this.editor,
+    required this.commands,
+    required this.indent,
+  });
+
+  final Layer layer;
+  final List<LayerEffect> effects;
+  final EditorController editor;
+  final LayerCommands commands;
+  final double indent;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final stroke = layer.props.stroke;
+    final anyOn = effects.any((e) => e.enabled) || (stroke?.enabled ?? false);
+
+    Widget line({
+      required bool on,
+      required VoidCallback onEye,
+      required IconData icon,
+      required String label,
+      VoidCallback? onTap,
+      bool header = false,
+    }) {
+      final fg = on ? scheme.onSurface : scheme.onSurfaceVariant;
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          height: 32,
+          child: Row(
+            children: [
+              SizedBox(width: indent),
+              InkResponse(
+                onTap: onEye,
+                radius: 16,
+                child: Padding(
+                  padding: const EdgeInsets.all(5),
+                  child: Icon(
+                    on
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
+                    size: 16,
+                    color: on
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurfaceVariant.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(icon, size: 16, color: header ? scheme.primary : fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: fg,
+                    fontWeight: header ? FontWeight.w800 : FontWeight.w500,
+                    fontStyle: header ? FontStyle.italic : null,
+                  ),
+                ),
+              ),
+              if (onTap != null)
+                Icon(
+                  Icons.tune_rounded,
+                  size: 15,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
+              const SizedBox(width: 10),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        children: [
+          line(
+            on: anyOn,
+            header: true,
+            icon: Icons.auto_fix_high_rounded,
+            label: l.effectsLabel,
+            onEye: () => editor.setAllEffectsEnabled(layer.id, !anyOn),
+            onTap: () => commands.openEffects(layer),
+          ),
+          for (final e in effects.reversed)
+            line(
+              on: e.enabled,
+              icon: fxIcon(e.type),
+              label: fxLabel(l, e.type),
+              onEye: () => editor.toggleEffect(layer.id, e.id),
+              onTap: () => commands.editEffect(layer.id, e.type, e.id),
+            ),
+          if (stroke != null)
+            line(
+              on: stroke.enabled,
+              icon: fxIcon('stroke'),
+              label: l.stroke,
+              onEye: () => editor.toggleStroke(layer.id),
+              onTap: () => commands.editEffect(layer.id, 'stroke', null),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _MiniToggle extends StatelessWidget {

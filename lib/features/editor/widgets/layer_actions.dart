@@ -25,7 +25,12 @@ class LayerCommands {
     required this.changeIcon,
     required this.runAsync,
     required this.openEffects,
+    required this.editEffect,
   });
+
+  /// Opens the panel that edits one effect ([type]; [effectId] for pixel
+  /// filters) of a layer.
+  final void Function(String layerId, String type, String? effectId) editEffect;
 
   /// Opens the Layer effects page (filters and styles) for a layer.
   final void Function(Layer layer) openEffects;

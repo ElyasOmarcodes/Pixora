@@ -414,6 +414,18 @@ class MaskPanel extends StatelessWidget {
               onChanged: (v) => editor.setMaskFeather(layer.id, v, live: true),
               onChangeEnd: (_) => editor.commit('mask_feather'),
             ),
+            SwitchListTile.adaptive(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              title: Text(l.maskHidesEffects),
+              subtitle: Text(l.maskHidesEffectsHint),
+              value: props.maskHidesEffects,
+              onChanged: (v) => editor.updateProps(
+                layer.id,
+                (p) => p.copyWith(maskHidesEffects: v),
+                label: 'mask_hides_effects',
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
               child: Text(

@@ -277,7 +277,7 @@ class _BevelPanelState extends State<BevelPanel> {
           ),
         ),
         PanelLabel(l.glossContour),
-        _ContourRow(value: p.gloss, onChanged: (c) => _set({'gloss': c.index})),
+        ContourRow(value: p.gloss, onChanged: (c) => _set({'gloss': c.index})),
         SwitchListTile.adaptive(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -346,7 +346,7 @@ class _BevelPanelState extends State<BevelPanel> {
           onChanged: (v) => _set({'contourOn': v ? 1 : 0}),
         ),
         if (on) ...[
-          _ContourRow(
+          ContourRow(
             value: p.contour!,
             onChanged: (c) => _set({'contour': c.index}),
           ),
@@ -498,8 +498,8 @@ class _TextureSwatch extends CustomPainter {
 }
 
 /// Contour presets as small curve thumbnails.
-class _ContourRow extends StatelessWidget {
-  const _ContourRow({required this.value, required this.onChanged});
+class ContourRow extends StatelessWidget {
+  const ContourRow({super.key, required this.value, required this.onChanged});
   final ContourPreset value;
   final ValueChanged<ContourPreset> onChanged;
 

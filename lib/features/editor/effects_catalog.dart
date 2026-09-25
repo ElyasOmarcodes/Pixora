@@ -171,6 +171,7 @@ Map<String, Object> suggestedParams(String type, Layer layer, Size size) {
     'tiltShift' => {'blur': px(0.015, 3, 100)},
     'filmGrain' => {'size': (side / 900).clamp(1.0, 8.0)},
     'saltPepper' => {'size': (side / 900).clamp(1.0, 8.0).roundToDouble()},
+    'glow' || 'innerGlow' => {'size': px(0.03, 5, 250)},
     _ => const {},
   };
 }
@@ -189,8 +190,19 @@ Map<String, Object> previewParams(String type, Size size) {
     'saltPepper' => {'density': 16, 'size': side / 60},
     'shadow' => {'dx': side * 0.05, 'dy': side * 0.05, 'blur': side * 0.05},
     'innerShadow' => {'distance': side * 0.05, 'blur': side * 0.06},
-    'glow' => {'size': side * 0.08, 'blur': side * 0.06},
-    'innerGlow' => {'size': side * 0.1, 'blur': side * 0.08},
+    // Photoshop's pale Screen glow vanishes on light thumbnails.
+    'glow' => {
+      'size': side * 0.1,
+      'color': 0xFFFFB300,
+      'blend': 0,
+      'opacity': 1,
+    },
+    'innerGlow' => {
+      'size': side * 0.12,
+      'color': 0xFFFFF59D,
+      'blend': 0,
+      'opacity': 1,
+    },
     'satin' => {'distance': side * 0.1, 'size': side * 0.08},
     'bevel' => {'size': side * 0.05},
     'extrude' => {'depth': side * 0.06},

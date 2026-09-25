@@ -109,9 +109,10 @@ class _EffectsPage extends StatelessWidget {
         if (existing == null) {
           final def = EffectRegistry.instance[entry.key];
           if (def != null) {
+            final fx = def.create(suggestedParams(entry.key, layer, size));
             editor.updateProps(
               layer.id,
-              (p) => p.copyWith(effects: [...p.effects, def.create()]),
+              (p) => p.copyWith(effects: [...p.effects, fx]),
               label: 'effect',
             );
           }

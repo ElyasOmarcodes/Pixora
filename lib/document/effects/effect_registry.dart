@@ -401,6 +401,7 @@ class EffectRegistry {
           EffectParam.number('dx', min: -200, max: 200, defaultValue: 12),
           EffectParam.number('dy', min: -200, max: 200, defaultValue: 12),
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 16),
+          EffectParam.number('spread', min: 0, max: 100, defaultValue: 0),
           EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.55),
           EffectParam.color('color', defaultValue: Color(0xFF000000)),
           EffectParam.number(
@@ -425,22 +426,75 @@ class EffectRegistry {
         ),
       ),
     );
+    // Outer glow (drawn by the renderer: GPU for plain glows, the glow
+    // engine for precise / spread / contour / noise / gradient ones).
+    // Photoshop's defaults.
+    List<EffectParam> glowParams({required bool inner}) => [
+      const EffectParam.number('v', min: 2, max: 2, defaultValue: 2, step: 1),
+      const EffectParam.number(
+        'blend',
+        min: 0,
+        max: 16,
+        defaultValue: 5,
+        step: 1,
+      ),
+      const EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.75),
+      const EffectParam.number('noise', min: 0, max: 100, defaultValue: 0),
+      const EffectParam.color('color', defaultValue: Color(0xFFFFFFBE)),
+      const EffectParam.number(
+        'fill',
+        min: 0,
+        max: 1,
+        defaultValue: 0,
+        step: 1,
+      ),
+      const EffectParam.color('color2', defaultValue: Color(0x00FFFFBE)),
+      const EffectParam.number(
+        'technique',
+        min: 0,
+        max: 1,
+        defaultValue: 0,
+        step: 1,
+      ),
+      if (inner)
+        const EffectParam.number(
+          'source',
+          min: 0,
+          max: 1,
+          defaultValue: 0,
+          step: 1,
+        ),
+      const EffectParam.number('spread', min: 0, max: 100, defaultValue: 0),
+      const EffectParam.number('size', min: 0, max: 250, defaultValue: 5),
+      const EffectParam.number(
+        'contour',
+        min: 0,
+        max: 11,
+        defaultValue: 0,
+        step: 1,
+      ),
+      const EffectParam.number(
+        'antiAlias',
+        min: 0,
+        max: 1,
+        defaultValue: 0,
+        step: 1,
+      ),
+      const EffectParam.number('range', min: 1, max: 100, defaultValue: 50),
+      const EffectParam.number('jitter', min: 0, max: 100, defaultValue: 0),
+    ];
     register(
       EffectDefinition(
         type: 'glow',
         category: EffectCategory.style,
-        params: const [
-          EffectParam.number('blur', min: 0, max: 100, defaultValue: 24),
-          EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.9),
-          EffectParam.color('color', defaultValue: Color(0xFF7C9CFF)),
-        ],
-        shadow: (e) => ShadowSpec(
-          offset: Offset.zero,
-          blur: e.number('blur', 24),
-          color: e
-              .color('color', const Color(0xFF7C9CFF))
-              .withValues(alpha: e.number('opacity', 0.9).clamp(0.0, 1.0)),
-        ),
+        params: glowParams(inner: false),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'innerGlow',
+        category: EffectCategory.style,
+        params: glowParams(inner: true),
       ),
     );
 
@@ -462,6 +516,7 @@ class EffectRegistry {
           EffectParam.number('distance', min: 0, max: 100, defaultValue: 8),
           EffectParam.number('angle', min: 0, max: 360, defaultValue: 45),
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 10),
+          EffectParam.number('spread', min: 0, max: 100, defaultValue: 0),
           EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.6),
           EffectParam.color('color', defaultValue: Color(0xFF000000)),
           EffectParam.number(
@@ -486,28 +541,6 @@ class EffectRegistry {
             const Color(0xFF000000),
             'opacity',
             0.6,
-          ),
-        ),
-      ),
-    );
-    register(
-      EffectDefinition(
-        type: 'innerGlow',
-        category: EffectCategory.style,
-        params: const [
-          EffectParam.number('blur', min: 0, max: 100, defaultValue: 18),
-          EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.9),
-          EffectParam.color('color', defaultValue: Color(0xFFFFF3A0)),
-        ],
-        inner: (e) => ShadowSpec(
-          offset: Offset.zero,
-          blur: e.number('blur', 18),
-          color: withOpacity(
-            e,
-            'color',
-            const Color(0xFFFFF3A0),
-            'opacity',
-            0.9,
           ),
         ),
       ),
