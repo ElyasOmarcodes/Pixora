@@ -537,5 +537,16 @@
   "fillOpacity": "Relleno",
   "fillOpacityHint": "Atenúa solo la capa — el trazo, la sombra, el resplandor y el bisel siguen visibles.",
   "blendInteriorEffects": "Fusionar efectos interiores como grupo",
-  "blendInteriorEffectsHint": "La sombra, el resplandor y el bisel interiores se atenúan con el relleno"
+  "blendInteriorEffectsHint": "La sombra, el resplandor y el bisel interiores se atenúan con el relleno",
+  "patternMode": "Motivo",
+  "newPattern": "Nuevo motivo",
+  "newPatternHint": "Crea un motivo repetido desde una foto, la capa o la selección.",
+  "fromPhoto": "Desde foto",
+  "fromLayer": "Desde capa",
+  "fromSelection": "Desde selección",
+  "savePattern": "Guardar motivo",
+  "seamless": "Sin costuras (espejo)",
+  "seamlessHint": "Refleja el mosaico para que sus bordes encajen",
+  "patternColor": "Color del motivo",
+  "deletePattern": "¿Eliminar este motivo?"
 }

@@ -222,6 +222,18 @@ sealed class Layer {
 
   Layer update(LayerProps Function(LayerProps p) f) => withProps(f(props));
 
+  /// Every fill this layer paints with (for pattern assets and the like).
+  Iterable<PixFill> get fills => switch (this) {
+    TextLayer t => [t.fill, ?t.background],
+    ShapeLayer s => [s.fill],
+    IconLayer i => [i.fill],
+    PathLayer p => [?p.fill],
+    RasterLayer() || GroupLayer() || DrawingLayer() => const [],
+  };
+
+  /// Project assets used by image-pattern fills.
+  Iterable<String> get fillAssets => [for (final f in fills) ?f.assetId];
+
   /// Returns a deep copy with fresh ids (layer and effects).
   Layer cloneWithNewId({String? name}) => withProps(
     props.copyWith(

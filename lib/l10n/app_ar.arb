@@ -537,5 +537,16 @@
   "fillOpacity": "التعبئة",
   "fillOpacityHint": "يخفي الطبقة نفسها فقط — يبقى الحد والظل والتوهج والنتوء ظاهرًا بالكامل.",
   "blendInteriorEffects": "مزج التأثيرات الداخلية كمجموعة",
-  "blendInteriorEffectsHint": "يتلاشى الظل والتوهج والنتوء الداخلي مع التعبئة"
+  "blendInteriorEffectsHint": "يتلاشى الظل والتوهج والنتوء الداخلي مع التعبئة",
+  "patternMode": "نقش",
+  "newPattern": "نقش جديد",
+  "newPatternHint": "أنشئ نقشًا متكررًا من صورة أو الطبقة المحددة أو التحديد.",
+  "fromPhoto": "من صورة",
+  "fromLayer": "من الطبقة",
+  "fromSelection": "من التحديد",
+  "savePattern": "حفظ النقش",
+  "seamless": "بلا فواصل (معكوس)",
+  "seamlessHint": "يعكس البلاطة لتلتقي حوافها دائمًا",
+  "patternColor": "لون النقش",
+  "deletePattern": "حذف هذا النقش؟"
 }

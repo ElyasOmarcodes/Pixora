@@ -44,6 +44,7 @@ Rect layerLocalRect(Layer layer) {
 /// Asset ids used by [layer] and, for groups, its descendants.
 Set<String> assetsOf(Layer layer) => {
   ...layer.props.maskAssets,
+  ...layer.fillAssets,
   ...switch (layer) {
     RasterLayer l => {l.assetId, ?l.sourceAssetId},
     GroupLayer g => {for (final c in g.children) ...assetsOf(c)},
@@ -449,7 +450,7 @@ class DocumentRenderer {
     if (layer is RasterLayer && assets.imageOf(layer.assetId) == null) {
       return null; // not decoded yet — don't cache the placeholder
     }
-    for (final id in layer.props.maskAssets) {
+    for (final id in [...layer.props.maskAssets, ...layer.fillAssets]) {
       if (assets.imageOf(id) == null) return null;
     }
     final p = layer.props;

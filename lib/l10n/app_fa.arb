@@ -537,5 +537,16 @@
   "fillOpacity": "پرشدگی",
   "fillOpacityHint": "فقط خود لایه را کم‌رنگ می‌کند — دورخط، سایه، درخشش و برجستگی کامل دیده می‌شوند.",
   "blendInteriorEffects": "ترکیب جلوه‌های داخلی به‌صورت گروه",
-  "blendInteriorEffectsHint": "سایه داخلی، درخشش داخلی و برجستگی داخلی با پرشدگی کم‌رنگ می‌شوند"
+  "blendInteriorEffectsHint": "سایه داخلی، درخشش داخلی و برجستگی داخلی با پرشدگی کم‌رنگ می‌شوند",
+  "patternMode": "الگو",
+  "newPattern": "الگوی جدید",
+  "newPatternHint": "از یک عکس، لایه انتخاب‌شده یا انتخاب خود الگوی تکرارشونده بسازید.",
+  "fromPhoto": "از عکس",
+  "fromLayer": "از لایه",
+  "fromSelection": "از انتخاب",
+  "savePattern": "ذخیره الگو",
+  "seamless": "بدون درز (آینه‌ای)",
+  "seamlessHint": "کاشی را آینه می‌کند تا لبه‌ها به هم برسند",
+  "patternColor": "رنگ الگو",
+  "deletePattern": "این الگو حذف شود؟"
 }

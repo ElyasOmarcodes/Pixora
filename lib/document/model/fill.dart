@@ -4,12 +4,18 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import '../../core/utils/json.dart';
+import 'patterns.dart';
 
 /// Gradient styles, like Photoshop's: linear, radial, angle (sweep around
-/// a centre) and reflected (linear, mirrored around its centre).
-enum FillKind { solid, linear, radial, sweep, reflected }
+/// a centre) and reflected (linear, mirrored around its centre); and
+/// [pattern], a repeating tile (see [Patterns]).
+enum FillKind { solid, linear, radial, sweep, reflected, pattern }
 
-/// A paint source: a solid color or a gradient.
+/// A paint source: a solid color, a gradient or a pattern.
+///
+/// Patterns use [pattern] (a built-in id or an image asset), [colors]
+/// (foreground, background — built-ins only), [angle] (rotation),
+/// [scale], [center] (offset in tiles) and [mirror] (seamless 2×2 tile).
 ///
 /// Fills are used by the document background, shapes and text. Gradients are
 /// resolved against the bounds of whatever they paint, so they scale with the
@@ -24,6 +30,8 @@ class PixFill {
     this.angle, {
     this.scale = 1,
     this.center = Offset.zero,
+    this.pattern,
+    this.mirror = false,
   });
 
   factory PixFill.color(Color color) =>
@@ -65,8 +73,35 @@ class PixFill {
     center: center,
   );
 
+  /// A repeating pattern: [id] from [Patterns.builtins] (drawn in [fg] on
+  /// [bg]) or [Patterns.forAsset] for an image pattern.
+  factory PixFill.pattern(
+    String id, {
+    Color fg = const Color(0xFF000000),
+    Color bg = const Color(0x00000000),
+    double angle = 0,
+    double scale = 1,
+    Offset center = Offset.zero,
+    bool mirror = false,
+  }) => PixFill._(
+    FillKind.pattern,
+    List.unmodifiable([fg, bg]),
+    null,
+    angle,
+    scale: scale,
+    center: center,
+    pattern: id,
+    mirror: mirror,
+  );
+
   final FillKind kind;
   final List<Color> colors;
+
+  /// Pattern id (see [Patterns]); pattern fills only.
+  final String? pattern;
+
+  /// Mirror the pattern tile 2×2 so any image repeats without seams.
+  final bool mirror;
   final List<double>? stops;
 
   /// Gradient direction in degrees (0 = left→right, 90 = top→bottom).
@@ -82,7 +117,18 @@ class PixFill {
 
   Color get primary => colors.isEmpty ? const Color(0xFFFFFFFF) : colors.first;
 
-  bool get isGradient => kind != FillKind.solid && colors.length > 1;
+  bool get isGradient =>
+      kind != FillKind.solid && kind != FillKind.pattern && colors.length > 1;
+
+  bool get isPattern => kind == FillKind.pattern && pattern != null;
+
+  /// Painted with a shader (gradient or pattern) rather than a flat color.
+  bool get hasShader => isGradient || isPattern;
+
+  /// Project asset behind an image pattern, if any.
+  String? get assetId => isPattern && Patterns.isAsset(pattern!)
+      ? Patterns.assetId(pattern!)
+      : null;
 
   /// Stop positions, evenly spread when none are stored.
   List<double> get effectiveStops =>
@@ -93,6 +139,11 @@ class PixFill {
       ];
 
   PixFill withPrimary(Color c) {
+    if (isPattern) {
+      return copyWith(
+        colors: [c, colors.length > 1 ? colors[1] : const Color(0x00000000)],
+      );
+    }
     if (!isGradient) return PixFill.color(c);
     final next = [...colors]..[0] = c;
     return copyWith(colors: next);
@@ -106,6 +157,8 @@ class PixFill {
     double? angle,
     double? scale,
     Offset? center,
+    String? pattern,
+    bool? mirror,
   }) => PixFill._(
     kind ?? this.kind,
     List.unmodifiable(colors ?? this.colors),
@@ -115,6 +168,8 @@ class PixFill {
     angle ?? this.angle,
     scale: scale ?? this.scale,
     center: center ?? this.center,
+    pattern: pattern ?? this.pattern,
+    mirror: mirror ?? this.mirror,
   );
 
   /// The same gradient with its colours in the opposite order.
@@ -145,6 +200,7 @@ class PixFill {
 
   /// Applies this fill to [paint] for content occupying [bounds].
   Paint applyTo(Paint paint, Rect bounds) {
+    if (isPattern) return _applyPattern(paint, bounds);
     if (!isGradient) {
       paint
         ..shader = null
@@ -185,9 +241,47 @@ class PixFill {
           rad,
           rad + math.pi * 2,
         );
-      case FillKind.solid:
+      case FillKind.solid || FillKind.pattern:
         paint.shader = null;
     }
+    return paint;
+  }
+
+  /// Pattern tiles start at the painted box's top-left (moved by [center]
+  /// tiles), rotated by [angle] and scaled by [scale].
+  Paint _applyPattern(Paint paint, Rect bounds) {
+    final img = Patterns.tile(
+      pattern!,
+      fg: colors.isEmpty ? const Color(0xFF000000) : colors.first,
+      bg: colors.length > 1 ? colors[1] : const Color(0x00000000),
+      mirror: mirror,
+    );
+    if (img == null) {
+      paint
+        ..shader = null
+        ..color = const Color(0x00000000);
+      return paint;
+    }
+    final sc = scale.clamp(0.02, 50.0);
+    final rad = angle * math.pi / 180;
+    final cs = math.cos(rad) * sc, sn = math.sin(rad) * sc;
+    final origin =
+        bounds.topLeft +
+        Offset(center.dx * img.width * sc, center.dy * img.height * sc);
+    paint
+      ..color = const Color(0xFFFFFFFF)
+      ..shader = ImageShader(
+        img,
+        TileMode.repeated,
+        TileMode.repeated,
+        Float64List.fromList([
+          cs, sn, 0, 0, //
+          -sn, cs, 0, 0, //
+          0, 0, 1, 0, //
+          origin.dx, origin.dy, 0, 1, //
+        ]),
+        filterQuality: FilterQuality.medium,
+      );
     return paint;
   }
 
@@ -195,6 +289,8 @@ class PixFill {
     'kind': kind.name,
     'colors': [for (final c in _effectiveColors) writeColor(c)],
     if (stops != null) 'stops': stops,
+    if (pattern != null) 'pattern': pattern,
+    if (mirror) 'mirror': true,
     if (kind != FillKind.solid && kind != FillKind.radial) 'angle': angle,
     if (scale != 1) 'scale': scale,
     if (center != Offset.zero) 'cx': center.dx,
@@ -215,7 +311,20 @@ class PixFill {
         ? [for (final s in stopsRaw) readDouble(s)]
         : null;
     final kind = readEnum(FillKind.values, m['kind'], FillKind.solid);
-    if (kind == FillKind.solid || colors.length < 2) {
+    if (kind == FillKind.pattern && m['pattern'] is String) {
+      return PixFill.pattern(
+        m['pattern'] as String,
+        fg: colors.first,
+        bg: colors.length > 1 ? colors[1] : const Color(0x00000000),
+        angle: readDouble(m['angle']),
+        scale: readDouble(m['scale'], 1).clamp(0.02, 50.0),
+        center: Offset(readDouble(m['cx']), readDouble(m['cy'])),
+        mirror: readBool(m['mirror']),
+      );
+    }
+    if (kind == FillKind.solid ||
+        kind == FillKind.pattern ||
+        colors.length < 2) {
       return PixFill.color(colors.first);
     }
     return PixFill.gradient(
@@ -235,6 +344,8 @@ class PixFill {
       other.angle == angle &&
       other.scale == scale &&
       other.center == center &&
+      other.pattern == pattern &&
+      other.mirror == mirror &&
       listEquals(other._effectiveColors, _effectiveColors) &&
       listEquals(other.stops, stops);
 
@@ -244,6 +355,8 @@ class PixFill {
     angle,
     scale,
     center,
+    pattern,
+    mirror,
     Object.hashAll(_effectiveColors),
     stops == null ? null : Object.hashAll(stops!),
   );

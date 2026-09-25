@@ -622,5 +622,16 @@
   "fillOpacity": "Fill",
   "fillOpacityHint": "Fades only the layer itself — stroke, shadow, glow and bevel stay fully visible.",
   "blendInteriorEffects": "Blend interior effects as group",
-  "blendInteriorEffectsHint": "Inner shadow, inner glow and inner bevel fade with Fill"
+  "blendInteriorEffectsHint": "Inner shadow, inner glow and inner bevel fade with Fill",
+  "patternMode": "Pattern",
+  "newPattern": "New pattern",
+  "newPatternHint": "Make a repeating pattern from a photo, the selected layer or your selection.",
+  "fromPhoto": "From photo",
+  "fromLayer": "From layer",
+  "fromSelection": "From selection",
+  "savePattern": "Save pattern",
+  "seamless": "Seamless (mirror)",
+  "seamlessHint": "Mirrors the tile so its edges always meet",
+  "patternColor": "Pattern colour",
+  "deletePattern": "Delete this pattern?"
 }

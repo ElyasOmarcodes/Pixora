@@ -300,7 +300,7 @@ class TextLayoutEntry {
 
     // Gradient fills need the laid-out size first, so lay out once plainly.
     var fill = make(null);
-    if (l.fill.isGradient) {
+    if (l.fill.hasShader) {
       final rect = Offset.zero & fill.size;
       fill.dispose();
       fill = make(l.fill.applyTo(Paint(), rect));

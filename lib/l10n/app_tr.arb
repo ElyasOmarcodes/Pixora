@@ -537,5 +537,16 @@
   "fillOpacity": "Dolgu",
   "fillOpacityHint": "Yalnızca katmanı soldurur — kontur, gölge, parlama ve eğim tam görünür kalır.",
   "blendInteriorEffects": "İç efektleri grup olarak karıştır",
-  "blendInteriorEffectsHint": "İç gölge, iç parlama ve iç eğim dolguyla birlikte solar"
+  "blendInteriorEffectsHint": "İç gölge, iç parlama ve iç eğim dolguyla birlikte solar",
+  "patternMode": "Desen",
+  "newPattern": "Yeni desen",
+  "newPatternHint": "Bir fotoğraftan, seçili katmandan veya seçimden tekrarlanan desen oluşturun.",
+  "fromPhoto": "Fotoğraftan",
+  "fromLayer": "Katmandan",
+  "fromSelection": "Seçimden",
+  "savePattern": "Deseni kaydet",
+  "seamless": "Dikişsiz (ayna)",
+  "seamlessHint": "Kenarları buluşsun diye döşemeyi aynalar",
+  "patternColor": "Desen rengi",
+  "deletePattern": "Bu desen silinsin mi?"
 }

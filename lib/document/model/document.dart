@@ -156,7 +156,9 @@ class PixDocument {
     for (final l in allLayers) ...[
       if (l is RasterLayer) ...[l.assetId, ?l.sourceAssetId],
       ...l.props.maskAssets,
+      ...l.fillAssets,
     ],
+    ?background?.assetId,
   };
 
   // ----------------------------------------------------------- transforms

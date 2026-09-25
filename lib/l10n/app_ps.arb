@@ -537,5 +537,16 @@
   "fillOpacity": "ډکوالی",
   "fillOpacityHint": "یوازې پخپله لایر روڼوي — سټروک، سیوری، ځلا او بیول په بشپړه توګه ښکاري.",
   "blendInteriorEffects": "دننني افکتونه له ډکوالي سره",
-  "blendInteriorEffectsHint": "دننه سیوری، دننه ځلا او دننه بیول هم د ډکوالي سره روڼیږي"
+  "blendInteriorEffectsHint": "دننه سیوری، دننه ځلا او دننه بیول هم د ډکوالي سره روڼیږي",
+  "patternMode": "پټرن",
+  "newPattern": "نوی پټرن",
+  "newPatternHint": "له عکس، ټاکل شوي لایر یا انتخاب څخه تکراري پټرن جوړ کړئ.",
+  "fromPhoto": "له عکس",
+  "fromLayer": "له لایر",
+  "fromSelection": "له انتخاب",
+  "savePattern": "پټرن خوندي کړه",
+  "seamless": "بې‌درزه (هنداره)",
+  "seamlessHint": "ټوټه هنداره کوي تر څو څنډې یې سره برابرې شي",
+  "patternColor": "د پټرن رنګ",
+  "deletePattern": "دا پټرن ړنګ شي؟"
 }

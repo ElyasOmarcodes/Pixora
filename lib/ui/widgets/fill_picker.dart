@@ -8,25 +8,32 @@ import '../../l10n/app_localizations.dart';
 import '../../projects/canvas_presets.dart';
 import 'color_picker.dart';
 import 'gradient_editor.dart';
+import 'pattern_picker.dart';
 import 'pix_slider.dart';
 import 'pressable.dart';
 
-/// The one colour control used across the app: a "Solid | Gradient"
-/// switch (solid by default), then a row that starts with "+" (custom
-/// colour or new gradient), the 20 most recently used colours/gradients
-/// and the built-in ones.
+enum _Mode { solid, gradient, pattern }
+
+/// The one colour control used across the app: a "One colour | Gradient |
+/// Pattern" switch (one colour by default), then a row that starts with
+/// "+" (custom colour, new gradient or new pattern), the recently used
+/// ones and the built-in ones.
 class FillPicker extends StatefulWidget {
   const FillPicker({
     super.key,
     required this.value,
     required this.onChanged,
     this.allowTransparent = false,
+    this.allowPattern = true,
     this.aspect = 1,
   });
 
   final PixFill? value;
   final void Function(PixFill? fill, {required bool live}) onChanged;
   final bool allowTransparent;
+
+  /// Offer the Pattern tab.
+  final bool allowPattern;
 
   /// Width / height of what is painted (for the gradient editor preview).
   final double aspect;
@@ -36,7 +43,13 @@ class FillPicker extends StatefulWidget {
 }
 
 class _FillPickerState extends State<FillPicker> {
-  late bool _gradient = widget.value?.isGradient ?? false;
+  late _Mode _mode = widget.value == null
+      ? _Mode.solid
+      : widget.value!.isPattern
+      ? _Mode.pattern
+      : widget.value!.isGradient
+      ? _Mode.gradient
+      : _Mode.solid;
 
   void _apply(PixFill f) {
     HapticFeedback.selectionClick();
@@ -75,28 +88,39 @@ class _FillPickerState extends State<FillPicker> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-          child: SegmentedButton<bool>(
+          child: SegmentedButton<_Mode>(
             showSelectedIcon: false,
             style: const ButtonStyle(visualDensity: VisualDensity.compact),
             segments: [
               ButtonSegment(
-                value: false,
+                value: _Mode.solid,
                 icon: const Icon(Icons.circle, size: 16),
-                label: Text(l.oneColor),
+                label: Text(l.oneColor, maxLines: 1),
               ),
               ButtonSegment(
-                value: true,
+                value: _Mode.gradient,
                 icon: const Icon(Icons.gradient_rounded, size: 18),
-                label: Text(l.gradient),
+                label: Text(l.gradient, maxLines: 1),
               ),
+              if (widget.allowPattern)
+                ButtonSegment(
+                  value: _Mode.pattern,
+                  icon: const Icon(Icons.texture_rounded, size: 18),
+                  label: Text(l.patternMode, maxLines: 1),
+                ),
             ],
-            selected: {_gradient},
-            onSelectionChanged: (s) => setState(() => _gradient = s.first),
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
           ),
         ),
-        if (!_gradient)
+        if (_mode == _Mode.pattern)
+          PatternPicker(
+            value: v,
+            onChanged: (f, {required live}) => widget.onChanged(f, live: live),
+          )
+        else if (_mode == _Mode.solid)
           ColorStrip(
-            value: v == null || v.isGradient ? null : v.primary,
+            value: v == null || v.hasShader ? null : v.primary,
             allowTransparent: widget.allowTransparent,
             onChanged: (c, {required live}) => widget.onChanged(
               c == null ? null : PixFill.color(c),

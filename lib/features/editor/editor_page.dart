@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -40,6 +41,7 @@ import 'editor_scope.dart';
 import 'panels/tool_panel_host.dart';
 import 'widgets/canvas_view.dart';
 import 'widgets/context_dock.dart';
+import '../../ui/widgets/pattern_source.dart';
 import 'widgets/editor_top_bar.dart';
 import 'widgets/export_sheet.dart';
 import 'widgets/layer_actions.dart';
@@ -771,39 +773,47 @@ class _EditorPageState extends State<EditorPage> {
       child: EditorScope(
         controller: _editor,
         ui: _ui,
-        child: CallbackShortcuts(
-          bindings: _shortcuts,
-          child: Focus(
-            autofocus: true,
-            child: Scaffold(
-              body: ListenableBuilder(
-                listenable: _ui,
-                builder: (context, _) => Stack(
-                  children: [
-                    SafeArea(
-                      // The phone bar paints behind the status bar itself.
-                      top: wide,
-                      child: Column(
-                        children: [
-                          EditorTopBar(
-                            editor: _editor,
-                            ui: _ui,
-                            settings: _services.settings,
-                            canvas: _canvas,
-                            wide: wide,
-                            saved: !_dirty,
-                            actions: _topBarActions,
-                          ),
-                          Expanded(
-                            child: wide
-                                ? _buildWide(context, screen)
-                                : _buildCompact(context),
-                          ),
-                        ],
+        child: PatternSource(
+          assets: _editor.assets,
+          pickImage: _pickPatternImage,
+          fromLayer: _patternFromLayer,
+          fromSelection: _patternFromSelection,
+          hasLayer: () => _editor.selectedId != null,
+          hasSelection: () => _ui.selection.hasSelection,
+          child: CallbackShortcuts(
+            bindings: _shortcuts,
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+                body: ListenableBuilder(
+                  listenable: _ui,
+                  builder: (context, _) => Stack(
+                    children: [
+                      SafeArea(
+                        // The phone bar paints behind the status bar itself.
+                        top: wide,
+                        child: Column(
+                          children: [
+                            EditorTopBar(
+                              editor: _editor,
+                              ui: _ui,
+                              settings: _services.settings,
+                              canvas: _canvas,
+                              wide: wide,
+                              saved: !_dirty,
+                              actions: _topBarActions,
+                            ),
+                            Expanded(
+                              child: wide
+                                  ? _buildWide(context, screen)
+                                  : _buildCompact(context),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (!wide) _layersDrawer(context, screen),
-                  ],
+                      if (!wide) _layersDrawer(context, screen),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -811,6 +821,35 @@ class _EditorPageState extends State<EditorPage> {
         ),
       ),
     );
+  }
+
+  // ------------------------------------------------------ pattern sources
+
+  /// Photo → crop page (free ratio) → pattern tile.
+  Future<Uint8List?> _pickPatternImage() async {
+    final picked = await _services.platform.pickImage();
+    if (picked == null || !mounted) return null;
+    final codec = await ui.instantiateImageCodec(picked.bytes);
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    if (!mounted) {
+      frame.image.dispose();
+      return null;
+    }
+    // Not disposed here: the crop page still paints it while it closes.
+    final r = await showCropPage(context, image: frame.image);
+    return r?.bytes;
+  }
+
+  Future<Uint8List?> _patternFromLayer() async {
+    final id = _editor.selectedId;
+    return id == null ? null : _editor.renderLayerPng(id);
+  }
+
+  Future<Uint8List?> _patternFromSelection() async {
+    final sel = _ui.selection.current;
+    if (sel == null) return null;
+    return _editor.renderSelection(sel, sourceId: _ui.selection.targetId);
   }
 
   late final TopBarActions _topBarActions = TopBarActions(

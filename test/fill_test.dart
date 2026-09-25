@@ -7,7 +7,9 @@ import 'package:pixora/document/model/fill.dart';
 
 void main() {
   test('every gradient style round-trips through JSON', () {
-    for (final k in FillKind.values.where((k) => k != FillKind.solid)) {
+    for (final k in FillKind.values.where(
+      (k) => k != FillKind.solid && k != FillKind.pattern,
+    )) {
       final f = PixFill.gradient(
         k,
         const [Color(0xFFFF0000), Color(0x8000FF00), Color(0xFF0000FF)],

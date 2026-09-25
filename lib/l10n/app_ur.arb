@@ -537,5 +537,16 @@
   "fillOpacity": "فل",
   "fillOpacityHint": "صرف لیئر کو مدھم کرتا ہے — اسٹروک، سایہ، چمک اور بیول پوری طرح نظر آتے ہیں۔",
   "blendInteriorEffects": "اندرونی اثرات کو گروپ کے طور پر ملائیں",
-  "blendInteriorEffectsHint": "اندرونی سایہ، چمک اور بیول فل کے ساتھ مدھم ہوتے ہیں"
+  "blendInteriorEffectsHint": "اندرونی سایہ، چمک اور بیول فل کے ساتھ مدھم ہوتے ہیں",
+  "patternMode": "پیٹرن",
+  "newPattern": "نیا پیٹرن",
+  "newPatternHint": "تصویر، منتخب لیئر یا انتخاب سے دہرایا جانے والا پیٹرن بنائیں۔",
+  "fromPhoto": "تصویر سے",
+  "fromLayer": "لیئر سے",
+  "fromSelection": "انتخاب سے",
+  "savePattern": "پیٹرن محفوظ کریں",
+  "seamless": "بغیر جوڑ (آئینہ)",
+  "seamlessHint": "ٹائل کو آئینہ کرتا ہے تاکہ کنارے ملیں",
+  "patternColor": "پیٹرن کا رنگ",
+  "deletePattern": "یہ پیٹرن حذف کریں؟"
 }

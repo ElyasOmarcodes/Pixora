@@ -16,6 +16,8 @@ import '../document/model/layer.dart';
 import '../document/model/layer_geometry.dart';
 import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
+import '../document/model/patterns.dart';
+import '../document/render/text_layout.dart';
 import '../document/render/document_renderer.dart';
 import '../document/render/layer_cache.dart';
 import '../document/render/brush_paint.dart';
@@ -48,6 +50,7 @@ class EditorController extends ChangeNotifier {
     : _document = document,
       assets = assets ?? AssetStore() {
     this.assets.addListener(_onAssetsChanged);
+    Patterns.addLookup(this.assets.imageOf);
   }
 
   final AssetStore assets;
@@ -91,6 +94,13 @@ class EditorController extends ChangeNotifier {
       DocumentRenderer(assets, cache: rasterCache, pixelScale: pixelScale);
 
   void _onAssetsChanged() {
+    // Text layouts bake their shader; rebuild them once an image pattern
+    // they use has decoded.
+    if (_document.allLayers.any(
+      (l) => l is TextLayer && l.fillAssets.isNotEmpty,
+    )) {
+      TextLayoutCache.instance.clear();
+    }
     paintRevision++;
     notifyListeners();
   }
@@ -245,6 +255,7 @@ class EditorController extends ChangeNotifier {
   @override
   void dispose() {
     assets.removeListener(_onAssetsChanged);
+    Patterns.removeLookup(assets.imageOf);
     rasterCache.clear();
     super.dispose();
   }
@@ -1477,6 +1488,53 @@ class EditorController extends ChangeNotifier {
       return _insertAtCursor(next, raster);
     }, select: raster.id);
     return raster;
+  }
+
+  /// The selected pixels of [sourceId] (null = the visible canvas),
+  /// cropped to the selection, as PNG — e.g. to define a pattern.
+  Future<Uint8List?> renderSelection(
+    PixelSelection sel, {
+    String? sourceId,
+  }) async {
+    final b = _selectionRect(sel);
+    if (b == null) return null;
+    var src = _document;
+    if (sourceId != null) {
+      final l = src.layerById(sourceId);
+      if (l == null) return null;
+      src = src.copyWith(clearBackground: true, layers: [l]);
+    }
+    await assets.decodeAll(src.referencedAssets);
+    final img = await _selectionImage(sel);
+    final k = math.min(1.0, 2048 / math.max(b.width, b.height));
+    final w = math.max(1, (b.width * k).round());
+    final h = math.max(1, (b.height * k).round());
+    final recorder = PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(k)
+      ..translate(-b.left, -b.top)
+      ..saveLayer(b, Paint());
+    renderer.paint(c, src);
+    c
+      ..drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        _document.bounds,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = BlendMode.dstIn,
+      )
+      ..restore();
+    img.dispose();
+    return _png(recorder.endRecording(), w, h);
+  }
+
+  /// One layer rendered on its own (effects included) as PNG.
+  Future<Uint8List?> renderLayerPng(String id) async {
+    final l = _document.layerById(id);
+    if (l == null) return null;
+    final r = await renderer.rasterize([l], maxSide: 2048);
+    return r?.$1;
   }
 
   /// Fills the selection with [color] on a new image layer.

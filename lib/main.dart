@@ -4,6 +4,7 @@ import 'app/app_scope.dart';
 import 'app/pixora_app.dart';
 import 'core/colors/recent_colors.dart';
 import 'core/fonts/font_catalog.dart';
+import 'core/patterns/pattern_library.dart';
 import 'core/platform/platform_services.dart';
 import 'core/settings/app_settings.dart';
 import 'editor/actions/action_registry.dart';
@@ -24,6 +25,7 @@ Future<void> main(List<String> args) async {
   // Imported fonts load in the background; text re-lays out when ready.
   fonts.init().ignore();
   RecentColors.instance.load().ignore();
+  PatternLibrary.instance.load().ignore();
 
   final services = AppServices(
     settings: settings,

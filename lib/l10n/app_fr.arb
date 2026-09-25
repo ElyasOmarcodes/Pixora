@@ -537,5 +537,16 @@
   "fillOpacity": "Fond",
   "fillOpacityHint": "Atténue seulement le calque — contour, ombre, lueur et biseau restent visibles.",
   "blendInteriorEffects": "Fusionner les effets intérieurs en groupe",
-  "blendInteriorEffectsHint": "L’ombre, la lueur et le biseau intérieurs s’atténuent avec le fond"
+  "blendInteriorEffectsHint": "L’ombre, la lueur et le biseau intérieurs s’atténuent avec le fond",
+  "patternMode": "Motif",
+  "newPattern": "Nouveau motif",
+  "newPatternHint": "Créez un motif répété depuis une photo, le calque ou la sélection.",
+  "fromPhoto": "Depuis une photo",
+  "fromLayer": "Depuis le calque",
+  "fromSelection": "Depuis la sélection",
+  "savePattern": "Enregistrer le motif",
+  "seamless": "Sans raccord (miroir)",
+  "seamlessHint": "Reflète la tuile pour que ses bords se rejoignent",
+  "patternColor": "Couleur du motif",
+  "deletePattern": "Supprimer ce motif ?"
 }
