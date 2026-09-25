@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
+import '../../../document/model/layer_stroke.dart';
 import '../../../document/model/text_span_style.dart';
 import '../widgets/rich_text_field.dart';
 import '../../../editor/editor_controller.dart';
@@ -174,58 +175,136 @@ class _FillPanelState extends State<FillPanel> {
 }
 
 /// Outline width and color for text and shapes.
+/// Photoshop's Stroke: size, position (outside / centre / inside), a
+/// colour, gradient or pattern fill, opacity and its own blend mode. It
+/// follows the layer's pixels and is not faded by Fill opacity.
 class StrokePanel extends StatelessWidget {
   const StrokePanel({super.key, required this.editor, required this.layer});
   final EditorController editor;
   final Layer layer;
 
+  /// The layer's stroke; older projects' simple strokes are shown as the
+  /// same-looking style stroke (text: outside, half width; shapes and
+  /// icons: centred).
+  static LayerStroke? strokeOf(Layer l) {
+    if (l.props.stroke != null) return l.props.stroke;
+    final (w, c, textLike) = switch (l) {
+      TextLayer t => (t.strokeWidth, t.strokeColor, true),
+      ShapeLayer s => (s.strokeWidth, s.strokeColor, false),
+      IconLayer i => (i.strokeWidth, i.strokeColor, false),
+      _ => (0.0, const Color(0xFF000000), false),
+    };
+    if (w <= 0) return null;
+    return LayerStroke(
+      size: textLike ? w / 2 : w,
+      position: textLike ? StrokePosition.outside : StrokePosition.center,
+      fill: PixFill.color(c),
+    );
+  }
+
+  /// [s] as the layer's stroke; the old simple stroke is dropped.
+  static Layer withStroke(Layer x, LayerStroke? s) {
+    final plain = switch (x) {
+      TextLayer t => t.copyWith(strokeWidth: 0),
+      ShapeLayer sh => sh.copyWith(strokeWidth: 0),
+      IconLayer i => i.copyWith(strokeWidth: 0),
+      _ => x,
+    };
+    return plain.update(
+      (p) => p.copyWith(stroke: s, clearStroke: s == null || s.size <= 0),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final (width, color) = switch (layer) {
-      TextLayer t => (t.strokeWidth, t.strokeColor),
-      ShapeLayer s => (s.strokeWidth, s.strokeColor),
-      IconLayer i => (i.strokeWidth, i.strokeColor),
-      PathLayer p => (p.strokeWidth, p.strokeColor),
-      RasterLayer _ || GroupLayer _ || DrawingLayer _ => (0.0, Colors.black),
-    };
-    Layer apply(Layer x, {double? w, Color? c}) => switch (x) {
-      TextLayer t => t.copyWith(strokeWidth: w, strokeColor: c),
-      ShapeLayer s => s.copyWith(strokeWidth: w, strokeColor: c),
-      IconLayer i => i.copyWith(strokeWidth: w, strokeColor: c),
-      PathLayer p => p.copyWith(strokeWidth: w, strokeColor: c),
-      RasterLayer _ || GroupLayer _ || DrawingLayer _ => x,
-    };
-    final maxWidth = layer is TextLayer
-        ? (layer as TextLayer).fontSize * 0.4
-        : 80.0;
+    final current = strokeOf(layer);
+    final maxSize = layer is TextLayer
+        ? ((layer as TextLayer).fontSize * 0.4).clamp(20.0, 200.0)
+        : 100.0;
+    final defaultSize = (maxSize * 0.1).clamp(2.0, 12.0);
+    final s =
+        current ??
+        LayerStroke(size: 0, fill: PixFill.color(const Color(0xFF000000)));
+
+    void set(LayerStroke next, {bool live = false}) {
+      live
+          ? editor.previewLayer(layer.id, (x) => withStroke(x, next))
+          : editor.updateLayer(
+              layer.id,
+              (x) => withStroke(x, next),
+              label: 'stroke',
+            );
+    }
+
+    // Choosing a colour, position… with no stroke yet makes it visible.
+    LayerStroke visible(LayerStroke x) =>
+        x.size > 0 ? x : x.copyWith(size: defaultSize);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         PixSlider(
-          label: l.strokeWidth,
-          value: width,
+          label: l.size,
+          value: s.size.clamp(0, maxSize).toDouble(),
           min: 0,
-          max: maxWidth.clamp(10, 200),
+          max: maxSize.toDouble(),
           defaultValue: 0,
-          onChanged: (v) =>
-              editor.previewLayer(layer.id, (x) => apply(x, w: v)),
+          onChanged: (v) => set(s.copyWith(size: v), live: true),
           onChangeEnd: (_) => editor.commit('stroke'),
         ),
-        ColorStrip(
-          value: color,
-          onChanged: (c, {required live}) {
-            if (c == null) return;
-            // Picking a color with no stroke yet gives it a visible width.
-            final w = width == 0 ? (maxWidth * 0.12).clamp(2.0, 20.0) : null;
-            live
-                ? editor.previewLayer(layer.id, (x) => apply(x, c: c, w: w))
-                : editor.updateLayer(
-                    layer.id,
-                    (x) => apply(x, c: c, w: w),
-                    label: 'stroke',
-                  );
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+          child: SegmentedButton<StrokePosition>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              ButtonSegment(
+                value: StrokePosition.outside,
+                icon: const Icon(Icons.crop_din_rounded, size: 18),
+                label: Text(l.strokeOutside, maxLines: 1),
+              ),
+              ButtonSegment(
+                value: StrokePosition.center,
+                icon: const Icon(Icons.border_outer_rounded, size: 18),
+                label: Text(l.strokeCenter, maxLines: 1),
+              ),
+              ButtonSegment(
+                value: StrokePosition.inside,
+                icon: const Icon(Icons.border_inner_rounded, size: 18),
+                label: Text(l.strokeInside, maxLines: 1),
+              ),
+            ],
+            selected: {s.position},
+            onSelectionChanged: (v) =>
+                set(visible(s.copyWith(position: v.first))),
+          ),
+        ),
+        FillPicker(
+          value: s.fill,
+          aspect:
+              layerLocalSize(layer).width /
+              layerLocalSize(layer).height.clamp(1, double.infinity),
+          onChanged: (f, {required live}) {
+            if (f == null) return;
+            set(visible(s.copyWith(fill: f)), live: live);
           },
+        ),
+        PixSlider(
+          label: l.opacity,
+          value: s.opacity,
+          min: 0,
+          max: 1,
+          defaultValue: 1,
+          format: (v) => '${(v * 100).round()}%',
+          onChanged: (v) => set(visible(s.copyWith(opacity: v)), live: true),
+          onChangeEnd: (_) => editor.commit('stroke'),
+        ),
+        BlendModeRow(
+          label: l.blendMode,
+          value: s.blend,
+          onChanged: (m) => set(visible(s.copyWith(blend: m))),
         ),
         const SizedBox(height: 8),
       ],

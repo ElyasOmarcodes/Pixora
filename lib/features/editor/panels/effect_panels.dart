@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../document/effects/effect_registry.dart';
+import '../../../document/model/blend.dart';
 import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
@@ -18,6 +19,13 @@ class FxSlider extends FxControl {
   final String key;
   final String label;
   final String Function(double v)? format;
+}
+
+/// A blend-mode picker for an effect's `blend` param.
+class FxBlend extends FxControl {
+  const FxBlend(this.label, {this.key = 'blend'});
+  final String key;
+  final String label;
 }
 
 class FxColor extends FxControl {
@@ -121,6 +129,15 @@ class EffectEditor extends StatelessWidget {
                           ),
                           onChangeEnd: (_) => editor.commit('effect'),
                         ),
+                        FxBlend b => BlendModeRow(
+                          label: b.label,
+                          value:
+                              PixBlendMode.values[valueOf(b.key)
+                                  .round()
+                                  .clamp(0, PixBlendMode.values.length - 1)],
+                          onChanged: (m) =>
+                              editor.setEffectParam(id, type, b.key, m.index),
+                        ),
                         FxColor col => Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -214,6 +231,7 @@ class ShadowPanel extends StatelessWidget {
               type: 'innerShadow',
               title: l.innerShadow,
               controls: [
+                FxBlend(l.blendMode),
                 FxSlider('distance', l.distance),
                 FxSlider('angle', l.angle, format: fxDegrees),
                 FxSlider('blur', l.blur),
@@ -228,6 +246,7 @@ class ShadowPanel extends StatelessWidget {
               type: 'shadow',
               title: l.dropShadow,
               controls: [
+                FxBlend(l.blendMode),
                 FxSlider('dx', l.offsetX),
                 FxSlider('dy', l.offsetY),
                 FxSlider('blur', l.blur),

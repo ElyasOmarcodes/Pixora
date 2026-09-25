@@ -7,6 +7,7 @@ import '../../core/utils/json.dart';
 import 'blend.dart';
 import 'effect.dart';
 import 'fill.dart';
+import 'layer_stroke.dart';
 import 'layer_transform.dart';
 import 'mask.dart';
 import 'text_span_style.dart';
@@ -36,6 +37,7 @@ class LayerProps {
     this.maskFeather = 0,
     this.fillOpacity = 1,
     this.blendInterior = false,
+    this.stroke,
   }) : id = id ?? newId('ly'),
        effects = List.unmodifiable(effects),
        mask = List.unmodifiable(mask);
@@ -77,6 +79,9 @@ class LayerProps {
   /// shadow / glow, inner bevel) fade together with the fill.
   final bool blendInterior;
 
+  /// Stroke layer style (null = none).
+  final LayerStroke? stroke;
+
   /// Whether the layer has a mask at all (it may be disabled).
   bool get hasMaskLayer => mask.isNotEmpty;
 
@@ -101,6 +106,8 @@ class LayerProps {
     double? maskFeather,
     double? fillOpacity,
     bool? blendInterior,
+    LayerStroke? stroke,
+    bool clearStroke = false,
   }) => LayerProps(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -117,6 +124,7 @@ class LayerProps {
     maskFeather: maskFeather ?? this.maskFeather,
     fillOpacity: fillOpacity ?? this.fillOpacity,
     blendInterior: blendInterior ?? this.blendInterior,
+    stroke: clearStroke ? null : (stroke ?? this.stroke),
   );
 
   Json toJson() => {
@@ -135,6 +143,7 @@ class LayerProps {
     if (maskFeather != 0) 'maskFeather': maskFeather,
     if (fillOpacity != 1) 'fill': fillOpacity,
     if (blendInterior) 'blendInterior': true,
+    if (stroke != null) 'stroke': stroke!.toJson(),
   };
 
   static LayerProps fromJson(Json m) => LayerProps(
@@ -159,6 +168,9 @@ class LayerProps {
     maskFeather: readDouble(m['maskFeather']).clamp(0.0, 1000.0),
     fillOpacity: readDouble(m['fill'], 1).clamp(0.0, 1.0),
     blendInterior: readBool(m['blendInterior']),
+    stroke: m['stroke'] is Map
+        ? LayerStroke.fromJson(readMap(m['stroke']))
+        : null,
   );
 
   @override
@@ -177,6 +189,7 @@ class LayerProps {
       other.maskFeather == maskFeather &&
       other.fillOpacity == fillOpacity &&
       other.blendInterior == blendInterior &&
+      other.stroke == stroke &&
       listEquals(other.effects, effects) &&
       listEquals(other.mask, mask);
 
@@ -195,6 +208,7 @@ class LayerProps {
     maskFeather,
     fillOpacity,
     blendInterior,
+    stroke,
     Object.hashAll(effects),
     Object.hashAll(mask),
   );
@@ -223,13 +237,16 @@ sealed class Layer {
   Layer update(LayerProps Function(LayerProps p) f) => withProps(f(props));
 
   /// Every fill this layer paints with (for pattern assets and the like).
-  Iterable<PixFill> get fills => switch (this) {
-    TextLayer t => [t.fill, ?t.background],
-    ShapeLayer s => [s.fill],
-    IconLayer i => [i.fill],
-    PathLayer p => [?p.fill],
-    RasterLayer() || GroupLayer() || DrawingLayer() => const [],
-  };
+  Iterable<PixFill> get fills => [
+    ?props.stroke?.fill,
+    ...switch (this) {
+      TextLayer t => [t.fill, ?t.background],
+      ShapeLayer s => [s.fill],
+      IconLayer i => [i.fill],
+      PathLayer p => [?p.fill],
+      RasterLayer() || GroupLayer() || DrawingLayer() => const <PixFill>[],
+    },
+  ];
 
   /// Project assets used by image-pattern fills.
   Iterable<String> get fillAssets => [for (final f in fills) ?f.assetId];

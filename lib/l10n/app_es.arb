@@ -548,5 +548,8 @@
   "seamless": "Sin costuras (espejo)",
   "seamlessHint": "Refleja el mosaico para que sus bordes encajen",
   "patternColor": "Color del motivo",
-  "deletePattern": "¿Eliminar este motivo?"
+  "deletePattern": "¿Eliminar este motivo?",
+  "strokeOutside": "Fuera",
+  "strokeCenter": "Centro",
+  "strokeInside": "Dentro"
 }

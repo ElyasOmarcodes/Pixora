@@ -633,5 +633,8 @@
   "seamless": "Seamless (mirror)",
   "seamlessHint": "Mirrors the tile so its edges always meet",
   "patternColor": "Pattern colour",
-  "deletePattern": "Delete this pattern?"
+  "deletePattern": "Delete this pattern?",
+  "strokeOutside": "Outside",
+  "strokeCenter": "Center",
+  "strokeInside": "Inside"
 }

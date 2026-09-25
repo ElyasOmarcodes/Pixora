@@ -548,5 +548,8 @@
   "seamless": "بلا فواصل (معكوس)",
   "seamlessHint": "يعكس البلاطة لتلتقي حوافها دائمًا",
   "patternColor": "لون النقش",
-  "deletePattern": "حذف هذا النقش؟"
+  "deletePattern": "حذف هذا النقش؟",
+  "strokeOutside": "خارج",
+  "strokeCenter": "وسط",
+  "strokeInside": "داخل"
 }

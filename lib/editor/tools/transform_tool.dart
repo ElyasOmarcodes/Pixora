@@ -399,12 +399,19 @@ class TransformTool extends EditorTool {
       case HandleKind.fontSize:
         final text = leaf as TextLayer;
         final f = _ratio(anchorDoc, pointer, vp).clamp(0.05, 50.0);
-        next = text.copyWith(
-          fontSize: math.max(4, text.fontSize * f),
-          strokeWidth: text.strokeWidth * f,
-          letterSpacing: text.letterSpacing * f,
-          boxWidth: text.boxWidth == null ? null : text.boxWidth! * f,
-        );
+        final st = text.props.stroke;
+        next = text
+            .copyWith(
+              fontSize: math.max(4, text.fontSize * f),
+              strokeWidth: text.strokeWidth * f,
+              letterSpacing: text.letterSpacing * f,
+              boxWidth: text.boxWidth == null ? null : text.boxWidth! * f,
+            )
+            .update(
+              (p) => st == null
+                  ? p
+                  : p.copyWith(stroke: st.copyWith(size: st.size * f)),
+            );
       case HandleKind.rotate:
         return;
     }

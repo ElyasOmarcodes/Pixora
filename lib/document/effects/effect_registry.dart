@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import '../model/blend.dart';
 import '../model/effect.dart';
 import '../render/color_matrix.dart';
 
@@ -46,10 +47,15 @@ class ShadowSpec {
     required this.offset,
     required this.blur,
     required this.color,
+    this.blend = PixBlendMode.normal,
   });
   final Offset offset;
   final double blur;
   final Color color;
+
+  /// How the shadow composites with what is beneath it (Photoshop's
+  /// Blend Mode inside Drop Shadow; Multiply is the classic choice).
+  final PixBlendMode blend;
 }
 
 /// Bevel & emboss, Photoshop style: a light and a dark edge derived from
@@ -346,6 +352,13 @@ class EffectRegistry {
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 16),
           EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.55),
           EffectParam.color('color', defaultValue: Color(0xFF000000)),
+          EffectParam.number(
+            'blend',
+            min: 0,
+            max: 16,
+            defaultValue: 0,
+            step: 1,
+          ),
         ],
         shadow: (e) => ShadowSpec(
           offset: Offset(e.number('dx', 12), e.number('dy', 12)),
@@ -353,6 +366,11 @@ class EffectRegistry {
           color: e
               .color('color', const Color(0xFF000000))
               .withValues(alpha: e.number('opacity', 0.55).clamp(0.0, 1.0)),
+          blend:
+              PixBlendMode.values[e
+                  .number('blend', 0)
+                  .round()
+                  .clamp(0, PixBlendMode.values.length - 1)],
         ),
       ),
     );
@@ -395,8 +413,20 @@ class EffectRegistry {
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 10),
           EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.6),
           EffectParam.color('color', defaultValue: Color(0xFF000000)),
+          EffectParam.number(
+            'blend',
+            min: 0,
+            max: 16,
+            defaultValue: 0,
+            step: 1,
+          ),
         ],
         inner: (e) => ShadowSpec(
+          blend:
+              PixBlendMode.values[e
+                  .number('blend', 0)
+                  .round()
+                  .clamp(0, PixBlendMode.values.length - 1)],
           offset: polar(e.number('distance', 8), e.number('angle', 45)),
           blur: e.number('blur', 10),
           color: withOpacity(

@@ -9,6 +9,7 @@ import '../effects/effect_registry.dart';
 import '../model/blend.dart';
 import '../model/document.dart';
 import '../model/layer.dart';
+import '../model/layer_stroke.dart';
 import '../model/layer_transform.dart';
 import '../model/mask.dart';
 import 'brush_paint.dart';
@@ -258,6 +259,11 @@ class DocumentRenderer {
     for (final x in extrudes) {
       margin = math.max(margin, x.depth / ms + 4);
     }
+    final stroke = !isGroup && (props.stroke?.visible ?? false)
+        ? props.stroke
+        : null;
+    // Outer effects start from the stroke's edge.
+    if (stroke != null) margin += stroke.outside + 2;
     // Children of a group may carry their own effects, so a group's layer
     // is left unbounded rather than risk clipping them.
     final Rect? layerBounds = isGroup ? null : local.inflate(margin + 2);
@@ -284,11 +290,28 @@ class DocumentRenderer {
     // Effects redraw the shape many times; stamp one pre-rendered bitmap
     // of it instead (the visible content itself stays vector).
     final passes =
-        shadows.length + inners.length + bevels.length * 4 + extrudes.length;
+        shadows.length +
+        inners.length +
+        bevels.length * 4 +
+        extrudes.length +
+        (stroke == null ? 0 : 8);
     final stamp = !isGroup && passes >= 2
         ? _Stamp.of(layer, shape, pixelScale)
         : null;
     void effectShape(Canvas c) => stamp == null ? shape(c) : stamp.draw(c);
+
+    // The stroke band, coloured, rendered once: exact vector outlines for
+    // shapes, icons and flat text; otherwise grown from the layer's pixels.
+    final band = stroke == null || stamp == null
+        ? null
+        : (_vectorBand(layer, stroke, stamp, local) ??
+              stamp.strokeBand(stroke, local));
+
+    // Outer effects (shadows, glows) follow the layer and its stroke.
+    void outerShape(Canvas c) {
+      effectShape(c);
+      band?.draw(c);
+    }
 
     // Effect offsets are in document space; undo rotation/scale so they
     // always fall the same way.
@@ -300,11 +323,18 @@ class DocumentRenderer {
       );
     }
 
-    void silhouette(Offset docOffset, double blurPx, Color color) {
+    void silhouette(
+      Offset docOffset,
+      double blurPx,
+      Color color, {
+      BlendMode mode = BlendMode.srcOver,
+      bool outer = false,
+    }) {
       final lo = toLocal(docOffset);
       canvas.saveLayer(
         layerBounds,
         Paint()
+          ..blendMode = mode
           ..colorFilter = ColorFilter.mode(color, BlendMode.srcIn)
           ..imageFilter = blurPx > 0
               ? ui.ImageFilter.blur(
@@ -315,12 +345,12 @@ class DocumentRenderer {
               : null,
       );
       canvas.translate(lo.dx, lo.dy);
-      effectShape(canvas);
+      outer ? outerShape(canvas) : effectShape(canvas);
       canvas.restore();
     }
 
     for (final s in shadows) {
-      silhouette(s.offset, s.blur, s.color);
+      silhouette(s.offset, s.blur, s.color, mode: s.blend.engine, outer: true);
     }
     for (final x in extrudes) {
       _paintExtrude(
@@ -373,7 +403,12 @@ class DocumentRenderer {
     }
 
     void innerEffects({required bool clipToShape}) {
-      void inner(Offset docOffset, double blurPx, Color color) => _paintInner(
+      void inner(
+        Offset docOffset,
+        double blurPx,
+        Color color, [
+        BlendMode mode = BlendMode.srcOver,
+      ]) => _paintInner(
         canvas,
         toLocal(docOffset),
         blurPx,
@@ -381,9 +416,10 @@ class DocumentRenderer {
         layerBounds ?? local.inflate(4000),
         shape,
         clipToShape: clipToShape,
+        mode: mode,
       );
       for (final s in inners) {
-        inner(s.offset, s.blur, s.color);
+        inner(s.offset, s.blur, s.color, s.blend.engine);
       }
       for (final b in bevels) {
         if (b.style == BevelStyle.outer) continue;
@@ -419,15 +455,88 @@ class DocumentRenderer {
       }
     }
 
+    // Stroke on top, with its own opacity and blend mode; Fill opacity
+    // does not fade it.
+    if (band != null) {
+      band.draw(
+        canvas,
+        Offset.zero,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = stroke!.blend.engine
+          ..color = Color.fromRGBO(0, 0, 0, stroke.opacity.clamp(0.0, 1.0)),
+      );
+      band.dispose();
+    }
+
     if (needsGroup) canvas.restore();
     canvas.restore();
     stamp?.dispose();
   }
 
+  /// Photoshop's stroke from the layer's vector outline: the outline drawn
+  /// twice as wide as the stroke (once for centre), clipped outside or
+  /// inside the shape, then coloured. Null when the layer has no plain
+  /// outline (images, curved or boxed text, masked layers).
+  _Stamp? _vectorBand(
+    Layer layer,
+    LayerStroke s,
+    _Stamp shapeStamp,
+    Rect local,
+  ) {
+    if (layer.props.hasMask) return null;
+    final width = s.position == StrokePosition.center ? s.size : s.size * 2;
+    void Function(Canvas c)? outline;
+    switch (layer) {
+      case ShapeLayer l:
+        final path = buildShapePath(l);
+        outline = (c) => c.drawPath(path, _outlinePaint(width));
+      case IconLayer l:
+        final path = iconPath(l);
+        outline = (c) => c.drawPath(path, _outlinePaint(width));
+      case TextLayer l when l.background == null && l.curve.abs() < 0.5:
+        final entry = TextLayoutCache.instance.entry(l);
+        outline = (c) => entry.paintOutline(c, width);
+      default:
+        return null;
+    }
+    final box = shapeStamp.rect.inflate(s.outside + 2);
+    return _Stamp._make(box, shapeStamp._res, (c) {
+      c.saveLayer(box, Paint());
+      outline!(c);
+      switch (s.position) {
+        case StrokePosition.outside:
+          shapeStamp.draw(
+            c,
+            Offset.zero,
+            Paint()..blendMode = BlendMode.dstOut,
+          );
+        case StrokePosition.inside:
+          shapeStamp.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstIn);
+        case StrokePosition.center:
+          break;
+      }
+      c.drawRect(
+        box,
+        s.fill.applyTo(Paint(), local.inflate(s.outside))
+          ..blendMode = BlendMode.srcIn,
+      );
+      c.restore();
+    });
+  }
+
+  static Paint _outlinePaint(double width) => Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = width
+    ..strokeJoin = StrokeJoin.round
+    ..isAntiAlias = true
+    ..color = const Color(0xFFFFFFFF);
+
   /// Whether a layer is worth caching as a bitmap.
   bool _isExpensive(Layer layer) {
     final p = layer.props;
     if (p.hasMask) return true;
+    if (p.stroke?.visible ?? false) return true;
     if (layer is TextLayer && layer.curve.abs() >= 0.5) return true;
     for (final e in p.effects) {
       if (!e.enabled) continue;
@@ -509,12 +618,15 @@ class DocumentRenderer {
     Rect area,
     void Function(Canvas) shape, {
     bool clipToShape = false,
+    BlendMode mode = BlendMode.srcOver,
   }) {
     // Over existing content: srcATop keeps it inside the painted pixels.
-    // Alone (fill opacity): clip to the full-strength shape instead.
+    // Alone (fill opacity) or with a blend mode: clip to the shape, then
+    // composite with the mode.
+    final clip = clipToShape || mode != BlendMode.srcOver;
     canvas.saveLayer(
       area,
-      Paint()..blendMode = clipToShape ? BlendMode.srcOver : BlendMode.srcATop,
+      Paint()..blendMode = clip ? mode : BlendMode.srcATop,
     );
     canvas.saveLayer(
       area,
@@ -537,7 +649,7 @@ class DocumentRenderer {
       ..restore()
       ..restore()
       ..restore();
-    if (clipToShape) {
+    if (clip) {
       canvas.saveLayer(area, Paint()..blendMode = BlendMode.dstIn);
       shape(canvas);
       canvas.restore();
@@ -951,22 +1063,28 @@ class DocumentRenderer {
   double _effectSpill(Iterable<Layer> layers) {
     var spill = 0.0;
     for (final l in layers) {
+      var own = 0.0;
       for (final e in l.props.effects) {
         if (!e.enabled) continue;
         final def = _fx[e.type];
         if (def == null) continue;
-        spill = math.max(spill, (def.blurSigma?.call(e) ?? 0) * 3);
+        own = math.max(own, (def.blurSigma?.call(e) ?? 0) * 3);
         final s = def.shadow?.call(e);
-        if (s != null) {
-          spill = math.max(spill, s.blur * 1.5 + s.offset.distance);
-        }
+        if (s != null) own = math.max(own, s.blur * 1.5 + s.offset.distance);
         if (def.extrude?.call(e) case final x?) {
-          spill = math.max(spill, x.depth + 2);
+          own = math.max(own, x.depth + 2);
         }
         if (def.bevel?.call(e) case final b?) {
-          spill = math.max(spill, b.depth + b.size + b.soften);
+          own = math.max(own, b.depth + b.size + b.soften);
         }
       }
+      // Shadows and glows start from the stroke's edge.
+      final st = l.props.stroke;
+      if (st != null && st.visible) {
+        final t = l.props.transform;
+        own += st.outside * math.max(t.scaleX.abs(), t.scaleY.abs()) + 2;
+      }
+      spill = math.max(spill, own);
       if (l is GroupLayer) spill = math.max(spill, _effectSpill(l.children));
     }
     return spill;
@@ -1006,13 +1124,94 @@ class _Stamp {
   final Rect rect;
   static final Paint _paint = Paint()..filterQuality = FilterQuality.medium;
 
-  void draw(Canvas canvas, [Offset offset = Offset.zero]) {
+  void draw(Canvas canvas, [Offset offset = Offset.zero, Paint? paint]) {
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
       rect.shift(offset),
-      _paint,
+      paint ?? _paint,
     );
+  }
+
+  /// Pixels per local unit.
+  double get _res => image.width / rect.width;
+
+  /// A new stamp of [w]×[h] over [box], drawn by [paint].
+  static _Stamp _make(Rect box, double res, void Function(Canvas c) paint) {
+    final w = math.max(1, (box.width * res).ceil());
+    final h = math.max(1, (box.height * res).ceil());
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(w / box.width, h / box.height)
+      ..translate(-box.left, -box.top);
+    paint(c);
+    final picture = recorder.endRecording();
+    final out = picture.toImageSync(w, h);
+    picture.dispose();
+    return _Stamp._(out, box);
+  }
+
+  /// Offsets covering a disk of radius [r] (local units): rings about
+  /// every 3 output pixels, up to 48 points each — morphology by stamping.
+  static List<Offset> _disk(double r, double res) {
+    if (r <= 0) return const [];
+    final rings = (r * res / 3).ceil().clamp(1, 6);
+    final out = <Offset>[];
+    for (var k = 1; k <= rings; k++) {
+      final rr = r * k / rings;
+      final n = (2 * math.pi * rr * res / 2.5).ceil().clamp(8, 48);
+      for (var i = 0; i < n; i++) {
+        out.add(Offset.fromDirection(2 * math.pi * i / n, rr));
+      }
+    }
+    return out;
+  }
+
+  /// Photoshop's Stroke style from this shape: grow it by the outside
+  /// width, take away the shape shrunk by the inside width, and colour
+  /// the band with the stroke's fill (laid out over [layerBox] grown by
+  /// the outside width).
+  _Stamp strokeBand(LayerStroke s, Rect layerBox) {
+    final res = _res;
+    final outR = s.outside, inR = s.inside;
+    final box = rect.inflate(outR + 2);
+    // The outside of the shape, for erosion: shape − grow(outside).
+    final outside = inR > 0
+        ? _make(rect.inflate(inR + 2), res, (c) {
+            final b = rect.inflate(inR + 2);
+            c.drawRect(b, Paint()..color = const Color(0xFFFFFFFF));
+            draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
+          })
+        : null;
+    final band = _make(box, res, (c) {
+      c.saveLayer(box, Paint());
+      // Grown shape.
+      draw(c);
+      for (final o in _disk(outR, res)) {
+        draw(c, o);
+      }
+      // Minus the shrunk shape.
+      c.saveLayer(box, Paint()..blendMode = BlendMode.dstOut);
+      draw(c);
+      if (outside != null) {
+        c.saveLayer(box, Paint()..blendMode = BlendMode.dstOut);
+        outside.draw(c);
+        for (final o in _disk(inR, res)) {
+          outside.draw(c, o);
+        }
+        c.restore();
+      }
+      c.restore();
+      // Colour it.
+      c.drawRect(
+        box,
+        s.fill.applyTo(Paint(), layerBox.inflate(outR))
+          ..blendMode = BlendMode.srcIn,
+      );
+      c.restore();
+    });
+    outside?.dispose();
+    return band;
   }
 
   void dispose() => image.dispose();

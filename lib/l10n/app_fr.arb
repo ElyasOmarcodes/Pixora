@@ -548,5 +548,8 @@
   "seamless": "Sans raccord (miroir)",
   "seamlessHint": "Reflète la tuile pour que ses bords se rejoignent",
   "patternColor": "Couleur du motif",
-  "deletePattern": "Supprimer ce motif ?"
+  "deletePattern": "Supprimer ce motif ?",
+  "strokeOutside": "Extérieur",
+  "strokeCenter": "Centre",
+  "strokeInside": "Intérieur"
 }

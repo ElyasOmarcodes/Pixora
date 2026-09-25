@@ -239,9 +239,43 @@ InlineSpan _spanTree(
 }
 
 class TextLayoutEntry {
-  TextLayoutEntry._(this.layer, this.fill, this.stroke, this.size, this._mesh);
+  TextLayoutEntry._(
+    this.layer,
+    this.fill,
+    this.stroke,
+    this.size,
+    this._mesh,
+    this._outlineMaker,
+  );
 
   final TextLayer layer;
+
+  /// Builds a painter drawing the glyph outlines with a given paint.
+  final TextPainter Function(Paint paint) _outlineMaker;
+  final Map<double, TextPainter> _outlines = {};
+
+  /// Paints the glyph outlines, [width] wide and centred on the glyph
+  /// edges, in opaque white — the vector source of a stroke style. Returns
+  /// false for curved text (which has no flat outline).
+  bool paintOutline(Canvas canvas, double width) {
+    if (_mesh != null) return false;
+    final p = _outlines[width] ??= _outlineMaker(
+      Paint()
+        ..style = ui.PaintingStyle.stroke
+        ..strokeWidth = width
+        ..strokeJoin = ui.StrokeJoin.round
+        ..strokeCap = ui.StrokeCap.round
+        ..color = const Color(0xFFFFFFFF),
+    );
+    if (_outlines.length > 8) _outlines.remove(_outlines.keys.first);
+    canvas
+      ..save()
+      ..translate(-fill.width / 2, -fill.height / 2);
+    p.paint(canvas, Offset.zero);
+    canvas.restore();
+    return true;
+  }
+
   final TextPainter fill;
   final TextPainter? stroke;
 
@@ -325,7 +359,14 @@ class TextLayoutEntry {
     if (l.curve.abs() < 0.5 || fill.width <= 0) {
       final w = fill.width + 2 * math.max(pad, bgPad.width);
       final h = fill.height + 2 * math.max(pad, bgPad.height);
-      return TextLayoutEntry._(l, fill, stroke, Size(w, h), null);
+      return TextLayoutEntry._(
+        l,
+        fill,
+        stroke,
+        Size(w, h),
+        null,
+        (p) => make(p, stroke: true),
+      );
     }
 
     // Curved: map the straight layout onto concentric arcs. A point at
@@ -390,6 +431,7 @@ class TextLayoutEntry {
       stroke,
       size,
       _CurveMesh(source: source, positions: pos, xs: xs),
+      (p) => make(p, stroke: true),
     );
   }
 

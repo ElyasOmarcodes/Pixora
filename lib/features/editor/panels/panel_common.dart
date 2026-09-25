@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../document/model/blend.dart';
 import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
@@ -176,3 +177,65 @@ String shapeLabel(AppLocalizations l, ShapeKind k) => switch (k) {
   ShapeKind.gear => l.shapeGear,
   ShapeKind.frame => l.shapeFrame,
 };
+
+/// "Blend mode ▾" row: a label and a menu of Photoshop's modes, grouped.
+class BlendModeRow extends StatelessWidget {
+  const BlendModeRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+  final String label;
+  final PixBlendMode value;
+  final ValueChanged<PixBlendMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 2, 12, 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+          PopupMenuButton<PixBlendMode>(
+            initialValue: value,
+            onSelected: onChanged,
+            itemBuilder: (_) => [
+              for (final m in PixBlendMode.values) ...[
+                if (m.index > 0 &&
+                    m.category != PixBlendMode.values[m.index - 1].category)
+                  const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: m,
+                  height: 40,
+                  child: Text(m.label, textDirection: TextDirection.ltr),
+                ),
+              ],
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(PixTokens.radiusM),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value.label,
+                    textDirection: TextDirection.ltr,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Icon(Icons.arrow_drop_down_rounded),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -548,5 +548,8 @@
   "seamless": "Dikişsiz (ayna)",
   "seamlessHint": "Kenarları buluşsun diye döşemeyi aynalar",
   "patternColor": "Desen rengi",
-  "deletePattern": "Bu desen silinsin mi?"
+  "deletePattern": "Bu desen silinsin mi?",
+  "strokeOutside": "Dış",
+  "strokeCenter": "Orta",
+  "strokeInside": "İç"
 }

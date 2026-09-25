@@ -548,5 +548,8 @@
   "seamless": "بغیر جوڑ (آئینہ)",
   "seamlessHint": "ٹائل کو آئینہ کرتا ہے تاکہ کنارے ملیں",
   "patternColor": "پیٹرن کا رنگ",
-  "deletePattern": "یہ پیٹرن حذف کریں؟"
+  "deletePattern": "یہ پیٹرن حذف کریں؟",
+  "strokeOutside": "باہر",
+  "strokeCenter": "درمیان",
+  "strokeInside": "اندر"
 }

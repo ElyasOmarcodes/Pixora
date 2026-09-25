@@ -548,5 +548,8 @@
   "seamless": "بدون درز (آینه‌ای)",
   "seamlessHint": "کاشی را آینه می‌کند تا لبه‌ها به هم برسند",
   "patternColor": "رنگ الگو",
-  "deletePattern": "این الگو حذف شود؟"
+  "deletePattern": "این الگو حذف شود؟",
+  "strokeOutside": "بیرون",
+  "strokeCenter": "مرکز",
+  "strokeInside": "داخل"
 }

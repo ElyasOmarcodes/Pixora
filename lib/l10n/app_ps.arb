@@ -548,5 +548,8 @@
   "seamless": "بې‌درزه (هنداره)",
   "seamlessHint": "ټوټه هنداره کوي تر څو څنډې یې سره برابرې شي",
   "patternColor": "د پټرن رنګ",
-  "deletePattern": "دا پټرن ړنګ شي؟"
+  "deletePattern": "دا پټرن ړنګ شي؟",
+  "strokeOutside": "بهر",
+  "strokeCenter": "منځ",
+  "strokeInside": "دننه"
 }
