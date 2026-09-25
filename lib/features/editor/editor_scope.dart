@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../editor/editor_controller.dart';
+import '../../editor/selection/selection_controller.dart';
 import '../../editor/tools/draw_tool.dart';
 import '../../editor/tools/mask_tool.dart';
 import '../../editor/tools/pen_tool.dart';
@@ -37,6 +38,7 @@ enum ToolPanel {
   bevel,
   extrude,
   colorFill,
+  selection,
 }
 
 /// What pointer input on the canvas does.
@@ -58,6 +60,9 @@ enum ToolMode {
 
   /// Freehand brush on a drawing layer.
   draw,
+
+  /// Pixel selections (Select menu).
+  select,
 }
 
 /// Editor UI state that is not part of the document (and therefore not
@@ -76,6 +81,9 @@ class EditorUiState extends ChangeNotifier {
   /// Freehand brush settings (drawing layers).
   final BrushSettings brushSettings = BrushSettings();
 
+  /// Pixel selection and Select-menu settings.
+  final SelectionController selection = SelectionController();
+
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;
   ToolMode get mode => _mode;
@@ -83,6 +91,8 @@ class EditorUiState extends ChangeNotifier {
   set mode(ToolMode m) {
     if (_mode == m) return;
     _mode = m;
+    selection.setActive(m == ToolMode.select);
+    if (m != ToolMode.select && _panel == ToolPanel.selection) _panel = null;
     notifyListeners();
   }
 
@@ -96,12 +106,16 @@ class EditorUiState extends ChangeNotifier {
       _mode = ToolMode.pen;
     } else if (p == ToolPanel.brush) {
       _mode = ToolMode.draw;
+    } else if (p == ToolPanel.selection) {
+      _mode = ToolMode.select;
     } else if (_mode == ToolMode.mask ||
         _mode == ToolMode.pen ||
-        _mode == ToolMode.draw) {
+        _mode == ToolMode.draw ||
+        _mode == ToolMode.select) {
       _mode = ToolMode.move;
       maskBrush.clearPen();
     }
+    selection.setActive(_mode == ToolMode.select);
     notifyListeners();
   }
 
@@ -110,6 +124,7 @@ class EditorUiState extends ChangeNotifier {
     maskBrush.dispose();
     penState.dispose();
     brushSettings.dispose();
+    selection.dispose();
     super.dispose();
   }
 

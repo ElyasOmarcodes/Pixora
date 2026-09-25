@@ -40,6 +40,7 @@ class TopBarActions {
 
 enum _More {
   share,
+  selection,
   rulers,
   gridSettings,
   snapSettings,
@@ -246,6 +247,7 @@ class EditorTopBar extends StatelessWidget {
         ),
         onSelected: (a) => switch (a) {
           _More.share => actions.exportImage(),
+          _More.selection => _openPanel(ToolPanel.selection),
           _More.rulers => _openPanel(ToolPanel.rulers),
           _More.gridSettings => _openPanel(ToolPanel.grid),
           _More.snapSettings => _openPanel(ToolPanel.snap),
@@ -261,6 +263,14 @@ class EditorTopBar extends StatelessWidget {
                 title: Text(l.shareImage),
               ),
             ),
+          PopupMenuItem(
+            value: _More.selection,
+            child: ListTile(
+              leading: const Icon(Icons.highlight_alt_rounded),
+              title: Text(l.selection),
+            ),
+          ),
+          const PopupMenuDivider(),
           PopupMenuItem(
             value: _More.rulers,
             child: ListTile(

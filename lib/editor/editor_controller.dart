@@ -21,6 +21,7 @@ import '../document/render/layer_cache.dart';
 import '../document/render/brush_paint.dart';
 import '../document/render/vector_paths.dart';
 import 'history.dart';
+import 'selection/pixel_selection.dart';
 
 /// Signature of a document edit. Every change to a document is expressed as
 /// one of these pure functions.
@@ -1274,6 +1275,277 @@ class EditorController extends ChangeNotifier {
                   }),
           );
     });
+  }
+
+  // ------------------------------------------------------------ selection
+  //
+  // Pixel selections live in the editor UI (see SelectionController); these
+  // turn them into document edits. Each action is one undo step.
+
+  static Future<Image> _selectionImage(PixelSelection sel) {
+    final done = Completer<Image>();
+    decodeImageFromPixels(
+      sel.toRgba(),
+      sel.width,
+      sel.height,
+      PixelFormat.rgba8888,
+      done.complete,
+    );
+    return done.future;
+  }
+
+  static Future<Uint8List> _png(Picture picture, int w, int h) async {
+    final img = await picture.toImage(w, h);
+    picture.dispose();
+    final data = await img.toByteData(format: ImageByteFormat.png);
+    img.dispose();
+    return data!.buffer.asUint8List();
+  }
+
+  /// Selection bounds snapped to whole pixels and clipped to the canvas.
+  Rect? _selectionRect(PixelSelection sel) {
+    final b = sel.bounds?.intersect(_document.bounds);
+    if (b == null || b.isEmpty) return null;
+    return Rect.fromLTRB(
+      b.left.floorToDouble(),
+      b.top.floorToDouble(),
+      b.right.ceilToDouble(),
+      b.bottom.ceilToDouble(),
+    );
+  }
+
+  /// A bitmap mask stroke for layer [l] from [sel]: with [reveal] only the
+  /// selection stays visible (Photoshop's "Reveal selection"), otherwise
+  /// the selection is hidden (Delete / Cut).
+  Future<MaskStroke?> _selectionMaskStroke(
+    Layer l,
+    PixelSelection sel, {
+    required bool reveal,
+  }) async {
+    final lr = layerLocalRect(l);
+    if (lr.isEmpty || !lr.isFinite) return null;
+    final k = math.min(1.0, 2048 / math.max(lr.width, lr.height));
+    final w = math.max(1, (lr.width * k).ceil());
+    final h = math.max(1, (lr.height * k).ceil());
+    final inv = _invert3(l.props.transform.homography);
+    if (inv == null) return null;
+    final img = await _selectionImage(sel);
+    final recorder = PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(w / lr.width, h / lr.height)
+      ..translate(-lr.left, -lr.top);
+    if (reveal) c.drawRect(lr, Paint()..color = const Color(0xFFFFFFFF));
+    c
+      ..save()
+      ..transform(
+        Float64List.fromList([
+          inv[0], inv[3], 0, inv[6], //
+          inv[1], inv[4], 0, inv[7], //
+          0, 0, 1, 0, //
+          inv[2], inv[5], 0, inv[8], //
+        ]),
+      )
+      ..drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        _document.bounds,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = reveal ? BlendMode.dstOut : BlendMode.srcOver,
+      )
+      ..restore();
+    img.dispose();
+    final png = await _png(recorder.endRecording(), w, h);
+    final assetId = assets.add(png);
+    await assets.decode(assetId);
+    return MaskStroke(
+      mode: MaskMode.hide,
+      shape: MaskShape.image,
+      points: [lr.topLeft, lr.bottomRight],
+      assetId: assetId,
+    );
+  }
+
+  static List<double>? _invert3(List<double> m) {
+    final a = m[0], b = m[1], c = m[2];
+    final d = m[3], e = m[4], f = m[5];
+    final g = m[6], h = m[7], i = m[8];
+    final det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+    if (det.abs() < 1e-12) return null;
+    final s = 1 / det;
+    return [
+      (e * i - f * h) * s,
+      (c * h - b * i) * s,
+      (b * f - c * e) * s,
+      (f * g - d * i) * s,
+      (a * i - c * g) * s,
+      (c * d - a * f) * s,
+      (d * h - e * g) * s,
+      (b * g - a * h) * s,
+      (a * e - b * d) * s,
+    ];
+  }
+
+  /// Layer mask that shows only the selection (intersected with an
+  /// existing mask).
+  Future<bool> maskFromSelection(String id, PixelSelection sel) async {
+    final l = _document.layerById(id);
+    if (l == null) return false;
+    final s = await _selectionMaskStroke(l, sel, reveal: true);
+    if (s == null) return false;
+    addMaskStrokes(id, [s]);
+    return true;
+  }
+
+  /// Photoshop's Delete on a selection, non-destructively: the selected
+  /// part of the layer is hidden with its mask.
+  Future<bool> clearSelection(String id, PixelSelection sel) async {
+    final l = _document.layerById(id);
+    if (l == null) return false;
+    final s = await _selectionMaskStroke(l, sel, reveal: false);
+    if (s == null) return false;
+    addMaskStrokes(id, [s]);
+    return true;
+  }
+
+  /// Renders the selected pixels of [sourceId] (null = the whole visible
+  /// canvas, background included) into a new image layer above the
+  /// selection. With [cut] the source layer hides that part in the same
+  /// undo step (Layer via Cut).
+  Future<RasterLayer?> copySelectionToLayer(
+    PixelSelection sel, {
+    String? sourceId,
+    bool cut = false,
+    String name = 'Selection',
+  }) async {
+    final b = _selectionRect(sel);
+    if (b == null) return null;
+    var src = _document;
+    final source = sourceId == null ? null : src.layerById(sourceId);
+    if (sourceId != null) {
+      if (source == null) return null;
+      src = src.copyWith(clearBackground: true, layers: [source]);
+    }
+    await assets.decodeAll(src.referencedAssets);
+    final img = await _selectionImage(sel);
+    final k = math.min(1.0, 8192 / math.max(b.width, b.height));
+    final w = math.max(1, (b.width * k).round());
+    final h = math.max(1, (b.height * k).round());
+    final recorder = PictureRecorder();
+    final c = Canvas(recorder)
+      ..scale(k)
+      ..translate(-b.left, -b.top)
+      ..saveLayer(b, Paint());
+    renderer.paint(c, src);
+    c
+      ..drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        _document.bounds,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = BlendMode.dstIn,
+      )
+      ..restore();
+    img.dispose();
+    final png = await _png(recorder.endRecording(), w, h);
+    final raster = _rasterFrom(
+      (png, b),
+      Size(w.toDouble(), h.toDouble()),
+      LayerProps(name: _nextName(name)),
+    );
+    MaskStroke? hide;
+    if (cut && source != null) {
+      hide = await _selectionMaskStroke(source, sel, reveal: false);
+    }
+    apply(cut ? 'cut_selection' : 'copy_selection', (d) {
+      var next = d;
+      if (hide != null && sourceId != null && d.contains(sourceId)) {
+        next = next.updateLayer(
+          sourceId,
+          (l) => l.update(
+            (p) =>
+                p.copyWith(mask: _pack([...p.mask, hide!]), maskEnabled: true),
+          ),
+        );
+        return next.insertLayer(
+          raster,
+          parentId: next.parentOf(sourceId)?.id,
+          index: next.indexOf(sourceId) + 1,
+        );
+      }
+      return _insertAtCursor(next, raster);
+    }, select: raster.id);
+    return raster;
+  }
+
+  /// Fills the selection with [color] on a new image layer.
+  Future<RasterLayer?> fillSelection(
+    PixelSelection sel,
+    Color color, {
+    String name = 'Fill',
+  }) async {
+    final b = _selectionRect(sel);
+    if (b == null) return null;
+    final img = await _selectionImage(sel);
+    final k = math.min(1.0, 8192 / math.max(b.width, b.height));
+    final w = math.max(1, (b.width * k).round());
+    final h = math.max(1, (b.height * k).round());
+    final recorder = PictureRecorder();
+    Canvas(recorder)
+      ..scale(k)
+      ..translate(-b.left, -b.top)
+      ..drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        _document.bounds,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..colorFilter = ColorFilter.mode(color, BlendMode.srcIn),
+      );
+    img.dispose();
+    final png = await _png(recorder.endRecording(), w, h);
+    final raster = _rasterFrom(
+      (png, b),
+      Size(w.toDouble(), h.toDouble()),
+      LayerProps(name: _nextName(name)),
+    );
+    apply(
+      'fill_selection',
+      (d) => _insertAtCursor(d, raster),
+      select: raster.id,
+    );
+    return raster;
+  }
+
+  /// Crops the canvas to the selection's bounds (layers keep their place
+  /// on the design).
+  bool cropToSelection(PixelSelection sel) {
+    final b = _selectionRect(sel);
+    if (b == null) return false;
+    apply('crop_canvas', (d) {
+      final g = d.guides;
+      return d
+          .copyWith(
+            width: b.width,
+            height: b.height,
+            guides: g.copyWith(
+              vertical: [for (final x in g.vertical) x - b.left],
+              horizontal: [for (final y in g.horizontal) y - b.top],
+            ),
+          )
+          .mapLayers(
+            (l) => l is GroupLayer
+                ? l
+                : l.update((p) {
+                    final t = p.transform;
+                    return p.copyWith(
+                      transform: t.copyWith(x: t.x - b.left, y: t.y - b.top),
+                    );
+                  }),
+          );
+    });
+    return true;
   }
 
   /// Topmost visible, unlocked leaf layer under [docPoint] (layers inside

@@ -116,9 +116,12 @@ class _CanvasViewState extends State<CanvasView>
     super.dispose();
   }
 
+  Offset? _pointerDown;
+
   ToolContext get _ctx {
     final pix = PixColors.of(context);
     return ToolContext(
+      pointerDown: _pointerDown,
       editor: widget.editor,
       viewport: _vp,
       snap: widget.snap,
@@ -287,6 +290,7 @@ class _CanvasViewState extends State<CanvasView>
             color: pix.canvasBackdrop,
             child: Listener(
               onPointerSignal: _onPointerSignal,
+              onPointerDown: (e) => _pointerDown = e.localPosition,
               child: MouseRegion(
                 cursor: _cursor,
                 onHover: _onHover,

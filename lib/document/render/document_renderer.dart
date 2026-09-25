@@ -42,11 +42,17 @@ Rect layerLocalRect(Layer layer) {
 }
 
 /// Asset ids used by [layer] and, for groups, its descendants.
-Set<String> assetsOf(Layer layer) => switch (layer) {
-  RasterLayer l => {l.assetId, ?l.sourceAssetId},
-  GroupLayer g => {for (final c in g.children) ...assetsOf(c)},
-  _ => const {},
+Set<String> assetsOf(Layer layer) => {
+  ...layer.props.maskAssets,
+  ...switch (layer) {
+    RasterLayer l => {l.assetId, ?l.sourceAssetId},
+    GroupLayer g => {for (final c in g.children) ...assetsOf(c)},
+    _ => const <String>{},
+  },
 };
+
+/// Looks up a decoded asset image (null while it is still decoding).
+typedef MaskImageLookup = ui.Image? Function(String assetId);
 
 /// Union of the document-space bounds of [layers] (Rect.zero if empty).
 Rect unionBounds(Iterable<Layer> layers) {
@@ -414,6 +420,9 @@ class DocumentRenderer {
     if (layer is RasterLayer && assets.imageOf(layer.assetId) == null) {
       return null; // not decoded yet — don't cache the placeholder
     }
+    for (final id in layer.props.maskAssets) {
+      if (assets.imageOf(id) == null) return null;
+    }
     final p = layer.props;
     final base = layer.withProps(
       p.copyWith(
@@ -570,7 +579,7 @@ class DocumentRenderer {
     final area = (bounds ?? layerLocalRect(layer).inflate(4000)).inflate(
       f * 3 + 2,
     );
-    paintMask(canvas, props.mask, area);
+    paintMask(canvas, props.mask, area, images: assets.imageOf);
     canvas
       ..restore()
       ..restore();
@@ -578,10 +587,15 @@ class DocumentRenderer {
 
   /// Draws a mask as alpha (opaque = visible) over [area]: starts white
   /// (reveal all) and applies every stroke in order.
-  static void paintMask(Canvas canvas, List<MaskStroke> mask, Rect area) {
+  static void paintMask(
+    Canvas canvas,
+    List<MaskStroke> mask,
+    Rect area, {
+    MaskImageLookup? images,
+  }) {
     canvas.drawRect(area, Paint()..color = const Color(0xFFFFFFFF));
     for (final s in mask) {
-      paintMaskStroke(canvas, s, area);
+      paintMaskStroke(canvas, s, area, images);
     }
   }
 
@@ -589,10 +603,53 @@ class DocumentRenderer {
   /// stroke replaces the mask with its grey [MaskStroke.value] by its
   /// coverage × opacity — `new = old·(1 − c) + grey·c` — done as an erase
   /// (dstOut) followed by an additive (plus) pass over the same shape.
-  static void paintMaskStroke(Canvas canvas, MaskStroke s, [Rect? area]) {
+  static void paintMaskStroke(
+    Canvas canvas,
+    MaskStroke s, [
+    Rect? area,
+    MaskImageLookup? images,
+  ]) {
     final whole = area ?? const Rect.fromLTWH(-1e5, -1e5, 2e5, 2e5);
     final v = s.value.clamp(0.0, 1.0), a = s.opacity.clamp(0.0, 1.0);
     if (a <= 0) return;
+
+    // Bitmap coverage (selections turned into masks).
+    if (s.shape == MaskShape.image) {
+      final id = s.assetId;
+      final img = id == null ? null : images?.call(id);
+      if (img == null || s.points.length < 2) return;
+      final src = Rect.fromLTWH(
+        0,
+        0,
+        img.width.toDouble(),
+        img.height.toDouble(),
+      );
+      final dst = Rect.fromPoints(s.points[0], s.points[1]);
+      canvas.drawImageRect(
+        img,
+        src,
+        dst,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..blendMode = BlendMode.dstOut
+          ..color = Color.fromRGBO(0, 0, 0, a),
+      );
+      if (v * a > 0) {
+        canvas.drawImageRect(
+          img,
+          src,
+          dst,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..blendMode = BlendMode.plus
+            ..colorFilter = ColorFilter.mode(
+              Color.fromRGBO(255, 255, 255, v * a),
+              BlendMode.srcIn,
+            ),
+        );
+      }
+      return;
+    }
 
     // Whole-mask fill and gradients.
     if (s.shape == MaskShape.fill ||

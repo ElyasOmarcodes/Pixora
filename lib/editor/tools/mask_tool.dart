@@ -395,7 +395,12 @@ class MaskTool extends EditorTool {
       ..saveLayer(area, Paint())
       ..drawRect(area, Paint()..color = const Color(0x88FF2D55))
       ..saveLayer(area, Paint()..blendMode = BlendMode.dstOut);
-    DocumentRenderer.paintMask(canvas, l.props.mask, area);
+    DocumentRenderer.paintMask(
+      canvas,
+      l.props.mask,
+      area,
+      images: ctx.editor.assets.imageOf,
+    );
     canvas
       ..restore()
       ..restore()

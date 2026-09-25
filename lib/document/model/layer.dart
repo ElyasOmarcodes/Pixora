@@ -72,6 +72,9 @@ class LayerProps {
 
   bool get hasMask => mask.isNotEmpty && maskEnabled;
 
+  /// Asset ids of bitmap mask strokes.
+  Iterable<String> get maskAssets => [for (final s in mask) ?s.assetId];
+
   LayerProps copyWith({
     String? id,
     String? name,

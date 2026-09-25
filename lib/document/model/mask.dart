@@ -26,6 +26,11 @@ enum MaskShape {
 
   /// Radial gradient: centre `points[0]`, edge at `points[1]`.
   radial,
+
+  /// A bitmap (from a selection): its alpha is the coverage, drawn over
+  /// the rect `points[0]`–`points[1]`. The PNG lives in the asset store
+  /// under [MaskStroke.assetId].
+  image,
 }
 
 /// One brush or pen stroke on a layer mask, in the layer's local space so
@@ -42,7 +47,11 @@ class MaskStroke {
     this.contour,
     this.level,
     this.opacity = 1,
+    this.assetId,
   }) : points = List.unmodifiable(points);
+
+  /// Bitmap coverage for [MaskShape.image] strokes.
+  final String? assetId;
 
   /// Grey painted into the mask, Photoshop style: 0 = black (hide),
   /// 1 = white (reveal), in between = partly visible. Null = from [mode].
@@ -64,6 +73,7 @@ class MaskStroke {
     contour: contour,
     level: level == null ? null : 1 - level!,
     opacity: opacity,
+    assetId: assetId,
   );
 
   /// Bezier outline drawn with the pen (area strokes); overrides [points].
@@ -88,6 +98,7 @@ class MaskStroke {
     contour: contour,
     level: level,
     opacity: opacity,
+    assetId: assetId,
   );
 
   Json toJson() => {
@@ -100,6 +111,7 @@ class MaskStroke {
     if (contour != null) 'path': contour!.toJson(),
     if (level != null) 'lv': level,
     if (opacity != 1) 'op': opacity,
+    if (assetId != null) 'asset': assetId,
   };
 
   static String _n(double v) => (v * 10).round() / 10 == v.roundToDouble()
@@ -125,6 +137,7 @@ class MaskStroke {
           : null,
       level: m['lv'] == null ? null : readDouble(m['lv']).clamp(0.0, 1.0),
       opacity: readDouble(m['op'], 1).clamp(0.0, 1.0),
+      assetId: m['asset'] is String ? m['asset'] as String : null,
     );
   }
 
@@ -138,6 +151,7 @@ class MaskStroke {
       other.contour == contour &&
       other.level == level &&
       other.opacity == opacity &&
+      other.assetId == assetId &&
       listEquals(other.points, points);
 
   @override
@@ -149,6 +163,7 @@ class MaskStroke {
     contour,
     level,
     opacity,
+    assetId,
     Object.hashAll(points),
   );
 }

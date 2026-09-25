@@ -21,6 +21,8 @@ import 'dialogs/icon_picker.dart';
 import 'pen_targets.dart';
 import '../../core/icons/icon_catalog.dart';
 import '../../editor/tools/pen_tool.dart';
+import '../../editor/tools/select_tool.dart';
+import '../../editor/selection/selection_controller.dart';
 import 'dialogs/text_dialog.dart';
 import 'dialogs/close_dialog.dart';
 import '../../ui/widgets/confirm_dialog.dart';
@@ -72,7 +74,11 @@ class _EditorPageState extends State<EditorPage> {
     startPen: _startPen,
     startBrush: _startBrush,
     maskPen: _maskPen,
+    selectTool: _selectTool,
+    selectionPen: _selectionPen,
   );
+  late final SelectTool _selectTool = SelectTool(_ui.selection);
+  final SelectionPenTarget _selectionPen = SelectionPenTarget();
   late final DrawTool _drawTool = DrawTool(_ui.brushSettings);
 
   /// The drawing layer the brush panel is painting into.
@@ -86,6 +92,8 @@ class _EditorPageState extends State<EditorPage> {
       _ui.maskBrush.kind == MaskToolKind.pen ? _penTool : _maskTool,
     ToolMode.pen => _penTool,
     ToolMode.draw => _drawTool,
+    ToolMode.select =>
+      _ui.selection.tool == SelectToolKind.pen ? _penTool : _selectTool,
   };
 
   /// Points the pen at what it should edit: the selected vector layer in
@@ -120,21 +128,35 @@ class _EditorPageState extends State<EditorPage> {
         pen.reset();
         pen.target = _maskPen;
       }
+    } else if (p == ToolPanel.selection &&
+        _ui.selection.tool == SelectToolKind.pen) {
+      if (pen.target != _selectionPen) {
+        _finishPen();
+        pen.reset();
+        pen.target = _selectionPen;
+      }
     } else if (pen.target != null) {
       _finishPen();
       pen.reset();
       _maskPen.clear();
+      _selectionPen.clear();
     }
     // Rebuild only when what the page shows changed (the canvas tool, the
     // panel, the layers sheet) — not on every brush-size or pen tweak.
-    final key = (_ui.mode, p, _ui.showLayers, _ui.maskBrush.kind);
+    final key = (
+      _ui.mode,
+      p,
+      _ui.showLayers,
+      _ui.maskBrush.kind,
+      _ui.selection.tool,
+    );
     if (key != _uiKey && mounted) {
       _uiKey = key;
       setState(() {});
     }
   }
 
-  (ToolMode, ToolPanel?, bool, MaskToolKind)? _uiKey;
+  (ToolMode, ToolPanel?, bool, MaskToolKind, SelectToolKind)? _uiKey;
 
   void _finishDrawing() {
     final id = _drawingId;
@@ -241,6 +263,7 @@ class _EditorPageState extends State<EditorPage> {
     Eyedropper.capture = () =>
         _editor.renderer.renderImage(_editor.document, maxSide: 1600);
     _ui.maskBrush.addListener(_syncPen);
+    _ui.selection.addListener(_syncPen);
     for (final id in widget.project.document.referencedAssets) {
       unawaited(_editor.assets.decode(id));
     }
@@ -258,6 +281,7 @@ class _EditorPageState extends State<EditorPage> {
     _editor.removeListener(_onEditorChanged);
     _ui.removeListener(_syncPen);
     _ui.maskBrush.removeListener(_syncPen);
+    _ui.selection.removeListener(_syncPen);
     _maskPen.dispose();
     _editor.dispose();
     _ui.dispose();

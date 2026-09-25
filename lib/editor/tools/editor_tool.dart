@@ -83,7 +83,13 @@ class ToolContext {
     required this.snap,
     required this.style,
     required this.requestRepaint,
+    this.pointerDown,
   });
+
+  /// Where the current gesture's first finger went down (screen space).
+  /// Gesture starts are reported after the touch slop; tools that draw
+  /// from the exact start point use this.
+  final Offset? pointerDown;
 
   final EditorController editor;
   final CanvasViewport viewport;

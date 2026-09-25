@@ -16,6 +16,8 @@ import 'text_panels.dart';
 import 'transform_panels.dart';
 import 'vector_panels.dart';
 import '../pen_targets.dart';
+import '../../../editor/tools/select_tool.dart';
+import 'selection_panel.dart';
 
 /// Page-level actions panels need.
 class PanelHooks {
@@ -24,11 +26,15 @@ class PanelHooks {
     required this.startPen,
     required this.startBrush,
     required this.maskPen,
+    required this.selectTool,
+    required this.selectionPen,
   });
   final VoidCallback addIcon;
   final VoidCallback startPen;
   final VoidCallback startBrush;
   final MaskPenTarget maskPen;
+  final SelectTool selectTool;
+  final SelectionPenTarget selectionPen;
 }
 
 /// Shows the open [ToolPanel] with a soft size/fade transition. Panels that
@@ -71,6 +77,13 @@ class ToolPanelHost extends StatelessWidget {
         return const SnapPanel();
       case ToolPanel.rulers:
         return RulerPanel(editor: editor);
+      case ToolPanel.selection:
+        return SelectionPanel(
+          editor: editor,
+          ui: ui,
+          tool: hooks.selectTool,
+          pen: hooks.selectionPen,
+        );
       default:
         break;
     }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../document/model/layer.dart';
 import '../../../document/render/document_renderer.dart';
+import '../editor_scope.dart';
 
 /// A layer mask as Photoshop shows it: white = visible, black = hidden,
 /// greys in between. A red cross marks a disabled mask.
@@ -21,6 +22,10 @@ class MaskThumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final assets = context
+        .getInheritedWidgetOfExactType<EditorScope>()
+        ?.controller
+        .assets;
     return Container(
       width: size,
       height: size,
@@ -33,15 +38,16 @@ class MaskThumb extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: RepaintBoundary(
-        child: CustomPaint(painter: _MaskThumbPainter(layer)),
+        child: CustomPaint(painter: _MaskThumbPainter(layer, assets?.imageOf)),
       ),
     );
   }
 }
 
 class _MaskThumbPainter extends CustomPainter {
-  _MaskThumbPainter(this.layer);
+  _MaskThumbPainter(this.layer, this.images);
   final Layer layer;
+  final MaskImageLookup? images;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -57,7 +63,7 @@ class _MaskThumbPainter extends CustomPainter {
       ..translate(-r.center.dx, -r.center.dy)
       ..saveLayer(r, Paint());
     final p = layer.props;
-    DocumentRenderer.paintMask(canvas, p.mask, r);
+    DocumentRenderer.paintMask(canvas, p.mask, r, images: images);
     canvas
       ..restore()
       ..restore();
