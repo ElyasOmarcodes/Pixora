@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -476,13 +477,18 @@ class DocumentRenderer {
       }
     }
 
-    // 3D extrusions.
+    // 3D extrusions. Rotated in 3D, a solid facing away from the viewer
+    // shows its back: then the extrusion covers the layer instead.
     final extrudeStamp = extrudes.isEmpty
         ? null
         : (stamp ?? _Stamp.of(layer, shape, pixelScale, extra: src.reach));
+    final solid = t.hasTilt;
+    final facing = !solid || t.axes.$3[2] >= 0;
+    final lateParts = <_Part>[];
     for (final (e, x) in extrudes) {
-      part(
+      final p = _Part(
         BlendMode.srcOver,
+        1,
         (c) => _paintExtrude(
           c,
           x,
@@ -494,6 +500,7 @@ class DocumentRenderer {
           content: shape,
         ),
       );
+      facing ? parts.add(p) : lateParts.add(p);
     }
 
     final hasInner =
@@ -584,6 +591,33 @@ class DocumentRenderer {
       }),
     );
 
+    // A 3D-rotated extrusion lights its front face too.
+    if (solid && facing) {
+      for (final (_, x) in extrudes) {
+        if (!x.lit) continue;
+        final l = _lightVector(x);
+        final az = t.axes.$3;
+        final f =
+            x.ambient +
+            x.intensity *
+                math.max(0.0, az[0] * l[0] + az[1] * l[1] + az[2] * l[2]);
+        if (f >= 0.995) continue;
+        final g = (f.clamp(0.0, 1.0) * 255).round();
+        part(BlendMode.multiply, (c) {
+          c.saveLayer(
+            layerBounds,
+            Paint()
+              ..colorFilter = ColorFilter.mode(
+                Color.fromARGB(255, g, g, g),
+                BlendMode.srcIn,
+              ),
+          );
+          effectShape(c);
+          c.restore();
+        });
+      }
+    }
+
     // Stroke on top, with its own opacity and blend mode; Fill opacity
     // does not fade it.
     if (band != null) {
@@ -631,6 +665,7 @@ class DocumentRenderer {
       );
     }
 
+    parts.addAll(lateParts);
     return _LayerPlan(
       parts,
       layerBounds,
@@ -1106,6 +1141,9 @@ class DocumentRenderer {
     final key = (base, bucket, TextLayoutCache.generation, blend.index);
     final hit = cache!.lookup(key);
     if (hit != null) return hit;
+    // Changing every frame (a slider, a rotate gesture): a bitmap would be
+    // stale by the next frame, so paint directly instead.
+    if (cache!.isHot((layer.id, bucket), key)) return null;
 
     final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
     if (rect.isEmpty || !rect.isFinite) return null;
@@ -1227,6 +1265,36 @@ class DocumentRenderer {
     canvas.restore();
   }
 
+  /// The light's direction (x right, y down, z towards the viewer).
+  static List<double> _lightVector(ExtrudeSpec x) {
+    final th = x.lightAngle * math.pi / 180, al = x.altitude * math.pi / 180;
+    return [
+      math.cos(al) * math.cos(th),
+      -math.cos(al) * math.sin(th),
+      math.sin(al),
+    ];
+  }
+
+  static List<double> _mul3(List<double> a, List<double> b) => [
+    for (var r = 0; r < 3; r++)
+      for (var c = 0; c < 3; c++)
+        a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c],
+  ];
+
+  static List<double> _invert3(List<double> h) {
+    final a = h[0], b = h[1], c = h[2];
+    final d = h[3], e = h[4], f = h[5];
+    final g = h[6], hh = h[7], i = h[8];
+    final det =
+        a * (e * i - f * hh) - b * (d * i - f * g) + c * (d * hh - e * g);
+    final k = det.abs() < 1e-12 ? 0.0 : 1 / det;
+    return [
+      (e * i - f * hh) * k, (c * hh - b * i) * k, (b * f - c * e) * k, //
+      (f * g - d * i) * k, (a * i - c * g) * k, (c * d - a * f) * k, //
+      (d * hh - e * g) * k, (b * g - a * hh) * k, (a * e - b * d) * k, //
+    ];
+  }
+
   /// How far a 3D extrusion reaches past the layer box (layer units).
   static double _extrudeReach(ExtrudeSpec x, Rect local, double ms) {
     final half = local.longestSide / 2;
@@ -1256,8 +1324,14 @@ class DocumentRenderer {
   }) {
     if (x.depth <= 0) return;
     final r = stamp.rect;
-    final th = x.lightAngle * math.pi / 180, al = x.altitude * math.pi / 180;
-    final lx = math.cos(al) * math.cos(th), ly = -math.cos(al) * math.sin(th);
+    final al = x.altitude * math.pi / 180;
+    final t = layer.props.transform;
+    final solid = t.hasTilt;
+    // The light in the layer's own axes (sides face along local x / y).
+    final lw = _lightVector(x);
+    final (ax, ay, az) = t.axes;
+    final lx = solid ? ax[0] * lw[0] + ax[1] * lw[1] + ax[2] * lw[2] : lw[0];
+    final ly = solid ? ay[0] * lw[0] + ay[1] * lw[1] + ay[2] * lw[2] : lw[1];
     Color grey(double v) {
       final g = (v.clamp(0.0, 1.0) * 255).round();
       return Color.fromARGB(255, g, g, g);
@@ -1320,7 +1394,19 @@ class DocumentRenderer {
       }
       // Material: a colour, or the layer's own pixels.
       if (x.layerMaterial) {
-        c.saveLayer(r, Paint()..blendMode = BlendMode.multiply);
+        // The layer's colours, opaque right to the anti-aliased rim (a
+        // faint rim would stack into streaks along the sides).
+        c.saveLayer(
+          r,
+          Paint()
+            ..blendMode = BlendMode.multiply
+            ..colorFilter = const ColorFilter.matrix([
+              1, 0, 0, 0, 0, //
+              0, 1, 0, 0, 0, //
+              0, 0, 1, 0, 0, //
+              0, 0, 0, 0, 255, //
+            ]),
+        );
         content(c);
         c.restore();
       } else {
@@ -1335,16 +1421,132 @@ class DocumentRenderer {
       c.restore();
     });
 
-    final t = layer.props.transform;
-    final dir = Offset(math.cos(x.angle), math.sin(x.angle));
     final center = layerLocalRect(layer).center;
     final half = layerLocalRect(layer).longestSide / 2;
     final outPx = pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs());
-    // About one copy per output pixel of travel (depth, taper, twist).
-    final travel =
-        x.depth * pixelScale +
+    void taperTwist(double u) {
+      if (x.backScale != 1 || x.twist != 0) {
+        canvas
+          ..translate(center.dx, center.dy)
+          ..rotate(x.twist * math.pi / 180 * u)
+          ..scale(1 + (x.backScale - 1) * u)
+          ..translate(-center.dx, -center.dy);
+      }
+    }
+
+    final shapeTravel =
         (x.backScale - 1).abs() * half * outPx +
         (x.twist * math.pi / 180).abs() * half * outPx;
+
+    if (solid) {
+      // A real solid: each slice sits at its depth behind the layer, in
+      // the layer's 3D rotation and perspective, drawn far to near.
+      final base = t.homographyAt(0);
+      final inv = _invert3(base);
+      final side = math.sqrt(az[0] * az[0] + az[1] * az[1]);
+      // Two slices per output pixel of side: seamless faces.
+      final steps =
+          ((x.depth * pixelScale * math.max(side, 0.04) + shapeTravel) * 2)
+              .ceil()
+              .clamp(2, 600);
+      final facing = az[2] >= 0;
+      void slice(int i) {
+        final u = i / steps;
+        final m = _mul3(inv, t.homographyAt(-x.depth * u));
+        canvas
+          ..save()
+          ..transform(
+            Float64List.fromList([
+              m[0], m[3], 0, m[6], //
+              m[1], m[4], 0, m[7], //
+              0, 0, 1, 0, //
+              m[2], m[5], 0, m[8], //
+            ]),
+          );
+        taperTwist(u);
+        lit.draw(canvas);
+        canvas.restore();
+      }
+
+      const bands = 8;
+      for (var k = 0; k < bands; k++) {
+        // Far band first.
+        final band = facing ? bands - 1 - k : k;
+        final f = 1 - x.shade * band / (bands - 1);
+        canvas.saveLayer(
+          null,
+          Paint()
+            ..colorFilter = ColorFilter.matrix([
+              f, 0, 0, 0, 0, //
+              0, f, 0, 0, 0, //
+              0, 0, f, 0, 0, //
+              0, 0, 0, 1, 0, //
+            ]),
+        );
+        final from = (steps * band / bands).floor() + 1;
+        final to = (steps * (band + 1) / bands).floor();
+        if (facing) {
+          for (var i = to; i >= from; i--) {
+            slice(i);
+          }
+        } else {
+          for (var i = from; i <= to; i++) {
+            slice(i);
+          }
+        }
+        canvas.restore();
+      }
+      if (!facing) {
+        // The back face, lit as a flat face pointing away.
+        final g =
+            (x.ambient +
+                    x.intensity *
+                        math.max(
+                          0.0,
+                          -(az[0] * lw[0] + az[1] * lw[1] + az[2] * lw[2]),
+                        ))
+                .clamp(0.0, 1.0) *
+            (1 - x.shade);
+        final m = _mul3(inv, t.homographyAt(-x.depth));
+        canvas
+          ..save()
+          ..transform(
+            Float64List.fromList([
+              m[0], m[3], 0, m[6], //
+              m[1], m[4], 0, m[7], //
+              0, 0, 1, 0, //
+              m[2], m[5], 0, m[8], //
+            ]),
+          );
+        taperTwist(1);
+        canvas.saveLayer(null, Paint());
+        if (x.layerMaterial) {
+          content(canvas);
+        } else {
+          stamp.draw(
+            canvas,
+            Offset.zero,
+            Paint()..colorFilter = ColorFilter.mode(x.color, BlendMode.srcIn),
+          );
+        }
+        final gv = (g * 255).round();
+        canvas
+          ..drawRect(
+            r.inflate(r.longestSide),
+            Paint()
+              ..color = Color.fromARGB(255, gv, gv, gv)
+              ..blendMode = BlendMode.modulate,
+          )
+          ..restore()
+          ..restore();
+      }
+      lit.dispose();
+      return;
+    }
+
+    final dir = Offset(math.cos(x.angle), math.sin(x.angle));
+    // About one copy per output pixel of travel (depth, taper, twist).
+    final travel = x.depth * pixelScale + shapeTravel;
     final steps = travel.ceil().clamp(1, 360);
     const bands = 8;
     for (var band = bands - 1; band >= 0; band--) {
@@ -1368,13 +1570,7 @@ class DocumentRenderer {
         canvas
           ..save()
           ..translate(o.dx, o.dy);
-        if (x.backScale != 1 || x.twist != 0) {
-          canvas
-            ..translate(center.dx, center.dy)
-            ..rotate(x.twist * math.pi / 180 * u)
-            ..scale(1 + (x.backScale - 1) * u)
-            ..translate(-center.dx, -center.dy);
-        }
+        taperTwist(u);
         lit.draw(canvas);
         canvas.restore();
       }
@@ -2155,8 +2351,12 @@ class _ShapeSource {
     this._layer,
     this._hidden,
     this._filtered,
-    this.reach,
-  );
+    this.reach, {
+    this.owned = true,
+  });
+
+  /// Whether [dispose] frees the filtered pixels (not when cached).
+  final bool owned;
 
   static _ShapeSource of(DocumentRenderer r, Layer layer, Set<String> hidden) {
     final local = layerLocalRect(layer);
@@ -2171,18 +2371,63 @@ class _ShapeSource {
       return _ShapeSource._(r, layer, hidden, null, 0);
     }
     final t = layer.props.transform;
-    var rs = r.pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs());
-    rs = math.min(rs, 4096 / math.max(box.width, box.height));
+    final want = r.pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs());
+    // Power-of-two resolution buckets, so moving, turning and small
+    // scale changes reuse the filtered pixels; capped for speed (lower
+    // on screen than for export).
+    var rs = math.pow(2, (math.log(math.max(want, 1e-3)) / math.ln2).ceil());
+    final cap = r.cache != null ? 2048.0 : 4096.0;
+    rs = math.min(rs, cap / math.max(box.width, box.height));
     rs = math.max(rs, 0.05);
+    final cacheable = layer is! GroupLayer && hidden.isEmpty;
+    final key = cacheable
+        ? (
+            layer.withProps(
+              layer.props.copyWith(
+                transform: const LayerTransform(),
+                opacity: 1,
+                blendMode: PixBlendMode.normal,
+                clip: false,
+                mask: const [],
+                clearStroke: true,
+                fillOpacity: 1,
+                effects: [
+                  for (final e in layer.props.effects)
+                    if (e.enabled && r._fx[e.type]?.filter != null) e,
+                ],
+              ),
+            ),
+            rs,
+            TextLayoutCache.generation,
+          )
+        : null;
+    final hit = key == null ? null : _filteredCache.remove(key);
+    if (hit != null) {
+      _filteredCache[key!] = hit;
+      return _ShapeSource._(r, layer, hidden, hit, reach + 2, owned: false);
+    }
     final plain = _Stamp._make(
       box,
-      rs,
+      rs.toDouble(),
       (c) => r._paintContent(c, layer, hidden),
     );
     final out = FilterEngine.apply(plain.image, box, filters);
     plain.dispose();
-    return _ShapeSource._(r, layer, hidden, _Stamp._(out, box), reach + 2);
+    final stamp = _Stamp._(out, box);
+    if (key != null) {
+      _filteredCache[key] = stamp;
+      // Evicted images are left to the garbage collector: a plan being
+      // painted may still hold them.
+      while (_filteredCache.length > 6) {
+        _filteredCache.remove(_filteredCache.keys.first);
+      }
+      return _ShapeSource._(r, layer, hidden, stamp, reach + 2, owned: false);
+    }
+    return _ShapeSource._(r, layer, hidden, stamp, reach + 2);
   }
+
+  /// Recently filtered layer pixels (filters are the slow part).
+  static final LinkedHashMap<Object, _Stamp> _filteredCache = LinkedHashMap();
 
   static List<FilterStep> _filters(DocumentRenderer r, Layer layer, Rect box) =>
       [
@@ -2223,7 +2468,9 @@ class _ShapeSource {
     f == null ? _r._paintContent(c, _layer, _hidden) : f.draw(c);
   }
 
-  void dispose() => _filtered?.dispose();
+  void dispose() {
+    if (owned) _filtered?.dispose();
+  }
 }
 
 /// One piece of a layer, composited on its own with [mode] and [alpha];

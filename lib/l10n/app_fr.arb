@@ -621,5 +621,6 @@
   "layerTexture": "Calque",
   "light": "Lumière",
   "ambientLight": "Ambiante",
-  "gloss": "Brillance"
+  "gloss": "Brillance",
+  "extrudeSolidHint": "Faites pivoter en 3D ci-dessous pour tourner le calque comme un vrai solide (la direction sert sans rotation 3D)."
 }

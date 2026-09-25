@@ -51,6 +51,19 @@ class LayerRasterCache {
       LinkedHashMap();
   int _pixels = 0;
 
+  final Map<Object, (Object, int)> _misses = {};
+
+  /// Records a miss of [key] for [slot] (a layer at a resolution) and
+  /// tells whether the slot keeps changing: missed with another key within
+  /// the last few frames.
+  bool isHot(Object slot, Object key) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final last = _misses[slot];
+    _misses[slot] = (key, now);
+    if (_misses.length > 256) _misses.remove(_misses.keys.first);
+    return last != null && last.$1 != key && now - last.$2 < 350;
+  }
+
   CachedLayer? lookup((Layer, double, int, int) key) {
     final hit = _entries.remove(key);
     if (hit != null) _entries[key] = hit;
@@ -74,6 +87,7 @@ class LayerRasterCache {
   }
 
   void clear() {
+    _misses.clear();
     for (final e in _entries.values) {
       e.dispose();
     }

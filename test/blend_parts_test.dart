@@ -181,4 +181,46 @@ void main() {
     );
     expect(below(55, 76).r, greaterThan(0.8));
   });
+
+  test('3D-rotated extrusion is a solid: its side turns into view', () async {
+    PixDocument turned(double tiltY) => PixDocument(
+      name: 't',
+      width: 100,
+      height: 100,
+      background: PixFill.color(const Color(0xFF000000)),
+      layers: [
+        ShapeLayer(
+          LayerProps(
+            name: 's',
+            effects: [
+              fx('extrude', {
+                'depth': 30,
+                'material': 0,
+                'color': 0xFFFFFFFF,
+                'shade': 0,
+                'intensity': 0,
+                'ambient': 100,
+              }),
+            ],
+            transform: LayerTransform(x: 50, y: 50, tiltY: tiltY),
+          ),
+          shape: ShapeKind.rectangle,
+          width: 40,
+          height: 40,
+          fill: PixFill.color(const Color(0xFFFF0000)),
+        ),
+      ],
+    );
+    // Turned right: the left side (white) shows left of the red face.
+    final right = await pixels(turned(40));
+    var white = 0;
+    for (var x = 10; x < 50; x++) {
+      final c = right(x, 50);
+      if (c.r > 0.9 && c.g > 0.9) white++;
+    }
+    expect(white, greaterThan(3));
+    // Straight on: the front face hides the extrusion.
+    final front = await pixels(turned(0.001));
+    expect(front(25, 50).g, lessThan(0.1));
+  });
 }

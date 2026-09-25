@@ -706,5 +706,6 @@
   "layerTexture": "Layer",
   "light": "Light",
   "ambientLight": "Ambient",
-  "gloss": "Gloss"
+  "gloss": "Gloss",
+  "extrudeSolidHint": "Rotate in 3D below to turn the extruded layer as a real solid (Direction is used without 3D rotation)."
 }

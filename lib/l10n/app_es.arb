@@ -621,5 +621,6 @@
   "layerTexture": "Capa",
   "light": "Luz",
   "ambientLight": "Ambiente",
-  "gloss": "Brillo"
+  "gloss": "Brillo",
+  "extrudeSolidHint": "Gira en 3D abajo para girar la capa como un sólido real (la dirección se usa sin rotación 3D)."
 }

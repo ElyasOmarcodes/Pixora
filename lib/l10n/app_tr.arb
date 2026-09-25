@@ -621,5 +621,6 @@
   "layerTexture": "Katman",
   "light": "Işık",
   "ambientLight": "Ortam",
-  "gloss": "Parlaklık"
+  "gloss": "Parlaklık",
+  "extrudeSolidHint": "Katmanı gerçek bir katı gibi döndürmek için aşağıda 3B döndürün (yön yalnızca 3B döndürme olmadan kullanılır)."
 }

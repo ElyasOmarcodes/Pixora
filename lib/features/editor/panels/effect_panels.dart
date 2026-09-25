@@ -512,6 +512,15 @@ class Extrude3DPanel extends StatelessWidget {
         ),
         if (layer is! GroupLayer) ...[
           const Divider(height: 12, indent: 20, endIndent: 20),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Text(
+              l.extrudeSolidHint,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
           TiltControls(editor: editor, layer: layer),
         ],
       ],
@@ -593,8 +602,8 @@ class TiltControls extends StatelessWidget {
         PixSlider(
           label: l.tiltX,
           value: t.tiltX,
-          min: -70,
-          max: 70,
+          min: -180,
+          max: 180,
           defaultValue: 0,
           format: fxDegrees,
           onChanged: (v) => set(x: v.roundToDouble()),
@@ -603,8 +612,8 @@ class TiltControls extends StatelessWidget {
         PixSlider(
           label: l.tiltY,
           value: t.tiltY,
-          min: -70,
-          max: 70,
+          min: -180,
+          max: 180,
           defaultValue: 0,
           format: fxDegrees,
           onChanged: (v) => set(y: v.roundToDouble()),

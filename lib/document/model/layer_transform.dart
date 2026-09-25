@@ -35,10 +35,10 @@ class LayerTransform {
   final double scaleX;
   final double scaleY;
 
-  /// 3D rotation around the horizontal axis, degrees (−80..80).
+  /// 3D rotation around the horizontal axis, degrees (−180..180).
   final double tiltX;
 
-  /// 3D rotation around the vertical axis, degrees (−80..80).
+  /// 3D rotation around the vertical axis, degrees (−180..180).
   final double tiltY;
 
   Offset get position => Offset(x, y);
@@ -72,28 +72,42 @@ class LayerTransform {
       copyWith(scaleX: scaleX * f, scaleY: scaleY * f);
 
   /// 3×3 homography (row-major) local → document.
-  List<double> get homography {
-    final c = math.cos(rotation), s = math.sin(rotation);
-    // Tilt: rotate the (scaled) plane in 3D, then project.
+  List<double> get homography => homographyAt(0);
+
+  /// The layer's 3D rotation as unit axes (x right, y down, z towards the
+  /// viewer): where its local x, y and z (depth) axes point.
+  (List<double>, List<double>, List<double>) get axes {
     final a = tiltX * math.pi / 180, b = tiltY * math.pi / 180;
+    return (
+      [math.cos(b), math.sin(a) * math.sin(b), -math.sin(b) * math.cos(a)],
+      [0.0, math.cos(a), math.sin(a)],
+      [math.sin(b), -math.cos(b) * math.sin(a), math.cos(b) * math.cos(a)],
+    );
+  }
+
+  /// Homography of the plane [z] document px in front of (negative:
+  /// behind) the layer, in the layer's 3D rotation and perspective — the
+  /// slices a real 3D extrusion is made of.
+  List<double> homographyAt(double z) {
+    final c = math.cos(rotation), s = math.sin(rotation);
+    final (ax, ay, az) = axes;
     const d = perspective;
-    final pa = math.cos(b), pc = math.sin(a) * math.sin(b), pe = math.cos(a);
-    final pf = -math.sin(b) * math.cos(a), pg = math.sin(a);
-    // P · S
-    final m00 = pa * scaleX, m01 = 0.0;
-    final m10 = pc * scaleX, m11 = pe * scaleY;
-    final m20 = -pf / d * scaleX, m21 = -pg / d * scaleY;
+    // P · S, plus the depth offset along the rotated z axis.
+    final m00 = ax[0] * scaleX, m01 = 0.0, m02 = az[0] * z;
+    final m10 = ax[1] * scaleX, m11 = ay[1] * scaleY, m12 = az[1] * z;
+    final m20 = -ax[2] / d * scaleX, m21 = -ay[2] / d * scaleY;
+    final m22 = 1 - az[2] * z / d;
     // T · R · (P·S)
     return [
       c * m00 - s * m10 + x * m20,
       c * m01 - s * m11 + x * m21,
-      x,
+      c * m02 - s * m12 + x * m22,
       s * m00 + c * m10 + y * m20,
       s * m01 + c * m11 + y * m21,
-      y,
+      s * m02 + c * m12 + y * m22,
       m20,
       m21,
-      1,
+      m22,
     ];
   }
 
@@ -181,8 +195,8 @@ class LayerTransform {
       rotation: readDouble(m['rotation']),
       scaleX: readDouble(m['scaleX'], 1),
       scaleY: readDouble(m['scaleY'], 1),
-      tiltX: readDouble(m['tiltX']).clamp(-80.0, 80.0),
-      tiltY: readDouble(m['tiltY']).clamp(-80.0, 80.0),
+      tiltX: readDouble(m['tiltX']).clamp(-180.0, 180.0),
+      tiltY: readDouble(m['tiltY']).clamp(-180.0, 180.0),
     );
   }
 

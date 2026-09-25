@@ -30,25 +30,33 @@ abstract final class ExtrudeEngine {
     for (var i = 0; i < n; i++) {
       d[i] = inside[i] == 1 ? math.sqrt(d2[i]) + alpha[i] - 1 : alpha[i] - 0.5;
     }
-    d = blur3(d, w, h, 1);
-    final out = Uint8List(n * 3);
+    // Smooth the field so pixel steps along slanted edges do not show
+    // as streaks down the extruded sides.
+    d = blur3(d, w, h, 2);
+    var gxs = Float32List(n), gys = Float32List(n);
     for (var y = 0; y < h; y++) {
       final r0 = (y > 0 ? y - 1 : y) * w, r1 = (y < h - 1 ? y + 1 : y) * w;
       final row = y * w;
       for (var x = 0; x < w; x++) {
         final x0 = x > 0 ? x - 1 : x, x1 = x < w - 1 ? x + 1 : x;
         // Distance grows inwards, so the outward normal is −∇d.
-        final gx = -(d[row + x1] - d[row + x0]);
-        final gy = -(d[r1 + x] - d[r0 + x]);
-        final len = math.sqrt(gx * gx + gy * gy);
-        final j = (row + x) * 3;
-        if (len < 1e-6) {
-          out[j] = 128;
-          out[j + 1] = 128;
-        } else {
-          out[j] = (127.5 + 127.5 * gx / len).round().clamp(0, 255);
-          out[j + 1] = (127.5 + 127.5 * gy / len).round().clamp(0, 255);
-        }
+        gxs[row + x] = -(d[row + x1] - d[row + x0]);
+        gys[row + x] = -(d[r1 + x] - d[r0 + x]);
+      }
+    }
+    gxs = blur3(gxs, w, h, 2);
+    gys = blur3(gys, w, h, 2);
+    final out = Uint8List(n * 3);
+    for (var i = 0; i < n; i++) {
+      final gx = gxs[i], gy = gys[i];
+      final len = math.sqrt(gx * gx + gy * gy);
+      final j = i * 3;
+      if (len < 1e-6) {
+        out[j] = 128;
+        out[j + 1] = 128;
+      } else {
+        out[j] = (127.5 + 127.5 * gx / len).round().clamp(0, 255);
+        out[j + 1] = (127.5 + 127.5 * gy / len).round().clamp(0, 255);
       }
     }
     return out;
