@@ -562,5 +562,16 @@
   "addStop": "Add colour stop",
   "deleteStop": "Delete colour stop",
   "distribute": "Spread evenly",
-  "location": "Location"
+  "location": "Location",
+  "crop": "Crop",
+  "free": "Free",
+  "original": "Original",
+  "rotateLeft": "Rotate left",
+  "rotateRight": "Rotate right",
+  "roundCrop": "Round crop",
+  "colorFill": "Colour fill",
+  "fillMode": "Fill",
+  "tintMode": "Tint",
+  "multiplyMode": "Multiply",
+  "strength": "Strength"
 }

@@ -154,7 +154,7 @@ class PixDocument {
   /// Every asset id referenced by the layers (used to garbage-collect).
   Set<String> get referencedAssets => {
     for (final l in allLayers)
-      if (l is RasterLayer) l.assetId,
+      if (l is RasterLayer) ...[l.assetId, ?l.sourceAssetId],
   };
 
   // ----------------------------------------------------------- transforms

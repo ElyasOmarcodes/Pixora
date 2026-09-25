@@ -351,6 +351,55 @@ class Extrude3DPanel extends StatelessWidget {
   }
 }
 
+/// Colour fill (Photoshop's Color Overlay): fill, tint (keeps light and
+/// shade) or multiply, with strength.
+class ColorFillPanel extends StatelessWidget {
+  const ColorFillPanel({super.key, required this.editor, required this.layer});
+  final EditorController editor;
+  final Layer layer;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final e = editor.effectOf(layer.id, 'colorFill');
+    final mode = e?.number('mode', 0).round() ?? 0;
+    return EffectEditor(
+      editor: editor,
+      layer: layer,
+      type: 'colorFill',
+      title: l.colorFill,
+      header: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+        child: SegmentedButton<int>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            ButtonSegment(
+              value: 0,
+              icon: const Icon(Icons.format_color_fill_rounded, size: 18),
+              label: Text(l.fillMode),
+            ),
+            ButtonSegment(
+              value: 1,
+              icon: const Icon(Icons.gradient_rounded, size: 18),
+              label: Text(l.tintMode),
+            ),
+            ButtonSegment(
+              value: 2,
+              icon: const Icon(Icons.layers_rounded, size: 18),
+              label: Text(l.multiplyMode),
+            ),
+          ],
+          selected: {mode},
+          onSelectionChanged: (v) =>
+              editor.setEffectParam(layer.id, 'colorFill', 'mode', v.first),
+        ),
+      ),
+      controls: [const FxColor('color'), FxSlider('amount', l.strength)],
+    );
+  }
+}
+
 /// 3D rotation (perspective tilt) sliders, shared by Rotate and 3D.
 class TiltControls extends StatelessWidget {
   const TiltControls({super.key, required this.editor, required this.layer});

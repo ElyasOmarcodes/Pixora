@@ -477,5 +477,16 @@
   "addStop": "Añadir color",
   "deleteStop": "Eliminar color",
   "distribute": "Repartir",
-  "location": "Posición"
+  "location": "Posición",
+  "crop": "Recortar",
+  "free": "Libre",
+  "original": "Original",
+  "rotateLeft": "Girar a la izquierda",
+  "rotateRight": "Girar a la derecha",
+  "roundCrop": "Recorte redondo",
+  "colorFill": "Relleno de color",
+  "fillMode": "Rellenar",
+  "tintMode": "Teñir",
+  "multiplyMode": "Multiplicar",
+  "strength": "Intensidad"
 }

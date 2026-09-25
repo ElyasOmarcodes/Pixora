@@ -477,5 +477,16 @@
   "addStop": "افزودن رنگ",
   "deleteStop": "حذف رنگ",
   "distribute": "توزیع یکسان",
-  "location": "موقعیت"
+  "location": "موقعیت",
+  "crop": "برش",
+  "free": "آزاد",
+  "original": "اصلی",
+  "rotateLeft": "چرخش به چپ",
+  "rotateRight": "چرخش به راست",
+  "roundCrop": "برش دایره‌ای",
+  "colorFill": "پرکردن رنگ",
+  "fillMode": "پرکردن",
+  "tintMode": "ته‌رنگ",
+  "multiplyMode": "ضرب",
+  "strength": "شدت"
 }

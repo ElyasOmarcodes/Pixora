@@ -477,5 +477,16 @@
   "addStop": "إضافة لون",
   "deleteStop": "حذف اللون",
   "distribute": "توزيع متساوٍ",
-  "location": "الموضع"
+  "location": "الموضع",
+  "crop": "قص",
+  "free": "حر",
+  "original": "الأصلي",
+  "rotateLeft": "تدوير لليسار",
+  "rotateRight": "تدوير لليمين",
+  "roundCrop": "قص دائري",
+  "colorFill": "تعبئة لونية",
+  "fillMode": "تعبئة",
+  "tintMode": "صبغة",
+  "multiplyMode": "ضرب",
+  "strength": "القوة"
 }

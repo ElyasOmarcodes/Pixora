@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 /// 4×5 color matrix helpers (row-major, the layout [ColorFilter.matrix]
 /// expects). Offsets in the 5th column are in 0..255 units.
@@ -34,6 +35,32 @@ abstract final class ColorMatrix {
   }
 
   /// Linear interpolation between identity and [m] by [t] (0..1).
+  /// Colour fill / overlay. [mode]: 0 = replace the colour (keep alpha),
+  /// 1 = tint (colourise by luminance, keeps shading), 2 = multiply.
+  /// [amount] 0..1 blends with the original.
+  static List<double> colorFill(Color color, double amount, int mode) {
+    final a = amount.clamp(0.0, 1.0);
+    final c = [color.r, color.g, color.b];
+    const lum = [0.2126, 0.7152, 0.0722];
+    final m = <double>[];
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 3; col++) {
+        final id = row == col ? 1.0 : 0.0;
+        final target = switch (mode) {
+          1 => lum[col] * c[row],
+          2 => row == col ? c[row] : 0.0,
+          _ => 0.0,
+        };
+        m.add(id * (1 - a) + target * a);
+      }
+      m
+        ..add(0)
+        ..add(mode == 0 ? c[row] * 255 * a : 0);
+    }
+    m.addAll([0, 0, 0, 1, 0]);
+    return m;
+  }
+
   static List<double> mixWithIdentity(List<double> m, double t) => [
     for (var i = 0; i < 20; i++) identity[i] + (m[i] - identity[i]) * t,
   ];

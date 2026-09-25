@@ -1,7 +1,7 @@
 name: pixora
 description: "Pixora — a layered, cross-platform photo & graphic editor."
 publish_to: 'none'
-version: 0.8.1+12
+version: 0.9.0+13
 
 environment:
   sdk: ^3.13.4

@@ -370,6 +370,42 @@ class EditorController extends ChangeNotifier {
     }, label: 'replace_image');
   }
 
+  /// Replaces an image's pixels with a cropped version, keeping the
+  /// original for later re-crops and the on-canvas pixel scale.
+  void applyCrop(
+    String id,
+    Uint8List bytes,
+    double width,
+    double height,
+    CropState state,
+  ) {
+    final current = _document.layerById(id);
+    if (current is! RasterLayer) return;
+    final assetId = assets.add(bytes);
+    unawaited(assets.decode(assetId));
+    final source = current.sourceAssetId ?? current.assetId;
+    // One original pixel keeps its on-canvas size: it was `prevRes` image
+    // pixels before and is `state.resolution` pixels now.
+    final k = (current.crop?.resolution ?? 1) / state.resolution;
+    updateLayer(id, (l) {
+      final r = l as RasterLayer;
+      final t = r.props.transform;
+      return r
+          .copyWith(
+            assetId: assetId,
+            width: width,
+            height: height,
+            sourceAssetId: source,
+            crop: state,
+          )
+          .update(
+            (p) => p.copyWith(
+              transform: t.copyWith(scaleX: t.scaleX * k, scaleY: t.scaleY * k),
+            ),
+          );
+    }, label: 'crop');
+  }
+
   // ------------------------------------------------------- layer editing
 
   void updateLayer(

@@ -477,5 +477,16 @@
   "addStop": "رنګ زیاتول",
   "deleteStop": "رنګ لرې کول",
   "distribute": "برابر وېشل",
-  "location": "ځای"
+  "location": "ځای",
+  "crop": "کراپ",
+  "free": "ازاد",
+  "original": "اصلي",
+  "rotateLeft": "کيڼ ته څرخول",
+  "rotateRight": "ښي ته څرخول",
+  "roundCrop": "ګرد کراپ",
+  "colorFill": "د رنګ ډکول",
+  "fillMode": "ډکول",
+  "tintMode": "رنګ ورکول",
+  "multiplyMode": "ضربول",
+  "strength": "زور"
 }

@@ -245,6 +245,25 @@ class EffectRegistry {
       ),
     );
 
+    // Colour fill (Photoshop's Color Overlay): mode 0 = fill with the
+    // colour, 1 = tint (colourise, keeps light and shade), 2 = multiply.
+    register(
+      EffectDefinition(
+        type: 'colorFill',
+        category: EffectCategory.style,
+        params: const [
+          EffectParam.color('color', defaultValue: Color(0xFFFF4D6D)),
+          EffectParam.number('amount', min: 0, max: 1, defaultValue: 1),
+          EffectParam.number('mode', min: 0, max: 2, defaultValue: 0, step: 1),
+        ],
+        colorMatrix: (e) => ColorMatrix.colorFill(
+          e.color('color', const Color(0xFFFF4D6D)),
+          e.number('amount', 1),
+          e.number('mode', 0).round(),
+        ),
+      ),
+    );
+
     // Filters: one-knob looks built from matrices, `amount` 0..1.
     EffectDefinition look(String type, List<double> m) => EffectDefinition(
       type: type,

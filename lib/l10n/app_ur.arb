@@ -477,5 +477,16 @@
   "addStop": "رنگ شامل کریں",
   "deleteStop": "رنگ ہٹائیں",
   "distribute": "برابر پھیلائیں",
-  "location": "مقام"
+  "location": "مقام",
+  "crop": "کراپ",
+  "free": "آزاد",
+  "original": "اصل",
+  "rotateLeft": "بائیں گھمائیں",
+  "rotateRight": "دائیں گھمائیں",
+  "roundCrop": "گول کراپ",
+  "colorFill": "رنگ بھرنا",
+  "fillMode": "بھرنا",
+  "tintMode": "رنگت",
+  "multiplyMode": "ضرب",
+  "strength": "شدت"
 }

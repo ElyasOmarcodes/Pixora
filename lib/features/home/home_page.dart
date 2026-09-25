@@ -161,7 +161,8 @@ class _HomePageState extends State<HomePage> {
         layers: [layer],
       );
       await _openEditor(StoredProject(doc, {assetId: picked.bytes}));
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('Pixora: opening the photo failed: $e\n$st');
       messenger.showSnackBar(SnackBar(content: Text(l.imageOpenFailed)));
     }
   }

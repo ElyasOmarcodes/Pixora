@@ -32,6 +32,7 @@ import '../../projects/project_share.dart';
 import '../../projects/project_store.dart';
 import '../../ui/layer_style.dart';
 import '../home/widgets/new_canvas_dialog.dart';
+import 'dialogs/crop_page.dart';
 import '../home/widgets/text_prompt.dart';
 import 'editor_scope.dart';
 import 'panels/tool_panel_host.dart';
@@ -515,6 +516,16 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  /// Crop & resize page, always starting from the original pixels.
+  Future<void> _cropImage(RasterLayer layer) async {
+    final source = layer.sourceAssetId ?? layer.assetId;
+    final image = await _editor.assets.decode(source);
+    if (image == null || !mounted) return;
+    final r = await showCropPage(context, image: image, initial: layer.crop);
+    if (r == null) return;
+    _editor.applyCrop(layer.id, r.bytes, r.width, r.height, r.state);
+  }
+
   void _openSaveSheet() => unawaited(
     showSaveSheet(
       context,
@@ -609,6 +620,7 @@ class _EditorPageState extends State<EditorPage> {
     editText: _editText,
     pickFont: _pickFont,
     replaceImage: _replaceImage,
+    cropImage: (r) => unawaited(_cropImage(r)),
     deleteLayers: (ids) => unawaited(_confirmDeleteLayers(ids)),
     changeIcon: (l) => unawaited(_changeIcon(l)),
     runAsync: (job) => runWithProgress(context, job),

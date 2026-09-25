@@ -20,6 +20,7 @@ class LayerCommands {
     required this.editText,
     required this.pickFont,
     required this.replaceImage,
+    required this.cropImage,
     required this.deleteLayers,
     required this.changeIcon,
     required this.runAsync,
@@ -32,6 +33,9 @@ class LayerCommands {
   final void Function(TextLayer layer) editText;
   final void Function(TextLayer layer) pickFont;
   final void Function(RasterLayer layer) replaceImage;
+
+  /// Opens the crop & resize page for an image.
+  final void Function(RasterLayer layer) cropImage;
 
   /// Deletes layers after asking for confirmation.
   final void Function(List<String> ids) deleteLayers;
@@ -160,6 +164,8 @@ List<QuickAction> quickActionsFor(
         l.replaceImage,
         () => cmd.replaceImage(r),
       ),
+      QuickAction(Icons.crop_rounded, l.crop, () => cmd.cropImage(r)),
+      panel(Icons.format_color_fill_rounded, l.colorFill, ToolPanel.colorFill),
       shadow,
       blend,
       center,

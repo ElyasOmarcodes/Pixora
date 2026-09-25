@@ -43,7 +43,7 @@ Rect layerLocalRect(Layer layer) {
 
 /// Asset ids used by [layer] and, for groups, its descendants.
 Set<String> assetsOf(Layer layer) => switch (layer) {
-  RasterLayer l => {l.assetId},
+  RasterLayer l => {l.assetId, ?l.sourceAssetId},
   GroupLayer g => {for (final c in g.children) ...assetsOf(c)},
   _ => const {},
 };

@@ -228,14 +228,115 @@ sealed class Layer {
   }
 }
 
+/// How an image was cropped (kept so the crop can be edited again from
+/// the original pixels): quarter turns, flips, straighten angle, the crop
+/// rectangle (0..1 of the turned, straightened image's bounding box),
+/// an elliptical crop and the output resolution.
+@immutable
+class CropState {
+  const CropState({
+    this.quarterTurns = 0,
+    this.flipH = false,
+    this.flipV = false,
+    this.straighten = 0,
+    this.rect = const Rect.fromLTRB(0, 0, 1, 1),
+    this.ellipse = false,
+    this.resolution = 1,
+  });
+
+  final int quarterTurns;
+  final bool flipH;
+  final bool flipV;
+
+  /// Degrees, −45…45.
+  final double straighten;
+  final Rect rect;
+  final bool ellipse;
+
+  /// Output pixel scale 0.1…1.
+  final double resolution;
+
+  CropState copyWith({
+    int? quarterTurns,
+    bool? flipH,
+    bool? flipV,
+    double? straighten,
+    Rect? rect,
+    bool? ellipse,
+    double? resolution,
+  }) => CropState(
+    quarterTurns: quarterTurns ?? this.quarterTurns,
+    flipH: flipH ?? this.flipH,
+    flipV: flipV ?? this.flipV,
+    straighten: straighten ?? this.straighten,
+    rect: rect ?? this.rect,
+    ellipse: ellipse ?? this.ellipse,
+    resolution: resolution ?? this.resolution,
+  );
+
+  Json toJson() => {
+    if (quarterTurns != 0) 'turns': quarterTurns,
+    if (flipH) 'flipH': true,
+    if (flipV) 'flipV': true,
+    if (straighten != 0) 'straighten': straighten,
+    'l': rect.left,
+    't': rect.top,
+    'r': rect.right,
+    'b': rect.bottom,
+    if (ellipse) 'ellipse': true,
+    if (resolution != 1) 'res': resolution,
+  };
+
+  static CropState fromJson(Json m) => CropState(
+    quarterTurns: readDouble(m['turns']).round() % 4,
+    flipH: readBool(m['flipH']),
+    flipV: readBool(m['flipV']),
+    straighten: readDouble(m['straighten']).clamp(-45.0, 45.0),
+    rect: Rect.fromLTRB(
+      readDouble(m['l']).clamp(0.0, 1.0),
+      readDouble(m['t']).clamp(0.0, 1.0),
+      readDouble(m['r'], 1).clamp(0.0, 1.0),
+      readDouble(m['b'], 1).clamp(0.0, 1.0),
+    ),
+    ellipse: readBool(m['ellipse']),
+    resolution: readDouble(m['res'], 1).clamp(0.05, 1.0),
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is CropState &&
+      other.quarterTurns == quarterTurns &&
+      other.flipH == flipH &&
+      other.flipV == flipV &&
+      other.straighten == straighten &&
+      other.rect == rect &&
+      other.ellipse == ellipse &&
+      other.resolution == resolution;
+
+  @override
+  int get hashCode => Object.hash(
+    quarterTurns,
+    flipH,
+    flipV,
+    straighten,
+    rect,
+    ellipse,
+    resolution,
+  );
+}
+
 /// A bitmap. Pixels live in the project's asset store under [assetId]; the
-/// layer only references them, so snapshots stay cheap.
+/// layer only references them, so snapshots stay cheap. A cropped image
+/// keeps its [sourceAssetId] (the original) and [crop] so the crop can be
+/// changed later without losing pixels.
 final class RasterLayer extends Layer {
   const RasterLayer(
     super.props, {
     required this.assetId,
     required this.width,
     required this.height,
+    this.sourceAssetId,
+    this.crop,
   });
 
   final String assetId;
@@ -244,29 +345,55 @@ final class RasterLayer extends Layer {
   final double width;
   final double height;
 
+  /// The uncropped original, when the image was cropped.
+  final String? sourceAssetId;
+  final CropState? crop;
+
   @override
   LayerKind get kind => LayerKind.raster;
 
   @override
-  RasterLayer withProps(LayerProps props) =>
-      RasterLayer(props, assetId: assetId, width: width, height: height);
+  RasterLayer withProps(LayerProps props) => RasterLayer(
+    props,
+    assetId: assetId,
+    width: width,
+    height: height,
+    sourceAssetId: sourceAssetId,
+    crop: crop,
+  );
 
-  RasterLayer copyWith({String? assetId, double? width, double? height}) =>
-      RasterLayer(
-        props,
-        assetId: assetId ?? this.assetId,
-        width: width ?? this.width,
-        height: height ?? this.height,
-      );
+  RasterLayer copyWith({
+    String? assetId,
+    double? width,
+    double? height,
+    String? sourceAssetId,
+    CropState? crop,
+    bool clearCrop = false,
+  }) => RasterLayer(
+    props,
+    assetId: assetId ?? this.assetId,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    sourceAssetId: clearCrop ? null : (sourceAssetId ?? this.sourceAssetId),
+    crop: clearCrop ? null : (crop ?? this.crop),
+  );
 
   @override
-  Json contentToJson() => {'asset': assetId, 'w': width, 'h': height};
+  Json contentToJson() => {
+    'asset': assetId,
+    'w': width,
+    'h': height,
+    if (sourceAssetId != null) 'source': sourceAssetId,
+    if (crop != null) 'crop': crop!.toJson(),
+  };
 
   static RasterLayer fromJson(LayerProps props, Json m) => RasterLayer(
     props,
     assetId: readString(m['asset']),
     width: readDouble(m['w'], 1),
     height: readDouble(m['h'], 1),
+    sourceAssetId: m['source'] == null ? null : readString(m['source']),
+    crop: m['crop'] is Map ? CropState.fromJson(readMap(m['crop'])) : null,
   );
 
   @override
@@ -275,10 +402,13 @@ final class RasterLayer extends Layer {
       other.props == props &&
       other.assetId == assetId &&
       other.width == width &&
-      other.height == height;
+      other.height == height &&
+      other.sourceAssetId == sourceAssetId &&
+      other.crop == crop;
 
   @override
-  int get hashCode => Object.hash(props, assetId, width, height);
+  int get hashCode =>
+      Object.hash(props, assetId, width, height, sourceAssetId, crop);
 }
 
 enum PixTextAlign { start, center, end, justify }

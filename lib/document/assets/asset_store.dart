@@ -94,14 +94,27 @@ class AssetStore extends ChangeNotifier {
 }
 
 /// Reads the pixel size of an encoded image without keeping it decoded.
+/// (ImageDescriptor's size isn't available on the web, so there the first
+/// frame is decoded instead.)
 Future<ui.Size> measureImage(Uint8List bytes) async {
-  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
-  final descriptor = await ui.ImageDescriptor.encoded(buffer);
+  if (!kIsWeb) {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    final descriptor = await ui.ImageDescriptor.encoded(buffer);
+    final size = ui.Size(
+      descriptor.width.toDouble(),
+      descriptor.height.toDouble(),
+    );
+    descriptor.dispose();
+    buffer.dispose();
+    return size;
+  }
+  final codec = await ui.instantiateImageCodec(bytes);
+  final frame = await codec.getNextFrame();
   final size = ui.Size(
-    descriptor.width.toDouble(),
-    descriptor.height.toDouble(),
+    frame.image.width.toDouble(),
+    frame.image.height.toDouble(),
   );
-  descriptor.dispose();
-  buffer.dispose();
+  frame.image.dispose();
+  codec.dispose();
   return size;
 }

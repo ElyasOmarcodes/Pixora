@@ -36,6 +36,7 @@ enum ToolPanel {
   glow,
   bevel,
   extrude,
+  colorFill,
 }
 
 /// What pointer input on the canvas does.

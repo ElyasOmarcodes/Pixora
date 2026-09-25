@@ -234,6 +234,16 @@ class ContextDock extends StatelessWidget {
           l.replaceImage,
           onTap: () => commands.replaceImage(r),
         ),
+        DockItem(
+          Icons.crop_rounded,
+          l.crop,
+          onTap: () => commands.cropImage(r),
+        ),
+        DockItem(
+          Icons.format_color_fill_rounded,
+          l.colorFill,
+          panel: ToolPanel.colorFill,
+        ),
         ...basics,
         div,
         DockItem(Icons.tune_rounded, l.adjust, panel: ToolPanel.adjust),

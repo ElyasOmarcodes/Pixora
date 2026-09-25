@@ -121,6 +121,7 @@ class ToolPanelHost extends StatelessWidget {
       ToolPanel.glow => GlowPanel(editor: editor, layer: layer),
       ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
       ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),
+      ToolPanel.colorFill => ColorFillPanel(editor: editor, layer: layer),
       ToolPanel.fill
           when layer is TextLayer ||
               layer is ShapeLayer ||

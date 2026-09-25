@@ -477,5 +477,16 @@
   "addStop": "Renk ekle",
   "deleteStop": "Rengi sil",
   "distribute": "Eşit dağıt",
-  "location": "Konum"
+  "location": "Konum",
+  "crop": "Kırp",
+  "free": "Serbest",
+  "original": "Orijinal",
+  "rotateLeft": "Sola döndür",
+  "rotateRight": "Sağa döndür",
+  "roundCrop": "Yuvarlak kırp",
+  "colorFill": "Renk dolgusu",
+  "fillMode": "Doldur",
+  "tintMode": "Renklendir",
+  "multiplyMode": "Çarp",
+  "strength": "Güç"
 }
