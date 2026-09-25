@@ -533,5 +533,9 @@
   "hintSelWand": "Toca un color para seleccionar píxeles similares",
   "hintSelRange": "Toca un color en el lienzo y ajusta la tolerancia",
   "needLayerFirst": "Primero selecciona una capa",
-  "nothingSelected": "Aún no hay nada seleccionado"
+  "nothingSelected": "Aún no hay nada seleccionado",
+  "fillOpacity": "Relleno",
+  "fillOpacityHint": "Atenúa solo la capa — el trazo, la sombra, el resplandor y el bisel siguen visibles.",
+  "blendInteriorEffects": "Fusionar efectos interiores como grupo",
+  "blendInteriorEffectsHint": "La sombra, el resplandor y el bisel interiores se atenúan con el relleno"
 }

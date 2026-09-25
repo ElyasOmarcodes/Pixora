@@ -126,7 +126,13 @@ List<QuickAction> quickActionsFor(
     () => cmd.deleteLayers([id]),
     destructive: true,
   );
-  final blend = panel(Icons.opacity_rounded, l.blendMode, ToolPanel.opacity);
+  // Opacity || Fill: two quick entries into the same panel.
+  final blend = panel(Icons.opacity_rounded, l.opacity, ToolPanel.opacity);
+  final fill = panel(
+    Icons.format_color_fill_rounded,
+    l.fillOpacity,
+    ToolPanel.fillOpacity,
+  );
   final mask = panel(
     Icons.vignette_rounded,
     layer.props.hasMaskLayer ? l.layerMask : l.addLayerMask,
@@ -144,6 +150,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.border_color_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -168,6 +175,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.format_color_fill_rounded, l.colorFill, ToolPanel.colorFill),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -190,6 +198,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -212,6 +221,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.style_rounded, l.style, ToolPanel.iconStyle),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -229,6 +239,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.line_style_rounded, l.lineStyle, ToolPanel.line),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -246,6 +257,7 @@ List<QuickAction> quickActionsFor(
       panel(Icons.palette_rounded, l.color, ToolPanel.fill),
       shadow,
       blend,
+      fill,
       center,
       rotate,
       flipH,
@@ -262,6 +274,7 @@ List<QuickAction> quickActionsFor(
       QuickAction(Icons.folder_off_rounded, l.ungroup, () => e.ungroup(g.id)),
       rename,
       blend,
+      fill,
       shadow,
       adjust,
       mask,

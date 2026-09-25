@@ -39,6 +39,9 @@ enum ToolPanel {
   extrude,
   colorFill,
   selection,
+
+  /// The opacity panel opened on its Fill tab.
+  fillOpacity,
 }
 
 /// What pointer input on the canvas does.

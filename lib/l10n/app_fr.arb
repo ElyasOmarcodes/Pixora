@@ -533,5 +533,9 @@
   "hintSelWand": "Touchez une couleur pour sélectionner les pixels similaires",
   "hintSelRange": "Touchez une couleur puis réglez la tolérance",
   "needLayerFirst": "Sélectionnez d’abord un calque",
-  "nothingSelected": "Rien n’est encore sélectionné"
+  "nothingSelected": "Rien n’est encore sélectionné",
+  "fillOpacity": "Fond",
+  "fillOpacityHint": "Atténue seulement le calque — contour, ombre, lueur et biseau restent visibles.",
+  "blendInteriorEffects": "Fusionner les effets intérieurs en groupe",
+  "blendInteriorEffectsHint": "L’ombre, la lueur et le biseau intérieurs s’atténuent avec le fond"
 }

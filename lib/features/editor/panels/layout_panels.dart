@@ -9,14 +9,34 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import 'panel_common.dart';
 
-/// Opacity, blend mode (grouped like Photoshop) and clipping mask.
+/// Opacity || Fill, blend mode (grouped like Photoshop) and clipping mask.
 ///
-/// On desktop, hovering a blend mode previews it on the canvas; clicking
-/// applies it.
-class OpacityPanel extends StatelessWidget {
-  const OpacityPanel({super.key, required this.editor, required this.layer});
+/// Opacity fades the whole layer with its styles; Fill (Photoshop's Fill
+/// opacity) fades only the layer's own pixels, so stroke, shadows and
+/// glows stay. On desktop, hovering a blend mode previews it on the
+/// canvas; clicking applies it.
+class OpacityPanel extends StatefulWidget {
+  const OpacityPanel({
+    super.key,
+    required this.editor,
+    required this.layer,
+    this.fillFirst = false,
+  });
   final EditorController editor;
   final Layer layer;
+
+  /// Open on the Fill tab.
+  final bool fillFirst;
+
+  @override
+  State<OpacityPanel> createState() => _OpacityPanelState();
+}
+
+class _OpacityPanelState extends State<OpacityPanel> {
+  late bool _fill = widget.fillFirst;
+
+  EditorController get editor => widget.editor;
+  Layer get layer => widget.layer;
 
   @override
   Widget build(BuildContext context) {
@@ -62,23 +82,88 @@ class OpacityPanel extends StatelessWidget {
       );
     }
 
+    String pct(double v) => '${(v * 100).round()}%';
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PixSlider(
-          label: l.opacity,
-          value: layer.props.opacity,
-          min: 0,
-          max: 1,
-          defaultValue: 1,
-          format: (v) => '${(v * 100).round()}%',
-          onChanged: (v) => editor.updateProps(
-            layer.id,
-            (p) => p.copyWith(opacity: v),
-            live: true,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: false,
+                  icon: const Icon(Icons.opacity_rounded),
+                  label: Text('${l.opacity} ${pct(layer.props.opacity)}'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: const Icon(Icons.format_color_fill_rounded),
+                  label: Text(
+                    '${l.fillOpacity} ${pct(layer.props.fillOpacity)}',
+                  ),
+                ),
+              ],
+              selected: {_fill},
+              onSelectionChanged: (v) => setState(() => _fill = v.first),
+            ),
           ),
-          onChangeEnd: (_) => editor.commit('opacity'),
         ),
+        if (!_fill)
+          PixSlider(
+            label: l.opacity,
+            value: layer.props.opacity,
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            format: pct,
+            onChanged: (v) => editor.updateProps(
+              layer.id,
+              (p) => p.copyWith(opacity: v),
+              live: true,
+            ),
+            onChangeEnd: (_) => editor.commit('opacity'),
+          )
+        else ...[
+          PixSlider(
+            label: l.fillOpacity,
+            value: layer.props.fillOpacity,
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            format: pct,
+            onChanged: (v) => editor.updateProps(
+              layer.id,
+              (p) => p.copyWith(fillOpacity: v),
+              live: true,
+            ),
+            onChangeEnd: (_) => editor.commit('fill_opacity'),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 2),
+            child: Text(
+              l.fillOpacityHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+            secondary: const Icon(Icons.layers_rounded),
+            title: Text(l.blendInteriorEffects),
+            subtitle: Text(l.blendInteriorEffectsHint),
+            value: layer.props.blendInterior,
+            onChanged: (v) => editor.updateProps(
+              layer.id,
+              (p) => p.copyWith(blendInterior: v),
+              label: 'blend_interior',
+            ),
+          ),
+        ],
         PanelLabel(l.blendMode),
         SizedBox(
           height: 52,

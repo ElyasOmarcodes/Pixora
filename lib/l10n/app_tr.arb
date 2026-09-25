@@ -533,5 +533,9 @@
   "hintSelWand": "Benzer pikselleri seçmek için bir renge dokunun",
   "hintSelRange": "Tuvalde bir renge dokunun, sonra bulanıklığı ayarlayın",
   "needLayerFirst": "Önce bir katman seçin",
-  "nothingSelected": "Henüz hiçbir şey seçilmedi"
+  "nothingSelected": "Henüz hiçbir şey seçilmedi",
+  "fillOpacity": "Dolgu",
+  "fillOpacityHint": "Yalnızca katmanı soldurur — kontur, gölge, parlama ve eğim tam görünür kalır.",
+  "blendInteriorEffects": "İç efektleri grup olarak karıştır",
+  "blendInteriorEffectsHint": "İç gölge, iç parlama ve iç eğim dolguyla birlikte solar"
 }

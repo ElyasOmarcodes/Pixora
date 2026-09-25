@@ -343,28 +343,35 @@ class DocumentRenderer {
 
     final hasInner =
         inners.isNotEmpty || bevels.any((b) => b.style != BevelStyle.outer);
-    if (hasInner) canvas.saveLayer(layerBounds, Paint());
+    // Fill opacity fades the layer's own pixels only. With "Blend interior
+    // effects as group" the inner effects fade with them; otherwise they
+    // keep full strength, clipped to the unfaded shape (Photoshop).
+    final fill = props.fillOpacity.clamp(0.0, 1.0);
+    final faded = fill < 1;
+    final interiorFades = faded && props.blendInterior;
 
-    if (matrix != null || blur > 0) {
-      canvas.saveLayer(
-        layerBounds,
-        Paint()
-          ..colorFilter = matrix == null ? null : ColorFilter.matrix(matrix)
-          ..imageFilter = blur > 0
-              ? ui.ImageFilter.blur(
-                  sigmaX: blur,
-                  sigmaY: blur,
-                  tileMode: TileMode.decal,
-                )
-              : null,
-      );
-      shape(canvas);
-      canvas.restore();
-    } else {
-      shape(canvas);
+    void content() {
+      if (matrix != null || blur > 0) {
+        canvas.saveLayer(
+          layerBounds,
+          Paint()
+            ..colorFilter = matrix == null ? null : ColorFilter.matrix(matrix)
+            ..imageFilter = blur > 0
+                ? ui.ImageFilter.blur(
+                    sigmaX: blur,
+                    sigmaY: blur,
+                    tileMode: TileMode.decal,
+                  )
+                : null,
+        );
+        shape(canvas);
+        canvas.restore();
+      } else {
+        shape(canvas);
+      }
     }
 
-    if (hasInner) {
+    void innerEffects({required bool clipToShape}) {
       void inner(Offset docOffset, double blurPx, Color color) => _paintInner(
         canvas,
         toLocal(docOffset),
@@ -372,6 +379,7 @@ class DocumentRenderer {
         color,
         layerBounds ?? local.inflate(4000),
         shape,
+        clipToShape: clipToShape,
       );
       for (final s in inners) {
         inner(s.offset, s.blur, s.color);
@@ -386,7 +394,28 @@ class DocumentRenderer {
         inner(-dir * d, bl, b.highlight);
         inner(dir * d, bl, b.shadow);
       }
+    }
+
+    final fadePaint = Paint()..color = Color.fromRGBO(0, 0, 0, fill);
+    if (!faded || interiorFades) {
+      // Content and inner effects together (faded as one when needed).
+      if (faded) canvas.saveLayer(layerBounds, fadePaint);
+      if (hasInner) canvas.saveLayer(layerBounds, Paint());
+      content();
+      if (hasInner) {
+        innerEffects(clipToShape: false);
+        canvas.restore();
+      }
+      if (faded) canvas.restore();
+    } else {
+      canvas.saveLayer(layerBounds, fadePaint);
+      content();
       canvas.restore();
+      if (hasInner) {
+        canvas.saveLayer(layerBounds, Paint());
+        innerEffects(clipToShape: true);
+        canvas.restore();
+      }
     }
 
     if (needsGroup) canvas.restore();
@@ -477,9 +506,15 @@ class DocumentRenderer {
     double blurPx,
     Color color,
     Rect area,
-    void Function(Canvas) shape,
-  ) {
-    canvas.saveLayer(area, Paint()..blendMode = BlendMode.srcATop);
+    void Function(Canvas) shape, {
+    bool clipToShape = false,
+  }) {
+    // Over existing content: srcATop keeps it inside the painted pixels.
+    // Alone (fill opacity): clip to the full-strength shape instead.
+    canvas.saveLayer(
+      area,
+      Paint()..blendMode = clipToShape ? BlendMode.srcOver : BlendMode.srcATop,
+    );
     canvas.saveLayer(
       area,
       Paint()
@@ -500,8 +535,13 @@ class DocumentRenderer {
     canvas
       ..restore()
       ..restore()
-      ..restore()
       ..restore();
+    if (clipToShape) {
+      canvas.saveLayer(area, Paint()..blendMode = BlendMode.dstIn);
+      shape(canvas);
+      canvas.restore();
+    }
+    canvas.restore();
   }
 
   /// 3D extrusion: the shape repeated along the extrusion direction,

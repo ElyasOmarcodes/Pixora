@@ -618,5 +618,9 @@
   "hintSelWand": "Tap a colour to select similar pixels",
   "hintSelRange": "Tap a colour on the canvas, then adjust fuzziness",
   "needLayerFirst": "Select a layer first",
-  "nothingSelected": "Nothing is selected yet"
+  "nothingSelected": "Nothing is selected yet",
+  "fillOpacity": "Fill",
+  "fillOpacityHint": "Fades only the layer itself — stroke, shadow, glow and bevel stay fully visible.",
+  "blendInteriorEffects": "Blend interior effects as group",
+  "blendInteriorEffectsHint": "Inner shadow, inner glow and inner bevel fade with Fill"
 }

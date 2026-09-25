@@ -533,5 +533,9 @@
   "hintSelWand": "انقر على لون لتحديد البكسلات المشابهة",
   "hintSelRange": "انقر على لون في اللوحة ثم اضبط الغموض",
   "needLayerFirst": "اختر طبقة أولاً",
-  "nothingSelected": "لم يتم تحديد شيء بعد"
+  "nothingSelected": "لم يتم تحديد شيء بعد",
+  "fillOpacity": "التعبئة",
+  "fillOpacityHint": "يخفي الطبقة نفسها فقط — يبقى الحد والظل والتوهج والنتوء ظاهرًا بالكامل.",
+  "blendInteriorEffects": "مزج التأثيرات الداخلية كمجموعة",
+  "blendInteriorEffectsHint": "يتلاشى الظل والتوهج والنتوء الداخلي مع التعبئة"
 }

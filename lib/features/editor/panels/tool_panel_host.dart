@@ -151,6 +151,11 @@ class ToolPanelHost extends StatelessWidget {
       ToolPanel.adjust => AdjustPanel(editor: editor, layer: layer),
       ToolPanel.filters => FiltersPanel(editor: editor, layer: layer),
       ToolPanel.opacity => OpacityPanel(editor: editor, layer: layer),
+      ToolPanel.fillOpacity => OpacityPanel(
+        editor: editor,
+        layer: layer,
+        fillFirst: true,
+      ),
       ToolPanel.arrange => ArrangePanel(editor: editor, layer: layer),
       ToolPanel.shapeStyle when layer is ShapeLayer => ShapeStylePanel(
         editor: editor,

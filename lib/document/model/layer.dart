@@ -34,6 +34,8 @@ class LayerProps {
     this.maskEnabled = true,
     this.maskDensity = 1,
     this.maskFeather = 0,
+    this.fillOpacity = 1,
+    this.blendInterior = false,
   }) : id = id ?? newId('ly'),
        effects = List.unmodifiable(effects),
        mask = List.unmodifiable(mask);
@@ -67,6 +69,14 @@ class LayerProps {
   /// Photoshop's mask Feather: blur of the whole mask, in layer pixels.
   final double maskFeather;
 
+  /// Photoshop's Fill opacity (0..1): fades only the layer's own pixels;
+  /// layer styles (stroke, shadows, glows, bevel) keep their strength.
+  final double fillOpacity;
+
+  /// Photoshop's "Blend Interior Effects as Group": inner effects (inner
+  /// shadow / glow, inner bevel) fade together with the fill.
+  final bool blendInterior;
+
   /// Whether the layer has a mask at all (it may be disabled).
   bool get hasMaskLayer => mask.isNotEmpty;
 
@@ -89,6 +99,8 @@ class LayerProps {
     bool? maskEnabled,
     double? maskDensity,
     double? maskFeather,
+    double? fillOpacity,
+    bool? blendInterior,
   }) => LayerProps(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -103,6 +115,8 @@ class LayerProps {
     maskEnabled: maskEnabled ?? this.maskEnabled,
     maskDensity: maskDensity ?? this.maskDensity,
     maskFeather: maskFeather ?? this.maskFeather,
+    fillOpacity: fillOpacity ?? this.fillOpacity,
+    blendInterior: blendInterior ?? this.blendInterior,
   );
 
   Json toJson() => {
@@ -119,6 +133,8 @@ class LayerProps {
     if (!maskEnabled) 'maskEnabled': false,
     if (maskDensity != 1) 'maskDensity': maskDensity,
     if (maskFeather != 0) 'maskFeather': maskFeather,
+    if (fillOpacity != 1) 'fill': fillOpacity,
+    if (blendInterior) 'blendInterior': true,
   };
 
   static LayerProps fromJson(Json m) => LayerProps(
@@ -141,6 +157,8 @@ class LayerProps {
     maskEnabled: readBool(m['maskEnabled'], true),
     maskDensity: readDouble(m['maskDensity'], 1).clamp(0.0, 1.0),
     maskFeather: readDouble(m['maskFeather']).clamp(0.0, 1000.0),
+    fillOpacity: readDouble(m['fill'], 1).clamp(0.0, 1.0),
+    blendInterior: readBool(m['blendInterior']),
   );
 
   @override
@@ -157,6 +175,8 @@ class LayerProps {
       other.maskEnabled == maskEnabled &&
       other.maskDensity == maskDensity &&
       other.maskFeather == maskFeather &&
+      other.fillOpacity == fillOpacity &&
+      other.blendInterior == blendInterior &&
       listEquals(other.effects, effects) &&
       listEquals(other.mask, mask);
 
@@ -173,6 +193,8 @@ class LayerProps {
     maskEnabled,
     maskDensity,
     maskFeather,
+    fillOpacity,
+    blendInterior,
     Object.hashAll(effects),
     Object.hashAll(mask),
   );
