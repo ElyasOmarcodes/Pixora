@@ -614,5 +614,12 @@
   "jitter": "Variación",
   "glowQuality": "Calidad",
   "elements": "Elementos",
-  "showEffects": "Mostrar efectos"
+  "showEffects": "Mostrar efectos",
+  "taper": "Estrechar",
+  "twist": "Torsión",
+  "material": "Material",
+  "layerTexture": "Capa",
+  "light": "Luz",
+  "ambientLight": "Ambiente",
+  "gloss": "Brillo"
 }

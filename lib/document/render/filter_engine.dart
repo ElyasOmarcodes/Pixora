@@ -134,6 +134,18 @@ class SaltPepperFilter extends PixFilter {
   final int seed;
 }
 
+/// A filter with its Blending Options.
+class FilterStep {
+  const FilterStep(
+    this.filter, {
+    this.mode = BlendMode.srcOver,
+    this.opacity = 1,
+  });
+  final PixFilter filter;
+  final BlendMode mode;
+  final double opacity;
+}
+
 /// Runs [PixFilter]s on the GPU: blurs as exact multi-tap averages built
 /// by repeated doubling (log₂ passes, so even 2000 px motion blurs stay
 /// fast and free of 8-bit banding), noise as pre-generated tiles added
@@ -143,11 +155,12 @@ abstract final class FilterEngine {
   /// Applies [filters] in order to [src], an image of the layer covering
   /// [rect] (layer units). Returns a new image of the same size; [src] is
   /// left alone.
-  static ui.Image apply(ui.Image src, Rect rect, List<PixFilter> filters) {
+  static ui.Image apply(ui.Image src, Rect rect, List<FilterStep> steps) {
     var img = src;
     final res = src.width / rect.width;
-    for (final f in filters) {
-      final next = switch (f) {
+    for (final step in steps) {
+      final f = step.filter;
+      var next = switch (f) {
         GaussianBlurFilter g => _gaussian(img, g.radius * res),
         BoxBlurFilter b => _box(img, b.radius * res),
         MotionBlurFilter m => _motion(img, m, res),
@@ -179,6 +192,24 @@ abstract final class FilterEngine {
         SaltPepperFilter s => _saltPepper(img, s, res),
       };
       if (next == null) continue;
+      // Photoshop's filter Blending Options: the result laid over the
+      // unfiltered pixels with a mode and opacity.
+      if (step.mode != BlendMode.srcOver || step.opacity < 1) {
+        final filtered = next;
+        final before = img;
+        next = _draw(img.width, img.height, (c) {
+          c
+            ..drawImage(before, Offset.zero, Paint())
+            ..drawImage(
+              filtered,
+              Offset.zero,
+              Paint()
+                ..blendMode = step.mode
+                ..color = Color.fromRGBO(0, 0, 0, step.opacity.clamp(0.0, 1.0)),
+            );
+        });
+        filtered.dispose();
+      }
       if (!identical(img, src)) img.dispose();
       img = next;
     }

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 // Per-pixel helpers shared by the layer-style engines.
@@ -7,24 +6,53 @@ import 'dart:typed_data';
 /// [set] value is [target] (Felzenszwalb & Huttenlocher, two 1D passes).
 Float32List edtSquared(Uint8List set, int w, int h, int target) {
   const inf = 1e20;
-  final f = Float32List(math.max(w, h));
-  final d = Float32List(math.max(w, h));
-  final v = Int32List(math.max(w, h));
-  final z = Float32List(math.max(w, h) + 1);
-  final grid = Float32List(w * h);
-  for (var i = 0; i < w * h; i++) {
-    grid[i] = set[i] == target ? 0 : inf;
+  final n = w * h;
+  // Vertical pass: on a binary image a 1D distance is just the gap to the
+  // nearest target pixel in the column — two sweeps, in memory order.
+  final col = Float32List(n);
+  final run = Float32List(w)..fillRange(0, w, inf);
+  for (var y = 0; y < h; y++) {
+    final row = y * w;
+    for (var x = 0; x < w; x++) {
+      final r = set[row + x] == target ? 0.0 : run[x] + 1;
+      run[x] = r;
+      col[row + x] = r;
+    }
   }
-  void pass(int len) {
+  run.fillRange(0, w, inf);
+  for (var y = h - 1; y >= 0; y--) {
+    final row = y * w;
+    for (var x = 0; x < w; x++) {
+      final r = set[row + x] == target ? 0.0 : run[x] + 1;
+      run[x] = r;
+      final c = col[row + x];
+      final m = c < r ? c : r;
+      col[row + x] = m >= inf ? inf : m * m;
+    }
+  }
+  // Horizontal pass: lower envelope of parabolas (Felzenszwalb &
+  // Huttenlocher), row by row.
+  final f = Float32List(w);
+  final v = Int32List(w);
+  final z = Float32List(w + 1);
+  final grid = Float32List(n);
+  for (var y = 0; y < h; y++) {
+    final row = y * w;
+    for (var x = 0; x < w; x++) {
+      f[x] = col[row + x];
+    }
     var k = 0;
     v[0] = 0;
     z[0] = -inf;
     z[1] = inf;
-    for (var q = 1; q < len; q++) {
-      var s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+    for (var q = 1; q < w; q++) {
+      final fq = f[q] + q * q;
+      var vk = v[k];
+      var s = (fq - (f[vk] + vk * vk)) / (2 * (q - vk));
       while (s <= z[k]) {
         k--;
-        s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
+        vk = v[k];
+        s = (fq - (f[vk] + vk * vk)) / (2 * (q - vk));
       }
       k++;
       v[k] = q;
@@ -32,31 +60,12 @@ Float32List edtSquared(Uint8List set, int w, int h, int target) {
       z[k + 1] = inf;
     }
     k = 0;
-    for (var q = 0; q < len; q++) {
+    for (var q = 0; q < w; q++) {
       while (z[k + 1] < q) {
         k++;
       }
       final dq = q - v[k];
-      d[q] = dq * dq + f[v[k]];
-    }
-  }
-
-  for (var x = 0; x < w; x++) {
-    for (var y = 0; y < h; y++) {
-      f[y] = grid[y * w + x];
-    }
-    pass(h);
-    for (var y = 0; y < h; y++) {
-      grid[y * w + x] = d[y];
-    }
-  }
-  for (var y = 0; y < h; y++) {
-    for (var x = 0; x < w; x++) {
-      f[x] = grid[y * w + x];
-    }
-    pass(w);
-    for (var x = 0; x < w; x++) {
-      grid[y * w + x] = d[x];
+      grid[row + q] = dq * dq + f[v[k]];
     }
   }
   return grid;
@@ -64,39 +73,68 @@ Float32List edtSquared(Uint8List set, int w, int h, int target) {
 
 /// Three box blurs (≈ Gaussian) of radius [r].
 Float32List blur3(Float32List src, int w, int h, int r) {
-  var a = src;
-  for (var k = 0; k < 3; k++) {
-    a = boxBlur(a, w, h, r);
-  }
+  if (r <= 0) return Float32List.fromList(src);
+  final a = Float32List(src.length), b = Float32List(src.length);
+  _boxInto(src, b, a, w, h, r);
+  _boxInto(a, b, a, w, h, r);
+  _boxInto(a, b, a, w, h, r);
   return a;
 }
 
 Float32List boxBlur(Float32List src, int w, int h, int r) {
-  final tmp = Float32List(src.length), out = Float32List(src.length);
-  final n = 2 * r + 1;
+  final out = Float32List(src.length);
+  if (r <= 0) return out..setAll(0, src);
+  _boxInto(src, Float32List(src.length), out, w, h, r);
+  return out;
+}
+
+/// One (2r+1)² box blur of [src] into [out] ([tmp] is scratch; [out] may
+/// be [src]). Edges repeat the border pixel.
+void _boxInto(
+  Float32List src,
+  Float32List tmp,
+  Float32List out,
+  int w,
+  int h,
+  int r,
+) {
+  final inv = 1 / (2 * r + 1);
+  // Rows → tmp.
   for (var y = 0; y < h; y++) {
     final row = y * w;
-    var sum = 0.0;
-    for (var k = -r; k <= r; k++) {
-      sum += src[row + k.clamp(0, w - 1)];
+    final first = src[row], last = src[row + w - 1];
+    var sum = first * (r + 1);
+    for (var k = 1; k <= r; k++) {
+      sum += k < w ? src[row + k] : last;
     }
     for (var x = 0; x < w; x++) {
-      tmp[row + x] = sum / n;
+      tmp[row + x] = sum * inv;
+      final add = x + r + 1, sub = x - r;
       sum +=
-          src[row + math.min(w - 1, x + r + 1)] - src[row + math.max(0, x - r)];
+          (add < w ? src[row + add] : last) -
+          (sub > 0 ? src[row + sub] : first);
     }
   }
+  // Columns → out, row by row (memory order) with running column sums.
+  final sums = Float64List(w);
   for (var x = 0; x < w; x++) {
-    var sum = 0.0;
-    for (var k = -r; k <= r; k++) {
-      sum += tmp[k.clamp(0, h - 1) * w + x];
+    final first = tmp[x], last = tmp[(h - 1) * w + x];
+    var sum = first * (r + 1);
+    for (var k = 1; k <= r; k++) {
+      sum += k < h ? tmp[k * w + x] : last;
     }
-    for (var y = 0; y < h; y++) {
-      out[y * w + x] = sum / n;
-      sum +=
-          tmp[math.min(h - 1, y + r + 1) * w + x] -
-          tmp[math.max(0, y - r) * w + x];
+    sums[x] = sum;
+  }
+  final lastRow = (h - 1) * w;
+  for (var y = 0; y < h; y++) {
+    final row = y * w;
+    final add = y + r + 1, sub = y - r;
+    final addRow = add < h ? add * w : lastRow;
+    final subRow = sub > 0 ? sub * w : 0;
+    for (var x = 0; x < w; x++) {
+      final v = sums[x];
+      out[row + x] = v * inv;
+      sums[x] = v + tmp[addRow + x] - tmp[subRow + x];
     }
   }
-  return out;
 }

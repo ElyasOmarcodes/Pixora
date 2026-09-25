@@ -8,7 +8,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import 'panel_common.dart';
-import 'bevel_panel.dart' show ContourRow;
+import 'bevel_panel.dart' show ContourRow, LightGlobe;
 import '../../../document/render/bevel_engine.dart' show ContourPreset;
 
 /// A control inside [EffectEditor].
@@ -441,7 +441,10 @@ class GlowPanel extends StatelessWidget {
 }
 
 /// Photoshop-style Bevel & Emboss.
-/// 3D: extrusion depth and colour plus perspective tilt.
+/// Photoshop-style 3D extrusion: structure (depth, direction, taper,
+/// twist), material (colour or the layer's own pixels, back shading) and
+/// light (direction and height on a globe, intensity, ambient, gloss),
+/// plus the perspective tilt.
 class Extrude3DPanel extends StatelessWidget {
   const Extrude3DPanel({super.key, required this.editor, required this.layer});
   final EditorController editor;
@@ -450,6 +453,10 @@ class Extrude3DPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final e = editor.effectOf(layer.id, 'extrude');
+    final layerMaterial = (e?.number('material', 0) ?? 0) >= 1;
+    String px(double v) => '${v.round()} px';
+    String pct(double v) => '${v.round()}%';
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -459,10 +466,48 @@ class Extrude3DPanel extends StatelessWidget {
           type: 'extrude',
           title: l.extrude3d,
           controls: [
-            FxSlider('depth', l.depth),
+            FxLabel(l.bevelStructure),
+            FxSlider('depth', l.depth, format: px),
             FxSlider('angle', l.direction, format: fxDegrees),
+            FxSlider('scale', l.taper, format: pct),
+            FxSlider('twist', l.twist, format: fxDegrees),
+            FxLabel(l.material),
+            FxChoice(
+              'material',
+              [l.color, l.layerTexture],
+              icons: const [Icons.circle, Icons.texture_rounded],
+            ),
+            if (!layerMaterial) const FxColor('color'),
             FxSlider('shade', l.shading),
-            const FxColor('color'),
+            FxLabel(l.light),
+            FxCustom(
+              (valueOf, set) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    LightGlobe(
+                      angle: valueOf('lightAngle'),
+                      altitude: valueOf('altitude'),
+                      onChanged: (a, alt, {required live}) {
+                        set('lightAngle', a, live: live);
+                        set('altitude', alt, live: live);
+                      },
+                      onEnd: () => editor.commit('effect'),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${l.angle} ${valueOf('lightAngle').round()}°\n'
+                        '${l.altitude} ${valueOf('altitude').round()}°',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            FxSlider('intensity', l.intensity, format: pct),
+            FxSlider('ambient', l.ambientLight, format: pct),
+            FxSlider('gloss', l.gloss, format: pct),
           ],
         ),
         if (layer is! GroupLayer) ...[

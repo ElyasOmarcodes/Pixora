@@ -699,5 +699,12 @@
   "jitter": "Jitter",
   "glowQuality": "Quality",
   "elements": "Elements",
-  "showEffects": "Show effects"
+  "showEffects": "Show effects",
+  "taper": "Taper",
+  "twist": "Twist",
+  "material": "Material",
+  "layerTexture": "Layer",
+  "light": "Light",
+  "ambientLight": "Ambient",
+  "gloss": "Gloss"
 }

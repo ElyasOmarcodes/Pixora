@@ -614,5 +614,12 @@
   "jitter": "لرزش",
   "glowQuality": "کیفیت",
   "elements": "عناصر",
-  "showEffects": "نمایش افکت‌ها"
+  "showEffects": "نمایش افکت‌ها",
+  "taper": "باریک‌شدن",
+  "twist": "پیچش",
+  "material": "جنس",
+  "layerTexture": "لایه",
+  "light": "نور",
+  "ambientLight": "نور محیط",
+  "gloss": "براقیت"
 }

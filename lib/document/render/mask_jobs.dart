@@ -76,7 +76,7 @@ class MaskJobCache extends ChangeNotifier {
   static final MaskJobCache instance = MaskJobCache._();
 
   /// Full-resolution work starts after the settings rest this long.
-  static const settle = Duration(milliseconds: 160);
+  static const settle = Duration(milliseconds: 90);
 
   static const _maxEntries = 40;
 

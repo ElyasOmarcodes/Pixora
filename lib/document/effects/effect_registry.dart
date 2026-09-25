@@ -135,21 +135,79 @@ class SatinSpec {
       Offset.fromDirection(-angle * 3.141592653589793 / 180, distance / 2);
 }
 
-/// 3D extrusion: the layer is repeated along [angle] for [depth] px,
-/// shaded from [color] to a darker tone at the back.
+/// Photoshop-style 3D extrusion: the layer pushed back along [angle] for
+/// [depth] px, its sides lit by a light (each side by the way it faces),
+/// in a colour or the layer's own pixels, narrowing ([backScale]) or
+/// twisting towards the back.
 class ExtrudeSpec {
   const ExtrudeSpec({
     required this.depth,
     required this.angle,
     required this.color,
     required this.shade,
+    this.layerMaterial = false,
+    this.lightAngle = 120,
+    this.altitude = 30,
+    this.intensity = 0,
+    this.ambient = 1,
+    this.gloss = 0,
+    this.backScale = 1,
+    this.twist = 0,
   });
+
+  factory ExtrudeSpec.of(LayerEffect e) {
+    double n(String k, double d) => e.number(k, d);
+    final v2 = n('v', 0) >= 2;
+    return ExtrudeSpec(
+      depth: n('depth', 24).clamp(0.0, 2000.0),
+      angle: n('angle', 45) * 3.141592653589793 / 180,
+      color: e.color('color', const Color(0xFF1E3A8A)),
+      shade: n('shade', 0.5).clamp(0.0, 1.0),
+      layerMaterial: n('material', 0) >= 1,
+      lightAngle: n('lightAngle', 120),
+      altitude: n('altitude', 30).clamp(0.0, 90.0),
+      // Older projects: flat sides, as before.
+      intensity: v2 ? n('intensity', 100).clamp(0.0, 200.0) / 100 : 0,
+      ambient: v2 ? n('ambient', 50).clamp(0.0, 100.0) / 100 : 1,
+      gloss: n('gloss', 0).clamp(0.0, 100.0) / 100,
+      backScale: n('scale', 100).clamp(10.0, 300.0) / 100,
+      twist: n('twist', 0).clamp(-360.0, 360.0),
+    );
+  }
+
   final double depth;
+
+  /// Radians: where the extrusion goes (document space).
   final double angle;
+
+  /// Side colour (Color material).
   final Color color;
 
   /// 0..1 darkening towards the back.
   final double shade;
+
+  /// Sides carry the layer's own pixels instead of [color].
+  final bool layerMaterial;
+
+  /// Light direction (degrees, Photoshop convention) and height.
+  final double lightAngle;
+  final double altitude;
+
+  /// Diffuse light strength and ambient light, 0..1 (intensity to 2).
+  final double intensity;
+  final double ambient;
+
+  /// Shine on the sides facing the light.
+  final double gloss;
+
+  /// Size of the back face relative to the front.
+  final double backScale;
+
+  /// Degrees the back face turns.
+  final double twist;
+
+  /// Whether the sides are lit per face (needs the shape's normals).
+  bool get lit => intensity > 0 || gloss > 0;
 }
 
 /// The behaviour behind an effect type.
@@ -216,7 +274,30 @@ class EffectRegistry {
 
   EffectDefinition? operator [](String type) => _defs[type];
 
-  void register(EffectDefinition def) => _defs[def.type] = def;
+  void register(EffectDefinition def) => _defs[def.type] = def.filter == null
+      ? def
+      : EffectDefinition(
+          type: def.type,
+          category: def.category,
+          // Every pixel filter has Photoshop's Blending Options.
+          params: [
+            ...def.params,
+            const EffectParam.number(
+              'blend',
+              min: 0,
+              max: 16,
+              defaultValue: 0,
+              step: 1,
+            ),
+            const EffectParam.number(
+              'opacity',
+              min: 0,
+              max: 1,
+              defaultValue: 1,
+            ),
+          ],
+          filter: def.filter,
+        );
 
   void registerBuiltIns() {
     double n(LayerEffect e, String k) => e.number(k, 0);
@@ -835,21 +916,37 @@ class EffectRegistry {
       ),
     );
     register(
-      EffectDefinition(
+      const EffectDefinition(
         type: 'extrude',
         category: EffectCategory.style,
-        params: const [
-          EffectParam.number('depth', min: 1, max: 200, defaultValue: 24),
+        params: [
+          EffectParam.number('v', min: 2, max: 2, defaultValue: 2, step: 1),
+          EffectParam.number('depth', min: 1, max: 500, defaultValue: 40),
           EffectParam.number('angle', min: 0, max: 360, defaultValue: 45),
+          // Like Photoshop, sides carry the layer's own colours at first.
+          EffectParam.number(
+            'material',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
           EffectParam.color('color', defaultValue: Color(0xFF1E3A8A)),
-          EffectParam.number('shade', min: 0, max: 1, defaultValue: 0.5),
+          EffectParam.number('shade', min: 0, max: 1, defaultValue: 0.3),
+          EffectParam.number(
+            'lightAngle',
+            min: -180,
+            max: 180,
+            defaultValue: 120,
+          ),
+          EffectParam.number('altitude', min: 0, max: 90, defaultValue: 30),
+          EffectParam.number('intensity', min: 0, max: 200, defaultValue: 100),
+          EffectParam.number('ambient', min: 0, max: 100, defaultValue: 50),
+          EffectParam.number('gloss', min: 0, max: 100, defaultValue: 0),
+          EffectParam.number('scale', min: 10, max: 300, defaultValue: 100),
+          EffectParam.number('twist', min: -360, max: 360, defaultValue: 0),
         ],
-        extrude: (e) => ExtrudeSpec(
-          depth: e.number('depth', 24),
-          angle: e.number('angle', 45) * 3.141592653589793 / 180,
-          color: e.color('color', const Color(0xFF1E3A8A)),
-          shade: e.number('shade', 0.5).clamp(0.0, 1.0),
-        ),
+        extrude: ExtrudeSpec.of,
       ),
     );
   }

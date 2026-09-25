@@ -614,5 +614,12 @@
   "jitter": "الاهتزاز",
   "glowQuality": "الجودة",
   "elements": "العناصر",
-  "showEffects": "إظهار التأثيرات"
+  "showEffects": "إظهار التأثيرات",
+  "taper": "الاستدقاق",
+  "twist": "الالتواء",
+  "material": "الخامة",
+  "layerTexture": "الطبقة",
+  "light": "الإضاءة",
+  "ambientLight": "الإضاءة المحيطة",
+  "gloss": "اللمعان"
 }

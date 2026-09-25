@@ -212,4 +212,17 @@ void main() {
     };
     expect(values.length, greaterThan(5));
   });
+
+  test(
+    'filter blending options: opacity mixes with the unfiltered pixels',
+    () async {
+      final half = await render([
+        fx('gaussianBlur', {'radius': 4, 'opacity': 0.5}),
+      ]);
+      // Half sharp edge, half blurred: in between.
+      expect(half(28, 50).a, greaterThan(0.02));
+      expect(half(28, 50).a, lessThan(0.3));
+      expect(half(31, 50).a, greaterThan(0.6));
+    },
+  );
 }

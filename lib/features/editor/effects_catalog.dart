@@ -172,6 +172,7 @@ Map<String, Object> suggestedParams(String type, Layer layer, Size size) {
     'filmGrain' => {'size': (side / 900).clamp(1.0, 8.0)},
     'saltPepper' => {'size': (side / 900).clamp(1.0, 8.0).roundToDouble()},
     'glow' || 'innerGlow' => {'size': px(0.03, 5, 250)},
+    'extrude' => {'depth': px(0.08, 10, 500)},
     _ => const {},
   };
 }
@@ -211,7 +212,14 @@ Map<String, Object> previewParams(String type, Size size) {
 }
 
 /// Controls of a pixel filter's panel.
-List<FxControl> filterControls(AppLocalizations l, String type) {
+List<FxControl> filterControls(AppLocalizations l, String type) => [
+  ..._filterControls(l, type),
+  // Photoshop's filter Blending Options.
+  FxBlend(l.blendMode),
+  FxSlider('opacity', l.opacity),
+];
+
+List<FxControl> _filterControls(AppLocalizations l, String type) {
   String px(double v) => '${v.toStringAsFixed(v < 10 ? 1 : 0)} px';
   String pct(double v) => '${v.round()}%';
   String frac(double v) => '${(v * 100).round()}%';

@@ -614,5 +614,12 @@
   "jitter": "جھٹکا",
   "glowQuality": "معیار",
   "elements": "عناصر",
-  "showEffects": "اثرات دکھائیں"
+  "showEffects": "اثرات دکھائیں",
+  "taper": "پتلا پن",
+  "twist": "بل",
+  "material": "مواد",
+  "layerTexture": "لیئر",
+  "light": "روشنی",
+  "ambientLight": "ماحولی روشنی",
+  "gloss": "چمک"
 }

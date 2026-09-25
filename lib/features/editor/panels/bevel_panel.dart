@@ -241,7 +241,7 @@ class _BevelPanelState extends State<BevelPanel> {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Row(
             children: [
-              _LightGlobe(
+              LightGlobe(
                 angle: p.angle,
                 altitude: p.altitude,
                 onChanged: (a, alt, {required live}) =>
@@ -571,8 +571,9 @@ class _CurvePainter extends CustomPainter {
 
 /// Photoshop's lighting globe: the dot's direction from the centre is the
 /// light angle, its distance the altitude (centre = 90°, rim = 0°).
-class _LightGlobe extends StatelessWidget {
-  const _LightGlobe({
+class LightGlobe extends StatelessWidget {
+  const LightGlobe({
+    super.key,
     required this.angle,
     required this.altitude,
     required this.onChanged,

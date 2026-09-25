@@ -21,6 +21,7 @@ import 'brush_paint.dart';
 import 'color_matrix.dart';
 import 'filter_engine.dart';
 import 'glow_engine.dart';
+import 'extrude_engine.dart';
 import 'layer_cache.dart';
 import 'shape_paths.dart';
 import 'text_layout.dart';
@@ -197,6 +198,11 @@ class DocumentRenderer {
   /// Paints one layer (and, for groups, its subtree). With [asClipBase] the
   /// layer's blend mode is skipped because the enclosing clip group applies
   /// it to the combined result.
+  ///
+  /// Like Photoshop, each layer style is composited onto the layers beneath
+  /// with its own blend mode (a Multiply shadow darkens what is under it),
+  /// in order: shadows, outer glows, 3D, the layer itself (with its inner
+  /// effects, in the layer's blend mode), stroke, bevel.
   void paintLayer(
     Canvas canvas,
     Layer layer, {
@@ -208,34 +214,50 @@ class DocumentRenderer {
     final blend = asClipBase ? BlendMode.srcOver : props.blendMode.engine;
 
     if (cache != null && layer is! GroupLayer && _isExpensive(layer)) {
-      final hit = _cachedBitmap(layer);
+      final hit = _cachedBitmap(layer, blend);
       if (hit != null) {
         final t = props.transform;
-        canvas.drawImageRect(
-          hit.image,
-          Rect.fromLTWH(
-            0,
-            0,
-            hit.image.width.toDouble(),
-            hit.image.height.toDouble(),
-          ),
-          hit.rect.shift(Offset(t.x, t.y)),
-          Paint()
-            ..color = Color.fromRGBO(0, 0, 0, props.opacity)
-            ..blendMode = blend
-            ..filterQuality = FilterQuality.medium
-            ..isAntiAlias = true,
-        );
+        final dst = hit.rect.shift(Offset(t.x, t.y));
+        for (final part in hit.parts) {
+          final img = part.image;
+          canvas.drawImageRect(
+            img,
+            Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+            dst,
+            Paint()
+              ..color = Color.fromRGBO(
+                0,
+                0,
+                0,
+                (props.opacity * part.alpha).clamp(0.0, 1.0),
+              )
+              ..blendMode = part.mode
+              ..filterQuality = FilterQuality.medium
+              ..isAntiAlias = true,
+          );
+        }
         return;
       }
     }
 
+    final plan = _plan(layer, hidden);
+    canvas.save();
+    props.transform.applyTo(canvas);
+    plan.paint(canvas, blend: blend, opacity: props.opacity);
+    canvas.restore();
+    plan.dispose();
+  }
+
+  /// Everything [layer] draws, as parts in layer space (see [paintLayer]).
+  /// Dispose the plan once its parts are painted.
+  _LayerPlan _plan(Layer layer, Set<String> hidden) {
+    final props = layer.props;
     List<double>? matrix;
     var blur = 0.0;
     final shadows = <ShadowSpec>[];
     final inners = <ShadowSpec>[];
     final bevels = <BevelParams>[];
-    final extrudes = <ExtrudeSpec>[];
+    final extrudes = <(LayerEffect, ExtrudeSpec)>[];
     final satins = <SatinSpec>[];
     final glows = <(LayerEffect, GlowParams)>[];
     // Shadows with Spread / Choke: masks from the glow engine.
@@ -271,7 +293,7 @@ class DocumentRenderer {
       blur += def.blurSigma?.call(e) ?? 0;
       if (def.shadow?.call(e) case final s?) shadows.add(s);
       if (def.inner?.call(e) case final s?) inners.add(s);
-      if (def.extrude?.call(e) case final x?) extrudes.add(x);
+      if (def.extrude?.call(e) case final x?) extrudes.add((e, x));
     }
     if (matrix != null && ColorMatrix.isIdentity(matrix)) matrix = null;
 
@@ -286,8 +308,8 @@ class DocumentRenderer {
     for (final b in bevels) {
       margin = math.max(margin, b.reach + 2);
     }
-    for (final x in extrudes) {
-      margin = math.max(margin, x.depth / ms + 4);
+    for (final (_, x) in extrudes) {
+      margin = math.max(margin, _extrudeReach(x, local, ms) + 4);
     }
     for (final s in satins) {
       margin = math.max(margin, s.size * 1.5 + s.distance / ms);
@@ -307,26 +329,9 @@ class DocumentRenderer {
     // is left unbounded rather than risk clipping them.
     final Rect? layerBounds = isGroup ? null : local.inflate(margin + 2);
 
-    canvas.save();
-    t.applyTo(canvas);
-
-    // Groups are always isolated so their blend mode applies to the
-    // composite of their children.
-    final needsGroup =
-        isGroup || props.opacity < 1 || blend != BlendMode.srcOver;
-    if (needsGroup) {
-      canvas.saveLayer(
-        layerBounds,
-        Paint()
-          ..color = Color.fromRGBO(0, 0, 0, props.opacity)
-          ..blendMode = blend,
-      );
-    }
-
     // Photoshop's "Layer Mask Hides Effects": styles come from the whole
     // layer and the mask is applied to the finished result.
     final maskAfter = props.maskHidesEffects && props.hasMask;
-    if (maskAfter) canvas.saveLayer(layerBounds, Paint());
 
     // The layer's shape (filtered content with its mask) — what effects
     // derive from.
@@ -343,7 +348,7 @@ class DocumentRenderer {
         glows.length * 2 +
         spreadShadows.length * 2 +
         bevels.length * 4 +
-        extrudes.length +
+        extrudes.length * 2 +
         (stroke == null ? 0 : 8);
     final stamp = !isGroup && passes >= 2
         ? _Stamp.of(layer, shape, pixelScale, extra: src.reach)
@@ -365,20 +370,18 @@ class DocumentRenderer {
 
     // Styles computed in the background (bevels, precise glows…).
     final jobs =
-        bevels.isEmpty && spreadShadows.isEmpty && glows.every((g) => g.$2.fast)
+        bevels.isEmpty &&
+            spreadShadows.isEmpty &&
+            glows.every((g) => g.$2.fast) &&
+            extrudes.every((x) => !x.$2.lit)
         ? const <_StyleJob>[]
         : _styleJobs(layer, pixelScale, shape, band);
     final area = layerBounds ?? local.inflate(4000);
-    void glow(LayerEffect e, GlowParams g) {
-      if (g.fast) {
-        _paintGlow(canvas, g, area, g.inner ? effectShape : outerShape);
-        return;
-      }
+    MaskResult? jobFor(LayerEffect e) {
       for (final j in jobs) {
-        if (j.effectId == e.id && j.result != null) {
-          _paintGlowMask(canvas, j.result!, g);
-        }
+        if (j.effectId == e.id) return j.result;
       }
+      return null;
     }
 
     // Effect offsets are in document space; undo rotation/scale so they
@@ -391,43 +394,38 @@ class DocumentRenderer {
       );
     }
 
-    void silhouette(
-      Offset docOffset,
-      double blurPx,
-      Color color, {
-      BlendMode mode = BlendMode.srcOver,
-      bool outer = false,
-    }) {
-      final lo = toLocal(docOffset);
-      canvas.saveLayer(
-        layerBounds,
-        Paint()
-          ..blendMode = mode
-          ..colorFilter = ColorFilter.mode(color, BlendMode.srcIn)
-          ..imageFilter = blurPx > 0
-              ? ui.ImageFilter.blur(
-                  sigmaX: blurPx / 2,
-                  sigmaY: blurPx / 2,
-                  tileMode: TileMode.decal,
-                )
-              : null,
-      );
-      canvas.translate(lo.dx, lo.dy);
-      outer ? outerShape(canvas) : effectShape(canvas);
-      canvas.restore();
-    }
+    final parts = <_Part>[];
+    void part(BlendMode mode, void Function(Canvas c) draw, [double a = 1]) =>
+        parts.add(_Part(mode, a, draw));
 
+    // Drop shadows.
     for (final s in shadows) {
-      silhouette(s.offset, s.blur, s.color, mode: s.blend.engine, outer: true);
-    }
-    MaskResult? jobFor(LayerEffect e) {
-      for (final j in jobs) {
-        if (j.effectId == e.id) return j.result;
-      }
-      return null;
+      final lo = toLocal(s.offset);
+      part(s.blend.engine, (canvas) {
+        canvas.saveLayer(
+          layerBounds,
+          Paint()
+            ..colorFilter = ColorFilter.mode(s.color, BlendMode.srcIn)
+            ..imageFilter = s.blur > 0
+                ? ui.ImageFilter.blur(
+                    sigmaX: s.blur / 2,
+                    sigmaY: s.blur / 2,
+                    tileMode: TileMode.decal,
+                  )
+                : null,
+        );
+        canvas.translate(lo.dx, lo.dy);
+        outerShape(canvas);
+        canvas.restore();
+      });
     }
 
-    void spreadShadow(LayerEffect e, ShadowSpec sp, {required bool inner}) {
+    void spreadShadow(
+      Canvas canvas,
+      LayerEffect e,
+      ShadowSpec sp, {
+      required bool inner,
+    }) {
       final r = jobFor(e);
       if (r == null) return;
       final m = r.masks[0];
@@ -435,19 +433,14 @@ class DocumentRenderer {
       final paint = Paint()
         ..filterQuality = FilterQuality.medium
         ..colorFilter = ColorFilter.mode(sp.color, BlendMode.srcIn);
-      final src = Rect.fromLTWH(0, 0, m.width.toDouble(), m.height.toDouble());
+      final from = Rect.fromLTWH(0, 0, m.width.toDouble(), m.height.toDouble());
       if (!inner) {
-        canvas.drawImageRect(
-          m,
-          src,
-          r.rect.shift(o),
-          paint..blendMode = sp.blend.engine,
-        );
+        canvas.drawImageRect(m, from, r.rect.shift(o), paint);
         return;
       }
       canvas
         ..saveLayer(area, Paint()..blendMode = sp.blend.engine)
-        ..drawImageRect(m, src, r.rect.shift(o), paint)
+        ..drawImageRect(m, from, r.rect.shift(o), paint)
         ..saveLayer(area, Paint()..blendMode = BlendMode.dstIn);
       shape(canvas);
       canvas
@@ -456,22 +449,53 @@ class DocumentRenderer {
     }
 
     for (final (e, sp) in spreadShadows) {
-      if (e.type == 'shadow') spreadShadow(e, sp, inner: false);
+      if (e.type == 'shadow') {
+        part(sp.blend.engine, (c) => spreadShadow(c, e, sp, inner: false));
+      }
     }
+
+    void glow(Canvas canvas, LayerEffect e, GlowParams g, {BlendMode? mode}) {
+      if (g.fast) {
+        _paintGlow(
+          canvas,
+          g,
+          area,
+          g.inner ? effectShape : outerShape,
+          mode: mode,
+        );
+        return;
+      }
+      final r = jobFor(e);
+      if (r != null) _paintGlowMask(canvas, r, g, mode: mode);
+    }
+
     // Outer glows above drop shadows (Photoshop's order).
     for (final (e, g) in glows) {
-      if (!g.inner) glow(e, g);
+      if (!g.inner) {
+        part(g.blend.engine, (c) => glow(c, e, g, mode: BlendMode.srcOver));
+      }
     }
-    for (final x in extrudes) {
-      _paintExtrude(
-        canvas,
-        x,
-        layerBounds,
-        toLocal,
-        stamp ?? _Stamp.of(layer, shape, pixelScale, extra: src.reach),
-        disposeStamp: stamp == null,
+
+    // 3D extrusions.
+    final extrudeStamp = extrudes.isEmpty
+        ? null
+        : (stamp ?? _Stamp.of(layer, shape, pixelScale, extra: src.reach));
+    for (final (e, x) in extrudes) {
+      part(
+        BlendMode.srcOver,
+        (c) => _paintExtrude(
+          c,
+          x,
+          layer,
+          layerBounds,
+          toLocal,
+          extrudeStamp!,
+          normals: jobFor(e),
+          content: shape,
+        ),
       );
     }
+
     final hasInner =
         inners.isNotEmpty ||
         spreadShadows.any((x) => x.$1.type == 'innerShadow') ||
@@ -484,7 +508,7 @@ class DocumentRenderer {
     final faded = fill < 1;
     final interiorFades = faded && props.blendInterior;
 
-    void content() {
+    void content(Canvas canvas) {
       if (matrix != null || blur > 0) {
         canvas.saveLayer(
           layerBounds,
@@ -505,76 +529,72 @@ class DocumentRenderer {
       }
     }
 
-    void innerEffects({required bool clipToShape}) {
+    void innerEffects(Canvas canvas, {required bool clipToShape}) {
       // Satin sits beneath inner glows and shadows (Photoshop's order).
       for (final s in satins) {
-        _paintSatin(
-          canvas,
-          s,
-          layerBounds ?? local.inflate(4000),
-          toLocal(s.offset),
-          effectShape,
-        );
+        _paintSatin(canvas, s, area, toLocal(s.offset), effectShape);
       }
       // Then inner glows, then inner shadows.
       for (final (e, g) in glows) {
-        if (g.inner) glow(e, g);
+        if (g.inner) glow(canvas, e, g);
       }
-      void inner(
-        Offset docOffset,
-        double blurPx,
-        Color color, [
-        BlendMode mode = BlendMode.srcOver,
-      ]) => _paintInner(
-        canvas,
-        toLocal(docOffset),
-        blurPx,
-        color,
-        layerBounds ?? local.inflate(4000),
-        shape,
-        clipToShape: clipToShape,
-        mode: mode,
-      );
       for (final s in inners) {
-        inner(s.offset, s.blur, s.color, s.blend.engine);
+        _paintInner(
+          canvas,
+          toLocal(s.offset),
+          s.blur,
+          s.color,
+          area,
+          shape,
+          clipToShape: clipToShape,
+          mode: s.blend.engine,
+        );
       }
       for (final (e, sp) in spreadShadows) {
-        if (e.type == 'innerShadow') spreadShadow(e, sp, inner: true);
+        if (e.type == 'innerShadow') {
+          spreadShadow(canvas, e, sp, inner: true);
+        }
       }
     }
 
+    // The layer itself with its interior effects, in the layer's mode.
     final fadePaint = Paint()..color = Color.fromRGBO(0, 0, 0, fill);
-    if (!faded || interiorFades) {
-      // Content and inner effects together (faded as one when needed).
-      if (faded) canvas.saveLayer(layerBounds, fadePaint);
-      if (hasInner) canvas.saveLayer(layerBounds, Paint());
-      content();
-      if (hasInner) {
-        innerEffects(clipToShape: false);
-        canvas.restore();
-      }
-      if (faded) canvas.restore();
-    } else {
-      canvas.saveLayer(layerBounds, fadePaint);
-      content();
-      canvas.restore();
-      if (hasInner) {
-        canvas.saveLayer(layerBounds, Paint());
-        innerEffects(clipToShape: true);
-        canvas.restore();
-      }
-    }
+    parts.add(
+      _Part(BlendMode.srcOver, 1, body: true, (canvas) {
+        if (!faded || interiorFades) {
+          // Content and inner effects together (faded as one when needed).
+          if (faded) canvas.saveLayer(layerBounds, fadePaint);
+          if (hasInner) canvas.saveLayer(layerBounds, Paint());
+          content(canvas);
+          if (hasInner) {
+            innerEffects(canvas, clipToShape: false);
+            canvas.restore();
+          }
+          if (faded) canvas.restore();
+        } else {
+          canvas.saveLayer(layerBounds, fadePaint);
+          content(canvas);
+          canvas.restore();
+          if (hasInner) {
+            canvas.saveLayer(layerBounds, Paint());
+            innerEffects(canvas, clipToShape: true);
+            canvas.restore();
+          }
+        }
+      }),
+    );
 
     // Stroke on top, with its own opacity and blend mode; Fill opacity
     // does not fade it.
     if (band != null) {
-      band.draw(
-        canvas,
-        Offset.zero,
-        Paint()
-          ..filterQuality = FilterQuality.medium
-          ..blendMode = stroke!.blend.engine
-          ..color = Color.fromRGBO(0, 0, 0, stroke.opacity.clamp(0.0, 1.0)),
+      part(
+        stroke!.blend.engine,
+        (c) => band.draw(
+          c,
+          Offset.zero,
+          Paint()..filterQuality = FilterQuality.medium,
+        ),
+        stroke.opacity.clamp(0.0, 1.0),
       );
     }
 
@@ -586,48 +606,43 @@ class DocumentRenderer {
       final q = job.bevel;
       if (r == null || q == null) continue;
       final hl = r.masks[0], sh = r.masks[1];
-      final src = Rect.fromLTWH(
+      final from = Rect.fromLTWH(
         0,
         0,
         sh.width.toDouble(),
         sh.height.toDouble(),
       );
-      canvas
-        ..drawImageRect(
-          sh,
-          src,
-          r.rect,
-          Paint()
-            ..filterQuality = FilterQuality.medium
-            ..blendMode = q.shadowMode.engine
-            ..colorFilter = ColorFilter.mode(
-              q.shadow.withValues(alpha: q.shadow.a * q.shadowOpacity),
-              BlendMode.srcIn,
-            ),
-        )
-        ..drawImageRect(
-          hl,
-          src,
-          r.rect,
-          Paint()
-            ..filterQuality = FilterQuality.medium
-            ..blendMode = q.highlightMode.engine
-            ..colorFilter = ColorFilter.mode(
-              q.highlight.withValues(alpha: q.highlight.a * q.highlightOpacity),
-              BlendMode.srcIn,
-            ),
-        );
+      void mask(Canvas c, ui.Image img, Color color, double opacity) =>
+          c.drawImageRect(
+            img,
+            from,
+            r.rect,
+            Paint()
+              ..filterQuality = FilterQuality.medium
+              ..colorFilter = ColorFilter.mode(
+                color.withValues(alpha: color.a * opacity),
+                BlendMode.srcIn,
+              ),
+          );
+      part(q.shadowMode.engine, (c) => mask(c, sh, q.shadow, q.shadowOpacity));
+      part(
+        q.highlightMode.engine,
+        (c) => mask(c, hl, q.highlight, q.highlightOpacity),
+      );
     }
-    band?.dispose();
 
-    if (maskAfter) {
-      _applyMask(canvas, layer, layerBounds);
-      canvas.restore();
-    }
-    if (needsGroup) canvas.restore();
-    canvas.restore();
-    stamp?.dispose();
-    src.dispose();
+    return _LayerPlan(
+      parts,
+      layerBounds,
+      isolate: isGroup || maskAfter,
+      applyMask: maskAfter ? (c) => _applyMask(c, layer, layerBounds) : null,
+      onDispose: () {
+        band?.dispose();
+        if (!identical(extrudeStamp, stamp)) extrudeStamp?.dispose();
+        stamp?.dispose();
+        src.dispose();
+      },
+    );
   }
 
   /// The layer styles of [layer] computed in the background — bevels and
@@ -738,6 +753,34 @@ class DocumentRenderer {
           now: now,
         );
         if (job != null) jobs.add(job);
+      } else if (e.type == 'extrude' && ExtrudeSpec.of(e).lit) {
+        // Side normals: smooth, so a modest resolution is plenty.
+        final box = local.inflate(4);
+        final job = _job(
+          layer: layer,
+          effect: e,
+          box: box,
+          capBox: box,
+          pixelScale: math.min(
+            pixelScale,
+            512 /
+                math.max(1, box.longestSide) /
+                math.max(
+                  0.01,
+                  math.max(
+                    layer.props.transform.scaleX.abs(),
+                    layer.props.transform.scaleY.abs(),
+                  ),
+                ),
+          ),
+          shapeKey: _bevelShape(layer, false),
+          computeKey: 'normals',
+          draw: shape,
+          compute: (_) => ExtrudeEngine.normals(),
+          start: start,
+          now: now,
+        );
+        if (job != null) jobs.add(job);
       } else if (e.type == 'glow' || e.type == 'innerGlow') {
         final p = GlowParams.of(e);
         if (p.fast || p.size <= 0) continue;
@@ -783,20 +826,17 @@ class DocumentRenderer {
   }) {
     if (box.isEmpty || !box.isFinite) return null;
     final t = layer.props.transform;
-    // Power-of-two resolution buckets; capped for speed by a box that
-    // does not depend on the stroke band being at hand, so every caller
-    // agrees on the key.
-    var res = 1.0;
+    // Resolution in quarter-octave buckets (at most ~19% above what the
+    // screen needs, so work stays close to the minimum); capped for speed
+    // by a box that does not depend on the stroke band being at hand, so
+    // every caller agrees on the key.
     final want = (pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs())).clamp(
       1 / 16,
       8.0,
     );
-    while (res < want) {
-      res *= 2;
-    }
-    while (res / 2 >= want) {
-      res /= 2;
-    }
+    var res = math
+        .pow(2, (math.log(want) / math.ln2 * 4).ceil() / 4)
+        .toDouble();
     final longest = math.max(capBox.width, capBox.height);
     res = math.min(res, 1536 / longest);
     final key = (effect.type, shapeKey, computeKey, res);
@@ -822,40 +862,58 @@ class DocumentRenderer {
     var result = cache.lookup(key);
     final exact = result != null;
     if (result == null) {
-      // A small version follows sliders live.
-      final pres = math.min(res, _previewSide / longest);
-      final preview = !now && pres < res * 0.75;
-      final pkey = (effect.type, shapeKey, computeKey, pres);
-      final quick = preview ? cache.lookup(pkey) : null;
-      if (start) {
-        if (preview && quick == null && !cache.isPending(pkey)) {
-          cache.request(
-            pkey,
-            slot,
-            alphaAt(pres),
-            box,
-            compute(pres),
-            lane: MaskLane.preview,
-          );
-        }
-        if (!cache.isPending(key)) {
+      final pixels = box.width * box.height * res * res;
+      if (now || pixels <= _livePixels) {
+        // Small enough to compute at full resolution on every change:
+        // the last result stays sharp on screen until the next lands.
+        if (start && !cache.isPending(key)) {
           cache.request(
             key,
             slot,
             alphaAt(res),
             box,
             compute(res),
-            lane: now ? MaskLane.now : MaskLane.full,
+            lane: now ? MaskLane.now : MaskLane.preview,
           );
         }
+        result = now ? null : cache.latest(slot);
+      } else {
+        // Big: a quick version at a reduced (but not blurry) resolution
+        // follows sliders live; full resolution once they rest.
+        final pres = res * math.sqrt(_livePixels / pixels);
+        final pkey = (effect.type, shapeKey, computeKey, pres);
+        final quick = cache.lookup(pkey);
+        if (start) {
+          if (quick == null && !cache.isPending(pkey)) {
+            cache.request(
+              pkey,
+              slot,
+              alphaAt(pres),
+              box,
+              compute(pres),
+              lane: MaskLane.preview,
+            );
+          }
+          if (!cache.isPending(key)) {
+            cache.request(
+              key,
+              slot,
+              alphaAt(res),
+              box,
+              compute(res),
+              lane: MaskLane.full,
+            );
+          }
+        }
+        result = quick ?? cache.latest(slot);
       }
-      result = quick ?? (now ? null : cache.latest(slot));
     }
     return _StyleJob(key, result, exact: exact, effectId: effect.id);
   }
 
-  /// Longest side (pixels) of live previews of background effects.
-  static const _previewSide = 320.0;
+  /// Background styles up to this many pixels recompute at full
+  /// resolution live; bigger ones show a reduced version while editing.
+  static const _livePixels = 640000.0;
 
   /// What a bevel's shape depends on: the layer without its placement and
   /// its other effects.
@@ -923,6 +981,7 @@ class DocumentRenderer {
   /// Whether [e] may need background work.
   static bool _isSlowStyle(LayerEffect e) =>
       e.type == 'bevel' ||
+      (e.type == 'extrude' && ExtrudeSpec.of(e).lit) ||
       ((e.type == 'shadow' || e.type == 'innerShadow') &&
           e.number('spread', 0) > 0) ||
       ((e.type == 'glow' || e.type == 'innerGlow') && !GlowParams.of(e).fast);
@@ -1013,9 +1072,11 @@ class DocumentRenderer {
     return false;
   }
 
-  /// Renders [layer] (at the document origin, full opacity, normal blend)
-  /// into a bitmap at the current resolution, or returns the cached one.
-  CachedLayer? _cachedBitmap(Layer layer) {
+  /// Renders [layer] (at the document origin, full opacity) into bitmaps
+  /// at the current resolution — one per differently blended part, so
+  /// each still blends with the layers beneath — or returns the cached
+  /// ones. [blend] is the mode of the layer itself.
+  CachedLayer? _cachedBitmap(Layer layer, BlendMode blend) {
     if (layer is RasterLayer && assets.imageOf(layer.assetId) == null) {
       return null; // not decoded yet — don't cache the placeholder
     }
@@ -1042,7 +1103,7 @@ class DocumentRenderer {
     while (bucket / 2 >= want) {
       bucket /= 2;
     }
-    final key = (base, bucket, TextLayoutCache.generation);
+    final key = (base, bucket, TextLayoutCache.generation, blend.index);
     final hit = cache!.lookup(key);
     if (hit != null) return hit;
 
@@ -1052,34 +1113,67 @@ class DocumentRenderer {
     final s = math.min(bucket, 4096 / longest);
     // A style still computing: paint directly until it is ready.
     if (layer.props.effects.any((e) => e.enabled && _isSlowStyle(e))) {
-      final jobs = _styleJobs(
-        layer.withProps(
-          layer.props.copyWith(
-            transform: layer.props.transform.copyWith(x: 0, y: 0),
-          ),
-        ),
-        s,
-        (_) {},
-        null,
-        start: false,
-      );
+      final jobs = _styleJobs(base, s, (_) {}, null, start: false);
       if (jobs.any((j) => !j.exact)) return null;
     }
     final w = math.max(1, (rect.width * s).ceil());
     final h = math.max(1, (rect.height * s).ceil());
-    final recorder = ui.PictureRecorder();
-    final c = Canvas(recorder)
-      ..scale(w / rect.width, h / rect.height)
-      ..translate(-rect.left, -rect.top);
-    DocumentRenderer(
-      assets,
-      effects: effects,
-      pixelScale: s,
-    ).paintLayer(c, base);
-    final picture = recorder.endRecording();
-    final image = picture.toImageSync(w, h);
-    picture.dispose();
-    final entry = CachedLayer(image, rect, s);
+    final r = DocumentRenderer(assets, effects: effects, pixelScale: s);
+    final plan = r._plan(base, const {});
+    ui.Image render(void Function(Canvas c) draw) {
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder)
+        ..scale(w / rect.width, h / rect.height)
+        ..translate(-rect.left, -rect.top);
+      base.props.transform.applyTo(c);
+      draw(c);
+      final picture = recorder.endRecording();
+      final image = picture.toImageSync(w, h);
+      picture.dispose();
+      return image;
+    }
+
+    final images = <CachedPart>[];
+    if (plan.isolate) {
+      images.add(
+        CachedPart(
+          render((c) => plan.paint(c, blend: BlendMode.srcOver, opacity: 1)),
+          blend,
+          1,
+        ),
+      );
+    } else {
+      // Consecutive plain parts share one bitmap.
+      var i = 0;
+      final parts = plan.parts;
+      while (i < parts.length) {
+        final mode = parts[i].body ? blend : parts[i].mode;
+        final a = parts[i].alpha;
+        var j = i + 1;
+        if (mode == BlendMode.srcOver && a >= 1) {
+          while (j < parts.length &&
+              (parts[j].body ? blend : parts[j].mode) == BlendMode.srcOver &&
+              parts[j].alpha >= 1) {
+            j++;
+          }
+        }
+        final run = parts.sublist(i, j);
+        images.add(
+          CachedPart(
+            render((c) {
+              for (final q in run) {
+                q.draw(c);
+              }
+            }),
+            mode,
+            a,
+          ),
+        );
+        i = j;
+      }
+    }
+    plan.dispose();
+    final entry = CachedLayer(images, rect, s);
     cache!.put(key, entry);
     return entry;
   }
@@ -1133,41 +1227,160 @@ class DocumentRenderer {
     canvas.restore();
   }
 
-  /// 3D extrusion: the shape repeated along the extrusion direction,
-  /// shaded in bands from the front colour to a darker back. The shape is
-  /// stamped from one bitmap, so deep extrusions stay fast.
+  /// How far a 3D extrusion reaches past the layer box (layer units).
+  static double _extrudeReach(ExtrudeSpec x, Rect local, double ms) {
+    final half = local.longestSide / 2;
+    var r = x.depth / ms;
+    if (x.backScale > 1) r += (x.backScale - 1) * half;
+    if (x.twist != 0) r += half * 0.5;
+    return r;
+  }
+
+  /// Photoshop-style 3D extrusion. The sides are made once per paint as a
+  /// "lit stamp": the shape's normal map turned into light (ambient +
+  /// diffuse from the light's direction, plus gloss) by a colour matrix,
+  /// times the side colour or the layer's own pixels, cut to the shape.
+  /// That stamp is then laid down back to front along the depth — about
+  /// one copy per output pixel, each moved, scaled (taper) and turned
+  /// (twist) and darkened towards the back — so every visible side pixel
+  /// shows the light of the edge that made it.
   void _paintExtrude(
     Canvas canvas,
     ExtrudeSpec x,
+    Layer layer,
     Rect? bounds,
     Offset Function(Offset) toLocal,
     _Stamp stamp, {
-    bool disposeStamp = false,
+    MaskResult? normals,
+    required void Function(Canvas) content,
   }) {
-    final steps = x.depth.ceil().clamp(1, 240);
+    if (x.depth <= 0) return;
+    final r = stamp.rect;
+    final th = x.lightAngle * math.pi / 180, al = x.altitude * math.pi / 180;
+    final lx = math.cos(al) * math.cos(th), ly = -math.cos(al) * math.sin(th);
+    Color grey(double v) {
+      final g = (v.clamp(0.0, 1.0) * 255).round();
+      return Color.fromARGB(255, g, g, g);
+    }
+
+    final lit = _Stamp._make(r, stamp._res, (c) {
+      c.saveLayer(r, Paint());
+      // Light. Until the normals are ready, sides get an even light.
+      c.drawRect(
+        r,
+        Paint()
+          ..color = grey(
+            x.lit && normals == null
+                ? x.ambient + x.intensity * math.cos(al) * 0.3
+                : x.ambient,
+          ),
+      );
+      final nm = normals?.masks.first;
+      if (x.lit && nm != null) {
+        final from = Rect.fromLTWH(
+          0,
+          0,
+          nm.width.toDouble(),
+          nm.height.toDouble(),
+        );
+        // dot(n, l) with n = 2·(R, G)/255 − 1.
+        List<double> light(double k, double bias) {
+          final row = [2 * k * lx, 2 * k * ly, 0.0, 0.0, bias];
+          return [...row, ...row, ...row, 0, 0, 0, 0, 255];
+        }
+
+        // Ambient everywhere, plus diffuse light on the sides that face
+        // it (negative light clamps to zero: Lambert's max(0, n·l)).
+        c.drawImageRect(
+          nm,
+          from,
+          normals!.rect,
+          Paint()
+            ..filterQuality = FilterQuality.medium
+            ..blendMode = BlendMode.plus
+            ..colorFilter = ColorFilter.matrix(
+              light(x.intensity, -255 * x.intensity * (lx + ly)),
+            ),
+        );
+        if (x.gloss > 0) {
+          // Shine where a side faces the light squarely.
+          final k = x.gloss * 4;
+          c.drawImageRect(
+            nm,
+            from,
+            normals.rect,
+            Paint()
+              ..filterQuality = FilterQuality.medium
+              ..blendMode = BlendMode.plus
+              ..colorFilter = ColorFilter.matrix(
+                light(k, 255 * k * (-(lx + ly) - 0.6)),
+              ),
+          );
+        }
+      }
+      // Material: a colour, or the layer's own pixels.
+      if (x.layerMaterial) {
+        c.saveLayer(r, Paint()..blendMode = BlendMode.multiply);
+        content(c);
+        c.restore();
+      } else {
+        c.drawRect(
+          r,
+          Paint()
+            ..color = x.color
+            ..blendMode = BlendMode.multiply,
+        );
+      }
+      stamp.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstIn);
+      c.restore();
+    });
+
+    final t = layer.props.transform;
     final dir = Offset(math.cos(x.angle), math.sin(x.angle));
-    const bands = 6;
-    final hsl = HSLColor.fromColor(x.color);
+    final center = layerLocalRect(layer).center;
+    final half = layerLocalRect(layer).longestSide / 2;
+    final outPx = pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs());
+    // About one copy per output pixel of travel (depth, taper, twist).
+    final travel =
+        x.depth * pixelScale +
+        (x.backScale - 1).abs() * half * outPx +
+        (x.twist * math.pi / 180).abs() * half * outPx;
+    final steps = travel.ceil().clamp(1, 360);
+    const bands = 8;
     for (var band = bands - 1; band >= 0; band--) {
       // band 0 = front, bands-1 = back.
-      final k = band / math.max(1, bands - 1);
-      final color = hsl
-          .withLightness(
-            (hsl.lightness * (1 - x.shade * 0.75 * k)).clamp(0.0, 1.0),
-          )
-          .toColor();
+      final f = 1 - x.shade * band / (bands - 1);
       canvas.saveLayer(
         bounds,
-        Paint()..colorFilter = ColorFilter.mode(color, BlendMode.srcIn),
+        Paint()
+          ..colorFilter = ColorFilter.matrix([
+            f, 0, 0, 0, 0, //
+            0, f, 0, 0, 0, //
+            0, 0, f, 0, 0, //
+            0, 0, 0, 1, 0, //
+          ]),
       );
       final from = (steps * band / bands).floor() + 1;
       final to = (steps * (band + 1) / bands).floor();
       for (var i = to; i >= from; i--) {
-        stamp.draw(canvas, toLocal(dir * (x.depth * i / steps)));
+        final u = i / steps;
+        final o = toLocal(dir * (x.depth * u));
+        canvas
+          ..save()
+          ..translate(o.dx, o.dy);
+        if (x.backScale != 1 || x.twist != 0) {
+          canvas
+            ..translate(center.dx, center.dy)
+            ..rotate(x.twist * math.pi / 180 * u)
+            ..scale(1 + (x.backScale - 1) * u)
+            ..translate(-center.dx, -center.dy);
+        }
+        lit.draw(canvas);
+        canvas.restore();
       }
       canvas.restore();
     }
-    if (disposeStamp) stamp.dispose();
+    lit.dispose();
   }
 
   /// Content with the layer mask applied (vector strokes, white = visible).
@@ -1232,8 +1445,9 @@ class DocumentRenderer {
     Canvas canvas,
     GlowParams g,
     Rect area,
-    void Function(Canvas) shape,
-  ) {
+    void Function(Canvas) shape, {
+    BlendMode? mode,
+  }) {
     final c = g.color;
     final k = 1 / g.range;
     final sigma = g.sigma;
@@ -1242,7 +1456,7 @@ class DocumentRenderer {
       ..saveLayer(
         area,
         Paint()
-          ..blendMode = g.blend.engine
+          ..blendMode = mode ?? g.blend.engine
           ..color = Color.fromRGBO(0, 0, 0, (g.opacity * c.a).clamp(0.0, 1.0)),
       )
       ..saveLayer(
@@ -1291,7 +1505,12 @@ class DocumentRenderer {
 
   /// A glow computed in the background: its coverage mask, coloured (or
   /// with its gradient colours), composited with the glow's mode.
-  void _paintGlowMask(Canvas canvas, MaskResult r, GlowParams g) {
+  void _paintGlowMask(
+    Canvas canvas,
+    MaskResult r,
+    GlowParams g, {
+    BlendMode? mode,
+  }) {
     final m = r.masks[0];
     final src = Rect.fromLTWH(0, 0, m.width.toDouble(), m.height.toDouble());
     if (r.masks.length > 1) {
@@ -1299,7 +1518,7 @@ class DocumentRenderer {
         ..saveLayer(
           r.rect,
           Paint()
-            ..blendMode = g.blend.engine
+            ..blendMode = mode ?? g.blend.engine
             ..color = Color.fromRGBO(0, 0, 0, g.opacity),
         )
         ..drawImageRect(
@@ -1326,7 +1545,7 @@ class DocumentRenderer {
       r.rect,
       Paint()
         ..filterQuality = FilterQuality.medium
-        ..blendMode = g.blend.engine
+        ..blendMode = mode ?? g.blend.engine
         ..colorFilter = ColorFilter.mode(
           c.withValues(alpha: (c.a * g.opacity).clamp(0.0, 1.0)),
           BlendMode.srcIn,
@@ -1754,7 +1973,7 @@ class DocumentRenderer {
         final s = def.shadow?.call(e);
         if (s != null) own = math.max(own, s.blur * 1.5 + s.offset.distance);
         if (def.extrude?.call(e) case final x?) {
-          own = math.max(own, x.depth + 2);
+          own = math.max(own, _extrudeReach(x, layerLocalRect(l), 1) + 2);
         }
         if (e.type == 'bevel') own = math.max(own, BevelParams.of(e).reach);
         if (e.type == 'glow') own = math.max(own, GlowParams.of(e).reach);
@@ -1945,7 +2164,7 @@ class _ShapeSource {
     if (filters.isEmpty) return _ShapeSource._(r, layer, hidden, null, 0);
     var reach = 0.0;
     for (final f in filters) {
-      reach += f.reach;
+      reach += f.filter.reach;
     }
     final box = local.inflate(reach + 2);
     if (box.isEmpty || !box.isFinite) {
@@ -1965,17 +2184,28 @@ class _ShapeSource {
     return _ShapeSource._(r, layer, hidden, _Stamp._(out, box), reach + 2);
   }
 
-  static List<PixFilter> _filters(DocumentRenderer r, Layer layer, Rect box) =>
+  static List<FilterStep> _filters(DocumentRenderer r, Layer layer, Rect box) =>
       [
         for (final e in layer.props.effects)
-          if (e.enabled) ?r._fx[e.type]?.filter?.call(e, box),
+          if (e.enabled)
+            if (r._fx[e.type]?.filter?.call(e, box) case final f?)
+              FilterStep(
+                f,
+                mode: PixBlendMode
+                    .values[e
+                        .number('blend', 0)
+                        .round()
+                        .clamp(0, PixBlendMode.values.length - 1)]
+                    .engine,
+                opacity: e.number('opacity', 1),
+              ),
       ];
 
   /// How far [layer]'s filters spread its pixels (layer units).
   static double reachOf(DocumentRenderer r, Layer layer) {
     var reach = 0.0;
     for (final f in _filters(r, layer, layerLocalRect(layer))) {
-      reach += f.reach;
+      reach += f.filter.reach;
     }
     return reach == 0 ? 0 : reach + 2;
   }
@@ -1994,4 +2224,74 @@ class _ShapeSource {
   }
 
   void dispose() => _filtered?.dispose();
+}
+
+/// One piece of a layer, composited on its own with [mode] and [alpha];
+/// the [body] (the layer itself) uses the layer's blend mode.
+class _Part {
+  _Part(this.mode, this.alpha, this.draw, {this.body = false});
+  final BlendMode mode;
+  final double alpha;
+  final bool body;
+  final void Function(Canvas c) draw;
+}
+
+/// What a layer draws, ready to paint (see `DocumentRenderer._plan`).
+class _LayerPlan {
+  _LayerPlan(
+    this.parts,
+    this.bounds, {
+    required this.isolate,
+    required this.applyMask,
+    required this.onDispose,
+  });
+
+  final List<_Part> parts;
+  final Rect? bounds;
+
+  /// Painted as one group (groups; Layer Mask Hides Effects).
+  final bool isolate;
+  final void Function(Canvas c)? applyMask;
+  final VoidCallback onDispose;
+
+  void paint(
+    Canvas canvas, {
+    required BlendMode blend,
+    required double opacity,
+  }) {
+    if (isolate) {
+      canvas.saveLayer(
+        bounds,
+        Paint()
+          ..color = Color.fromRGBO(0, 0, 0, opacity.clamp(0.0, 1.0))
+          ..blendMode = blend,
+      );
+      for (final p in parts) {
+        _draw(canvas, p, p.body ? BlendMode.srcOver : p.mode, p.alpha);
+      }
+      applyMask?.call(canvas);
+      canvas.restore();
+      return;
+    }
+    for (final p in parts) {
+      _draw(canvas, p, p.body ? blend : p.mode, p.alpha * opacity);
+    }
+  }
+
+  void _draw(Canvas c, _Part p, BlendMode mode, double alpha) {
+    if (mode == BlendMode.srcOver && alpha >= 1) {
+      p.draw(c);
+      return;
+    }
+    c.saveLayer(
+      bounds,
+      Paint()
+        ..blendMode = mode
+        ..color = Color.fromRGBO(0, 0, 0, alpha.clamp(0.0, 1.0)),
+    );
+    p.draw(c);
+    c.restore();
+  }
+
+  void dispose() => onDispose();
 }

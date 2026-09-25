@@ -340,42 +340,50 @@ abstract final class BevelEngine {
     for (var i = 0; i < n; i++) {
       inside[i] = alpha[i] >= 0.5 ? 1 : 0;
     }
-    final dIn = edtSquared(
-      inside,
-      w,
-      h,
-      0,
-    ); // distance to nearest outside pixel
-    final dOut = edtSquared(
-      inside,
-      w,
-      h,
-      1,
-    ); // distance to nearest inside pixel
+    // Inner bevels need no distances outside the shape, outer ones none
+    // inside it (only the side), so skip the transform that is not used.
+    final needIn = p.kind != BevelKind.outer;
+    final needOut =
+        p.kind != BevelKind.inner && p.kind != BevelKind.strokeEmboss;
+    // Distance to the nearest outside / inside pixel.
+    final dIn = needIn ? edtSquared(inside, w, h, 0) : null;
+    final dOut = needOut ? edtSquared(inside, w, h, 1) : null;
     final sd = Float32List(n);
     for (var i = 0; i < n; i++) {
-      sd[i] = inside[i] == 1
-          ? math.sqrt(dIn[i]) - 0.5 + (alpha[i] - 0.5)
-          : -(math.sqrt(dOut[i]) - 0.5) + (alpha[i] - 0.5);
+      final a = alpha[i] - 0.5;
+      if (inside[i] == 1) {
+        sd[i] = dIn == null ? 0.5 + a : math.sqrt(dIn[i]) - 0.5 + a;
+      } else {
+        sd[i] = dOut == null ? -0.5 + a : -(math.sqrt(dOut[i]) - 0.5) + a;
+      }
     }
 
-    // Height 0..1 by style.
+    // Height 0..1 by style (one loop per style: this runs per pixel).
     var height = Float32List(n);
     final half = sizePx / 2;
-    for (var i = 0; i < n; i++) {
-      final d = sd[i];
-      double v;
-      switch (p.kind) {
-        case BevelKind.inner || BevelKind.strokeEmboss:
-          v = (d / sizePx).clamp(0.0, 1.0);
-        case BevelKind.outer:
-          v = d >= 0 ? 1 : (1 + d / sizePx).clamp(0.0, 1.0);
-        case BevelKind.emboss:
-          v = (0.5 + d / sizePx).clamp(0.0, 1.0);
-        case BevelKind.pillow:
-          v = (d.abs() / half).clamp(0.0, 1.0);
-      }
-      height[i] = v;
+    final inv = 1 / sizePx;
+    switch (p.kind) {
+      case BevelKind.inner || BevelKind.strokeEmboss:
+        for (var i = 0; i < n; i++) {
+          final v = sd[i] * inv;
+          height[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
+        }
+      case BevelKind.outer:
+        for (var i = 0; i < n; i++) {
+          final d = sd[i];
+          final v = d >= 0 ? 1.0 : 1 + d * inv;
+          height[i] = v < 0 ? 0 : v;
+        }
+      case BevelKind.emboss:
+        for (var i = 0; i < n; i++) {
+          final v = 0.5 + sd[i] * inv;
+          height[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
+        }
+      case BevelKind.pillow:
+        for (var i = 0; i < n; i++) {
+          final v = sd[i].abs() / half;
+          height[i] = v > 1 ? 1 : v;
+        }
     }
 
     // Technique: Smooth rounds the ramp, Chisel Soft slightly; Chisel
@@ -421,22 +429,40 @@ abstract final class BevelEngine {
     final lz = math.sin(al);
     final flat = lz;
 
+    // Gloss contour as a lookup table (it runs twice per pixel).
+    const lutSize = 1024;
+    final lut = Float32List(lutSize + 1);
+    for (var i = 0; i <= lutSize; i++) {
+      lut[i] = p.gloss.apply(i / lutSize);
+    }
+    final upScale = 1 / math.max(1e-4, 1 - flat);
+    final downScale = 2 / math.max(1e-4, flat + 1);
+
     var hl = Float32List(n), sh = Float32List(n);
+    if (lut[0] != 0) {
+      hl.fillRange(0, n, lut[0]);
+      sh.fillRange(0, n, lut[0]);
+    }
     for (var y = 0; y < h; y++) {
-      final y0 = y > 0 ? y - 1 : y, y1 = y < h - 1 ? y + 1 : y;
+      final r0 = (y > 0 ? y - 1 : y) * w, r1 = (y < h - 1 ? y + 1 : y) * w;
+      final dy = (y > 0 && y < h - 1) ? 0.5 : 1.0;
+      final row = y * w;
       for (var x = 0; x < w; x++) {
-        final i = y * w + x;
+        final i = row + x;
         final x0 = x > 0 ? x - 1 : x, x1 = x < w - 1 ? x + 1 : x;
-        final gx = (z[y * w + x1] - z[y * w + x0]) / math.max(1, x1 - x0);
-        final gy = (z[y1 * w + x] - z[y0 * w + x]) / math.max(1, y1 - y0);
-        final len = math.sqrt(gx * gx + gy * gy + 1);
-        final s = (-gx * lx - gy * ly + lz) / len;
-        var up = s > flat ? (s - flat) / math.max(1e-4, 1 - flat) : 0.0;
-        var down = s < flat ? (flat - s) / math.max(1e-4, flat + 1) * 2 : 0.0;
-        up = p.gloss.apply(up.clamp(0.0, 1.0));
-        down = p.gloss.apply(down.clamp(0.0, 1.0));
-        hl[i] = up;
-        sh[i] = down;
+        final gx = (z[row + x1] - z[row + x0]) * ((x0 < x && x < x1) ? 0.5 : 1);
+        final gy = (z[r1 + x] - z[r0 + x]) * dy;
+        if (gx == 0 && gy == 0) continue; // flat: neither lit nor shaded
+        final s = (-gx * lx - gy * ly + lz) / math.sqrt(gx * gx + gy * gy + 1);
+        if (s > flat) {
+          var u = (s - flat) * upScale;
+          if (u > 1) u = 1;
+          hl[i] = lut[(u * lutSize).round()];
+        } else if (s < flat) {
+          var d = (flat - s) * downScale;
+          if (d > 1) d = 1;
+          sh[i] = lut[(d * lutSize).round()];
+        }
       }
     }
 

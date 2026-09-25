@@ -614,5 +614,12 @@
   "jitter": "Titreşim",
   "glowQuality": "Kalite",
   "elements": "Öğeler",
-  "showEffects": "Efektleri göster"
+  "showEffects": "Efektleri göster",
+  "taper": "Daralma",
+  "twist": "Bükme",
+  "material": "Malzeme",
+  "layerTexture": "Katman",
+  "light": "Işık",
+  "ambientLight": "Ortam",
+  "gloss": "Parlaklık"
 }

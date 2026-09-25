@@ -614,5 +614,12 @@
   "jitter": "لړزه",
   "glowQuality": "کیفیت",
   "elements": "عناصر",
-  "showEffects": "افکټونه ښکاره کړه"
+  "showEffects": "افکټونه ښکاره کړه",
+  "taper": "نری کېدل",
+  "twist": "تاو",
+  "material": "مواد",
+  "layerTexture": "لایر",
+  "light": "رڼا",
+  "ambientLight": "عمومي رڼا",
+  "gloss": "ځلا"
 }
