@@ -24,7 +24,11 @@ class LayerCommands {
     required this.deleteLayers,
     required this.changeIcon,
     required this.runAsync,
+    required this.openEffects,
   });
+
+  /// Opens the Layer effects page (filters and styles) for a layer.
+  final void Function(Layer layer) openEffects;
 
   /// Opens the icon browser to swap an icon layer's icon.
   final void Function(IconLayer layer) changeIcon;
@@ -50,11 +54,15 @@ class QuickAction {
     this.label,
     this.run, {
     this.destructive = false,
+    this.enabled = true,
   });
   final IconData icon;
   final String label;
   final VoidCallback run;
   final bool destructive;
+
+  /// Shown dimmed and does nothing when false (e.g. nothing to paste).
+  final bool enabled;
 }
 
 /// The actions that make sense for [layer], most used first.
@@ -141,7 +149,24 @@ List<QuickAction> quickActionsFor(
   final shadow = panel(Icons.blur_circular_rounded, l.shadow, ToolPanel.shadow);
   final adjust = panel(Icons.tune_rounded, l.adjust, ToolPanel.adjust);
 
-  return switch (layer) {
+  final addFx = QuickAction(
+    Icons.auto_fix_high_rounded,
+    l.addEffect,
+    () => cmd.openEffects(layer),
+  );
+  final copyFx = QuickAction(
+    Icons.style_rounded,
+    l.copyEffects,
+    () => e.copyStyle(id),
+  );
+  final pasteFx = QuickAction(
+    Icons.content_paste_rounded,
+    l.pasteEffects,
+    () => e.pasteStyle(ids),
+    enabled: e.hasCopiedStyle,
+  );
+
+  final list = switch (layer) {
     TextLayer t => [
       QuickAction(Icons.edit_rounded, l.editText, () => cmd.editText(t)),
       QuickAction(Icons.font_download_rounded, l.font, () => cmd.pickFont(t)),
@@ -292,6 +317,12 @@ List<QuickAction> quickActionsFor(
       delete,
     ],
   };
+  // Effects: add next to the styles, copy / paste next to Duplicate.
+  final at = list.indexOf(shadow);
+  list.insert(at < 0 ? 0 : at, addFx);
+  final dup = list.indexOf(duplicate);
+  list.insertAll(dup < 0 ? list.length - 1 : dup + 1, [copyFx, pasteFx]);
+  return list;
 }
 
 /// A button that opens the quick-edit grid for [layer].
@@ -385,7 +416,7 @@ class QuickEditGrid extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final kindColor = LayerStyle.color(layer.kind);
     return SizedBox(
-      width: 252,
+      width: 300,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -418,10 +449,12 @@ class QuickEditGrid extends StatelessWidget {
               for (final a in actions)
                 _QuickTile(
                   action: a,
-                  onTap: () {
-                    onPicked();
-                    a.run();
-                  },
+                  onTap: a.enabled
+                      ? () {
+                          onPicked();
+                          a.run();
+                        }
+                      : null,
                 ),
             ],
           ),
@@ -434,33 +467,42 @@ class QuickEditGrid extends StatelessWidget {
 class _QuickTile extends StatelessWidget {
   const _QuickTile({required this.action, required this.onTap});
   final QuickAction action;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = action.destructive
+    var color = action.destructive
         ? theme.colorScheme.error
         : theme.colorScheme.onSurface;
+    if (onTap == null) color = color.withValues(alpha: 0.35);
+    // Compact tiles: five per row on a phone.
     return Pressable(
-      onTap: onTap,
+      onTap: onTap ?? () {},
       scale: 0.9,
-      haptic: true,
+      haptic: onTap != null,
       semanticLabel: action.label,
       child: SizedBox(
-        width: 84,
-        height: 68,
+        width: 60,
+        height: 58,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(action.icon, color: color, size: 24),
-            const SizedBox(height: 4),
-            Text(
-              action.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall?.copyWith(color: color),
+            Icon(action.icon, color: color, size: 20),
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(
+                action.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: color,
+                  fontSize: 10,
+                  height: 1.1,
+                ),
+              ),
             ),
           ],
         ),

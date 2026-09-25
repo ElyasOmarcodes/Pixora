@@ -14,10 +14,11 @@ import '../document/model/guides.dart';
 import '../document/model/blend.dart';
 import '../document/model/layer.dart';
 import '../document/model/layer_geometry.dart';
+import '../document/model/layer_stroke.dart';
 import '../document/model/layer_transform.dart';
 import '../document/model/mask.dart';
 import '../document/model/patterns.dart';
-import '../document/render/bevel_engine.dart';
+import '../document/render/mask_jobs.dart';
 import '../document/render/text_layout.dart';
 import '../document/render/document_renderer.dart';
 import '../document/render/layer_cache.dart';
@@ -52,7 +53,7 @@ class EditorController extends ChangeNotifier {
       assets = assets ?? AssetStore() {
     this.assets.addListener(_onAssetsChanged);
     Patterns.addLookup(this.assets.imageOf);
-    BevelCache.instance.addListener(_onBevelReady);
+    MaskJobCache.instance.addListener(_onBevelReady);
   }
 
   /// A bevel finished computing in the background: repaint.
@@ -264,7 +265,7 @@ class EditorController extends ChangeNotifier {
   void dispose() {
     assets.removeListener(_onAssetsChanged);
     Patterns.removeLookup(assets.imageOf);
-    BevelCache.instance.removeListener(_onBevelReady);
+    MaskJobCache.instance.removeListener(_onBevelReady);
     rasterCache.clear();
     super.dispose();
   }
@@ -1228,6 +1229,152 @@ class EditorController extends ChangeNotifier {
     return p.copyWith(effects: def == null ? kept : [...kept, def.create()]);
   }, label: 'filter');
 
+  /// Adds a new effect of [type] (filters may be stacked, like Photoshop's
+  /// smart filters) and returns its id.
+  String? addEffect(String layerId, String type) {
+    final def = EffectRegistry.instance[type];
+    if (def == null) return null;
+    final fx = def.create();
+    updateProps(
+      layerId,
+      (p) => p.copyWith(effects: [...p.effects, fx]),
+      label: 'effect',
+    );
+    return fx.id;
+  }
+
+  LayerEffect? effectById(String layerId, String effectId) {
+    for (final e
+        in _document.layerById(layerId)?.props.effects ??
+            const <LayerEffect>[]) {
+      if (e.id == effectId) return e;
+    }
+    return null;
+  }
+
+  /// Edits one effect instance.
+  void updateEffect(
+    String layerId,
+    String effectId,
+    LayerEffect Function(LayerEffect e) f, {
+    bool live = false,
+    String label = 'effect',
+  }) => updateProps(
+    layerId,
+    (p) => p.copyWith(
+      effects: [for (final e in p.effects) e.id == effectId ? f(e) : e],
+    ),
+    label: label,
+    live: live,
+  );
+
+  void setEffectParamById(
+    String layerId,
+    String effectId,
+    String key,
+    Object value, {
+    bool live = false,
+  }) => updateEffect(
+    layerId,
+    effectId,
+    (e) => e.withParam(key, value),
+    live: live,
+  );
+
+  void toggleEffect(String layerId, String effectId) => updateEffect(
+    layerId,
+    effectId,
+    (e) => e.copyWith(enabled: !e.enabled),
+    label: 'toggle_effect',
+  );
+
+  void removeEffect(String layerId, String effectId) => updateProps(
+    layerId,
+    (p) => p.copyWith(
+      effects: [
+        for (final e in p.effects)
+          if (e.id != effectId) e,
+      ],
+    ),
+    label: 'remove_effect',
+  );
+
+  /// Shows or hides every effect (and the stroke) of a layer at once.
+  void setAllEffectsEnabled(String layerId, bool on) => updateProps(
+    layerId,
+    (p) => p.copyWith(
+      effects: [for (final e in p.effects) e.copyWith(enabled: on)],
+      stroke: p.stroke?.copyWith(enabled: on),
+    ),
+    label: 'toggle_effect',
+  );
+
+  void toggleStroke(String layerId) => updateProps(layerId, (p) {
+    final s = p.stroke;
+    return s == null ? p : p.copyWith(stroke: s.copyWith(enabled: !s.enabled));
+  }, label: 'toggle_effect');
+
+  /// The copied layer style (Photoshop's Copy Layer Style). Shared by all
+  /// open projects.
+  static LayerStyleClip? styleClipboard;
+
+  bool get hasCopiedStyle => styleClipboard != null;
+
+  /// Copies a layer's effects, stroke and fill blending options.
+  void copyStyle(String layerId) {
+    final p = _document.layerById(layerId)?.props;
+    if (p == null) return;
+    styleClipboard = LayerStyleClip(
+      effects: p.effects,
+      stroke: p.stroke,
+      fillOpacity: p.fillOpacity,
+      blendInterior: p.blendInterior,
+      maskHidesEffects: p.maskHidesEffects,
+    );
+    notifyListeners();
+  }
+
+  /// Replaces the style of [layerIds] with the copied one (fresh effect
+  /// ids per layer).
+  void pasteStyle(List<String> layerIds) {
+    final clip = styleClipboard;
+    if (clip == null || layerIds.isEmpty) return;
+    apply('paste_style', (d) {
+      var doc = d;
+      for (final id in layerIds) {
+        if (doc.isEffectivelyLocked(id)) continue;
+        doc = doc.updateLayer(
+          id,
+          (l) => l.update(
+            (p) => p.copyWith(
+              effects: [
+                for (final e in clip.effects)
+                  LayerEffect(
+                    type: e.type,
+                    enabled: e.enabled,
+                    params: e.params,
+                  ),
+              ],
+              stroke: clip.stroke,
+              clearStroke: clip.stroke == null,
+              fillOpacity: clip.fillOpacity,
+              blendInterior: clip.blendInterior,
+              maskHidesEffects: clip.maskHidesEffects,
+            ),
+          ),
+        );
+      }
+      return doc;
+    });
+  }
+
+  /// Removes every effect and the stroke (Photoshop's Clear Layer Style).
+  void clearStyle(String layerId) => updateProps(
+    layerId,
+    (p) => p.copyWith(effects: const [], clearStroke: true, fillOpacity: 1),
+    label: 'clear_style',
+  );
+
   // ------------------------------------------------------------ document
 
   void setBackground(PixFill? fill, {bool live = false}) {
@@ -1639,4 +1786,21 @@ class EditorController extends ChangeNotifier {
 
     return search(_document.layers, false);
   }
+}
+
+/// A copied layer style (see [EditorController.copyStyle]).
+@immutable
+class LayerStyleClip {
+  const LayerStyleClip({
+    required this.effects,
+    required this.stroke,
+    required this.fillOpacity,
+    required this.blendInterior,
+    required this.maskHidesEffects,
+  });
+  final List<LayerEffect> effects;
+  final LayerStroke? stroke;
+  final double fillOpacity;
+  final bool blendInterior;
+  final bool maskHidesEffects;
 }

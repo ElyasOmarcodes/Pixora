@@ -34,6 +34,131 @@ class FxColor extends FxControl {
   final String? label;
 }
 
+/// One of a few options (stored as its index).
+class FxChoice extends FxControl {
+  const FxChoice(this.key, this.options, {this.icons});
+  final String key;
+  final List<String> options;
+  final List<IconData>? icons;
+}
+
+/// On / off (stored as 0 / 1).
+class FxToggle extends FxControl {
+  const FxToggle(this.key, this.label, {this.subtitle});
+  final String key;
+  final String label;
+  final String? subtitle;
+}
+
+/// A "new random pattern" button for noise seeds.
+class FxSeed extends FxControl {
+  const FxSeed(this.label, {this.key = 'seed'});
+  final String key;
+  final String label;
+}
+
+/// A section title between controls.
+class FxLabel extends FxControl {
+  const FxLabel(this.label);
+  final String label;
+}
+
+/// Builds the widget for control [c] of an effect with definition [def].
+/// [valueOf] reads a number, [colorOf] a colour; [set] writes a value
+/// (live while dragging) and [commit] ends a drag.
+Widget buildFxControl(
+  BuildContext context,
+  FxControl c,
+  EffectDefinition def, {
+  required double Function(String key) valueOf,
+  required Color Function(String key) colorOf,
+  required void Function(String key, Object value, {bool live}) set,
+  required VoidCallback commit,
+}) {
+  switch (c) {
+    case FxSlider s:
+      final p = def.param(s.key)!;
+      return PixSlider(
+        label: s.label,
+        value: valueOf(s.key).clamp(p.min, p.max),
+        min: p.min,
+        max: p.max,
+        defaultValue: p.defaultNumber,
+        format: s.format ?? (p.max <= 1 ? fxPercent : null),
+        onChanged: (v) => set(s.key, v, live: true),
+        onChangeEnd: (_) => commit(),
+      );
+    case FxBlend b:
+      return BlendModeRow(
+        label: b.label,
+        value:
+            PixBlendMode.values[valueOf(b.key)
+                .round()
+                .clamp(0, PixBlendMode.values.length - 1)],
+        onChanged: (m) => set(b.key, m.index),
+      );
+    case FxColor col:
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (col.label != null) PanelLabel(col.label!),
+          ColorStrip(
+            value: colorOf(col.key),
+            onChanged: (v, {required live}) {
+              if (v == null) return;
+              set(col.key, v.toARGB32(), live: live);
+            },
+          ),
+        ],
+      );
+    case FxChoice ch:
+      final v = valueOf(ch.key).round().clamp(0, ch.options.length - 1);
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        child: SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<int>(
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: [
+              for (var i = 0; i < ch.options.length; i++)
+                ButtonSegment(
+                  value: i,
+                  icon: ch.icons == null ? null : Icon(ch.icons![i], size: 18),
+                  label: Text(ch.options[i]),
+                ),
+            ],
+            selected: {v},
+            onSelectionChanged: (x) => set(ch.key, x.first),
+          ),
+        ),
+      );
+    case FxToggle t:
+      return SwitchListTile.adaptive(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+        title: Text(t.label),
+        subtitle: t.subtitle == null ? null : Text(t.subtitle!),
+        value: valueOf(t.key) >= 1,
+        onChanged: (v) => set(t.key, v ? 1 : 0),
+      );
+    case FxSeed sd:
+      return Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: TextButton.icon(
+            onPressed: () => set(sd.key, (valueOf(sd.key).round() + 1) % 100),
+            icon: const Icon(Icons.casino_rounded, size: 18),
+            label: Text(sd.label),
+          ),
+        ),
+      );
+    case FxLabel lb:
+      return PanelLabel(lb.label);
+  }
+}
+
 String fxPercent(double v) => '${(v * 100).round()}%';
 String fxDegrees(double v) => '${v.round()}°';
 
@@ -110,57 +235,19 @@ class EffectEditor extends StatelessWidget {
                   children: [
                     ?header,
                     for (final c in controls)
-                      switch (c) {
-                        FxSlider s => PixSlider(
-                          label: s.label,
-                          value: valueOf(s.key),
-                          min: def.param(s.key)!.min,
-                          max: def.param(s.key)!.max,
-                          defaultValue: def.param(s.key)!.defaultNumber,
-                          format:
-                              s.format ??
-                              (def.param(s.key)!.max <= 1 ? fxPercent : null),
-                          onChanged: (v) => editor.setEffectParam(
-                            id,
-                            type,
-                            s.key,
-                            v,
-                            live: true,
-                          ),
-                          onChangeEnd: (_) => editor.commit('effect'),
+                      buildFxControl(
+                        context,
+                        c,
+                        def,
+                        valueOf: valueOf,
+                        colorOf: (k) => effect.color(
+                          k,
+                          def.param(k)?.defaultColor ?? const Color(0xFF000000),
                         ),
-                        FxBlend b => BlendModeRow(
-                          label: b.label,
-                          value:
-                              PixBlendMode.values[valueOf(b.key)
-                                  .round()
-                                  .clamp(0, PixBlendMode.values.length - 1)],
-                          onChanged: (m) =>
-                              editor.setEffectParam(id, type, b.key, m.index),
-                        ),
-                        FxColor col => Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (col.label != null) PanelLabel(col.label!),
-                            ColorStrip(
-                              value: effect.color(
-                                col.key,
-                                def.param(col.key)!.defaultColor!,
-                              ),
-                              onChanged: (c, {required live}) {
-                                if (c == null) return;
-                                editor.setEffectParam(
-                                  id,
-                                  type,
-                                  col.key,
-                                  c.toARGB32(),
-                                  live: live,
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      },
+                        set: (k, v, {live = false}) =>
+                            editor.setEffectParam(id, type, k, v, live: live),
+                        commit: () => editor.commit('effect'),
+                      ),
                     const SizedBox(height: 4),
                   ],
                 ),
@@ -172,15 +259,16 @@ class EffectEditor extends StatelessWidget {
 
 /// Outer / inner segmented header shared by shadow and glow.
 class _InOut extends StatefulWidget {
-  const _InOut({required this.builder});
+  const _InOut({required this.builder, this.initialInner = false});
   final Widget Function(BuildContext context, bool inner) builder;
+  final bool initialInner;
 
   @override
   State<_InOut> createState() => _InOutState();
 }
 
 class _InOutState extends State<_InOut> {
-  bool _inner = false;
+  late bool _inner = widget.initialInner;
 
   @override
   Widget build(BuildContext context) {
@@ -215,14 +303,21 @@ class _InOutState extends State<_InOut> {
 }
 
 class ShadowPanel extends StatelessWidget {
-  const ShadowPanel({super.key, required this.editor, required this.layer});
+  const ShadowPanel({
+    super.key,
+    required this.editor,
+    required this.layer,
+    this.initialInner = false,
+  });
   final EditorController editor;
   final Layer layer;
+  final bool initialInner;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return _InOut(
+      initialInner: initialInner,
       builder: (context, inner) => inner
           ? EffectEditor(
               key: const ValueKey('innerShadow'),
@@ -259,14 +354,21 @@ class ShadowPanel extends StatelessWidget {
 }
 
 class GlowPanel extends StatelessWidget {
-  const GlowPanel({super.key, required this.editor, required this.layer});
+  const GlowPanel({
+    super.key,
+    required this.editor,
+    required this.layer,
+    this.initialInner = false,
+  });
   final EditorController editor;
   final Layer layer;
+  final bool initialInner;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return _InOut(
+      initialInner: initialInner,
       builder: (context, inner) => EffectEditor(
         key: ValueKey(inner),
         editor: editor,

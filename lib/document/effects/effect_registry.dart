@@ -3,8 +3,11 @@ import 'dart:ui';
 import '../model/blend.dart';
 import '../model/effect.dart';
 import '../render/color_matrix.dart';
+import '../render/filter_engine.dart';
 
-enum EffectCategory { adjust, filter, style }
+/// adjust / filter: colour; blur / noise: pixel filters (applied before
+/// the mask, like smart filters); style: layer styles.
+enum EffectCategory { adjust, filter, style, blur, noise }
 
 enum EffectParamKind { number, color }
 
@@ -89,6 +92,49 @@ class BevelSpec {
   final Color shadow;
 }
 
+/// Photoshop's Satin: two blurred, offset copies of the shape, their
+/// difference coloured and laid inside the shape.
+class SatinSpec {
+  const SatinSpec({
+    required this.blend,
+    required this.color,
+    required this.opacity,
+    required this.angle,
+    required this.distance,
+    required this.size,
+    required this.invert,
+  });
+
+  factory SatinSpec.of(LayerEffect e) => SatinSpec(
+    blend:
+        PixBlendMode.values[e
+            .number('blend', 2)
+            .round()
+            .clamp(0, PixBlendMode.values.length - 1)],
+    color: e.color('color', const Color(0xFF000000)),
+    opacity: e.number('opacity', 0.5).clamp(0.0, 1.0),
+    angle: e.number('angle', 19),
+    distance: e.number('distance', 11).clamp(0.0, 1000.0),
+    size: e.number('size', 14).clamp(0.0, 1000.0),
+    invert: e.number('invert', 1) >= 1,
+  );
+
+  final PixBlendMode blend;
+  final Color color;
+  final double opacity;
+
+  /// Degrees, Photoshop convention (counter-clockwise from the right).
+  final double angle;
+  final double distance;
+  final double size;
+  final bool invert;
+
+  /// Offset of the first copy (document space); the second goes the
+  /// other way.
+  Offset get offset =>
+      Offset.fromDirection(-angle * 3.141592653589793 / 180, distance / 2);
+}
+
 /// 3D extrusion: the layer is repeated along [angle] for [depth] px,
 /// shaded from [color] to a darker tone at the back.
 class ExtrudeSpec {
@@ -123,6 +169,7 @@ class EffectDefinition {
     this.inner,
     this.bevel,
     this.extrude,
+    this.filter,
   });
 
   final String type;
@@ -136,6 +183,10 @@ class EffectDefinition {
   final ShadowSpec? Function(LayerEffect e)? inner;
   final BevelSpec? Function(LayerEffect e)? bevel;
   final ExtrudeSpec? Function(LayerEffect e)? extrude;
+
+  /// A pixel filter over the layer's own pixels ([box]: the layer's local
+  /// box, for filters with a centre).
+  final PixFilter? Function(LayerEffect e, Rect box)? filter;
 
   EffectParam? param(String key) {
     for (final p in params) {
@@ -578,6 +629,176 @@ class EffectRegistry {
             step: 1,
           ),
         ],
+      ),
+    );
+    // Satin (layer style, drawn by the renderer): Photoshop's defaults.
+    register(
+      const EffectDefinition(
+        type: 'satin',
+        category: EffectCategory.style,
+        params: [
+          EffectParam.number(
+            'blend',
+            min: 0,
+            max: 16,
+            defaultValue: 2,
+            step: 1,
+          ),
+          EffectParam.color('color', defaultValue: Color(0xFF000000)),
+          EffectParam.number('opacity', min: 0, max: 1, defaultValue: 0.5),
+          EffectParam.number('angle', min: -180, max: 180, defaultValue: 19),
+          EffectParam.number('distance', min: 0, max: 250, defaultValue: 11),
+          EffectParam.number('size', min: 0, max: 250, defaultValue: 14),
+          EffectParam.number(
+            'invert',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
+        ],
+      ),
+    );
+
+    // Pixel filters (Filter ▸ Blur / Noise), stackable like smart filters.
+    register(
+      EffectDefinition(
+        type: 'gaussianBlur',
+        category: EffectCategory.blur,
+        params: const [
+          EffectParam.number('radius', min: 0, max: 250, defaultValue: 5),
+        ],
+        filter: (e, _) => GaussianBlurFilter(e.number('radius', 5)),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'boxBlur',
+        category: EffectCategory.blur,
+        params: const [
+          EffectParam.number('radius', min: 0, max: 500, defaultValue: 5),
+        ],
+        filter: (e, _) => BoxBlurFilter(e.number('radius', 5)),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'motionBlur',
+        category: EffectCategory.blur,
+        params: const [
+          EffectParam.number('angle', min: -90, max: 90, defaultValue: 0),
+          EffectParam.number('distance', min: 1, max: 1000, defaultValue: 20),
+        ],
+        filter: (e, _) =>
+            MotionBlurFilter(e.number('angle', 0), e.number('distance', 20)),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'radialBlur',
+        category: EffectCategory.blur,
+        params: const [
+          EffectParam.number('amount', min: 1, max: 100, defaultValue: 10),
+          EffectParam.number(
+            'method',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number('cx', min: 0, max: 1, defaultValue: 0.5),
+          EffectParam.number('cy', min: 0, max: 1, defaultValue: 0.5),
+        ],
+        filter: (e, box) => RadialBlurFilter(
+          amount: e.number('amount', 10),
+          zoom: e.number('method', 0) >= 1,
+          center: Offset(e.number('cx', 0.5), e.number('cy', 0.5)),
+          box: box,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'tiltShift',
+        category: EffectCategory.blur,
+        params: const [
+          EffectParam.number('blur', min: 0, max: 100, defaultValue: 15),
+          EffectParam.number('angle', min: -90, max: 90, defaultValue: 0),
+          EffectParam.number('cy', min: 0, max: 1, defaultValue: 0.5),
+          EffectParam.number('focus', min: 0, max: 0.5, defaultValue: 0.12),
+          EffectParam.number(
+            'transition',
+            min: 0,
+            max: 0.5,
+            defaultValue: 0.18,
+          ),
+        ],
+        filter: (e, box) => TiltShiftFilter(
+          blur: e.number('blur', 15),
+          angle: e.number('angle', 0),
+          center: Offset(0.5, e.number('cy', 0.5)),
+          focus: e.number('focus', 0.12),
+          transition: e.number('transition', 0.18),
+          box: box,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'addNoise',
+        category: EffectCategory.noise,
+        params: const [
+          EffectParam.number('amount', min: 0, max: 400, defaultValue: 12),
+          EffectParam.number(
+            'distribution',
+            min: 0,
+            max: 1,
+            defaultValue: 0,
+            step: 1,
+          ),
+          EffectParam.number('mono', min: 0, max: 1, defaultValue: 0, step: 1),
+          EffectParam.number('seed', min: 0, max: 99, defaultValue: 0, step: 1),
+        ],
+        filter: (e, _) => AddNoiseFilter(
+          amount: e.number('amount', 12) / 100,
+          gaussian: e.number('distribution', 0) >= 1,
+          mono: e.number('mono', 0) >= 1,
+          seed: e.number('seed', 0).round(),
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'filmGrain',
+        category: EffectCategory.noise,
+        params: const [
+          EffectParam.number('amount', min: 0, max: 100, defaultValue: 25),
+          EffectParam.number('size', min: 1, max: 8, defaultValue: 1.5),
+          EffectParam.number('roughness', min: 0, max: 100, defaultValue: 50),
+          EffectParam.number('seed', min: 0, max: 99, defaultValue: 0, step: 1),
+        ],
+        filter: (e, _) => FilmGrainFilter(
+          amount: e.number('amount', 25) / 100,
+          size: e.number('size', 1.5),
+          roughness: e.number('roughness', 50) / 100,
+          seed: e.number('seed', 0).round(),
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'saltPepper',
+        category: EffectCategory.noise,
+        params: const [
+          EffectParam.number('density', min: 0, max: 50, defaultValue: 4),
+          EffectParam.number('size', min: 1, max: 8, defaultValue: 1),
+          EffectParam.number('seed', min: 0, max: 99, defaultValue: 0, step: 1),
+        ],
+        filter: (e, _) => SaltPepperFilter(
+          density: e.number('density', 4) / 100,
+          size: e.number('size', 1),
+          seed: e.number('seed', 0).round(),
+        ),
       ),
     );
     register(

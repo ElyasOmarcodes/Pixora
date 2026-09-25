@@ -42,6 +42,10 @@ enum ToolPanel {
 
   /// The opacity panel opened on its Fill tab.
   fillOpacity,
+
+  /// A pixel filter (blur, noise…) on the layer: [EditorUiState.effectId].
+  effect,
+  satin,
 }
 
 /// What pointer input on the canvas does.
@@ -86,6 +90,12 @@ class EditorUiState extends ChangeNotifier {
 
   /// Pixel selection and Select-menu settings.
   final SelectionController selection = SelectionController();
+
+  /// The effect the [ToolPanel.effect] panel edits.
+  String? effectId;
+
+  /// Shadow / glow panels open on their Inner tab.
+  bool innerTab = false;
 
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;

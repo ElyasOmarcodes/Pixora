@@ -12,10 +12,13 @@ import '../model/document.dart';
 import '../model/layer.dart';
 import '../model/layer_stroke.dart';
 import 'bevel_engine.dart';
+import 'mask_jobs.dart';
+import '../model/patterns.dart';
 import '../model/layer_transform.dart';
 import '../model/mask.dart';
 import 'brush_paint.dart';
 import 'color_matrix.dart';
+import 'filter_engine.dart';
 import 'layer_cache.dart';
 import 'shape_paths.dart';
 import 'text_layout.dart';
@@ -231,14 +234,20 @@ class DocumentRenderer {
     final inners = <ShadowSpec>[];
     final bevels = <BevelParams>[];
     final extrudes = <ExtrudeSpec>[];
+    final satins = <SatinSpec>[];
+    final local = layerLocalRect(layer);
     for (final e in props.effects) {
       if (!e.enabled) continue;
       if (e.type == 'bevel') {
         bevels.add(BevelParams.of(e));
         continue;
       }
+      if (e.type == 'satin') {
+        satins.add(SatinSpec.of(e));
+        continue;
+      }
       final def = _fx[e.type];
-      if (def == null) continue;
+      if (def == null || def.filter != null) continue;
       final m = def.colorMatrix?.call(e);
       if (m != null) {
         matrix = matrix == null ? m : ColorMatrix.concat(matrix, m);
@@ -251,10 +260,10 @@ class DocumentRenderer {
     if (matrix != null && ColorMatrix.isIdentity(matrix)) matrix = null;
 
     final isGroup = layer is GroupLayer;
-    final local = layerLocalRect(layer);
     final t = props.transform;
     final ms = _minScale(t);
-    var margin = blur * 3;
+    final src = _ShapeSource.of(this, layer, hidden);
+    var margin = blur * 3 + src.reach;
     for (final s in shadows) {
       margin = math.max(margin, s.blur * 3 + s.offset.distance / ms);
     }
@@ -263,6 +272,9 @@ class DocumentRenderer {
     }
     for (final x in extrudes) {
       margin = math.max(margin, x.depth / ms + 4);
+    }
+    for (final s in satins) {
+      margin = math.max(margin, s.size * 1.5 + s.distance / ms);
     }
     final stroke = !isGroup && (props.stroke?.visible ?? false)
         ? props.stroke
@@ -289,19 +301,28 @@ class DocumentRenderer {
       );
     }
 
-    // The layer's shape (content with its mask) — what effects derive from.
-    void shape(Canvas c) => _paintMasked(c, layer, hidden, layerBounds);
+    // Photoshop's "Layer Mask Hides Effects": styles come from the whole
+    // layer and the mask is applied to the finished result.
+    final maskAfter = props.maskHidesEffects && props.hasMask;
+    if (maskAfter) canvas.saveLayer(layerBounds, Paint());
+
+    // The layer's shape (filtered content with its mask) — what effects
+    // derive from.
+    void shape(Canvas c) => maskAfter
+        ? src.draw(c)
+        : _paintMasked(c, layer, hidden, layerBounds, content: src.draw);
 
     // Effects redraw the shape many times; stamp one pre-rendered bitmap
     // of it instead (the visible content itself stays vector).
     final passes =
         shadows.length +
         inners.length +
+        satins.length * 4 +
         bevels.length * 4 +
         extrudes.length +
         (stroke == null ? 0 : 8);
     final stamp = !isGroup && passes >= 2
-        ? _Stamp.of(layer, shape, pixelScale)
+        ? _Stamp.of(layer, shape, pixelScale, extra: src.reach)
         : null;
     void effectShape(Canvas c) => stamp == null ? shape(c) : stamp.draw(c);
 
@@ -309,7 +330,7 @@ class DocumentRenderer {
     // shapes, icons and flat text; otherwise grown from the layer's pixels.
     final band = stroke == null || stamp == null
         ? null
-        : (_vectorBand(layer, stroke, stamp, local) ??
+        : ((src.reach > 0 ? null : _vectorBand(layer, stroke, stamp, local)) ??
               stamp.strokeBand(stroke, local));
 
     // Outer effects (shadows, glows) follow the layer and its stroke.
@@ -363,11 +384,11 @@ class DocumentRenderer {
         x,
         layerBounds,
         toLocal,
-        stamp ?? _Stamp.of(layer, shape, pixelScale),
+        stamp ?? _Stamp.of(layer, shape, pixelScale, extra: src.reach),
         disposeStamp: stamp == null,
       );
     }
-    final hasInner = inners.isNotEmpty;
+    final hasInner = inners.isNotEmpty || satins.isNotEmpty;
     // Fill opacity fades the layer's own pixels only. With "Blend interior
     // effects as group" the inner effects fade with them; otherwise they
     // keep full strength, clipped to the unfaded shape (Photoshop).
@@ -397,6 +418,16 @@ class DocumentRenderer {
     }
 
     void innerEffects({required bool clipToShape}) {
+      // Satin sits beneath inner glows and shadows (Photoshop's order).
+      for (final s in satins) {
+        _paintSatin(
+          canvas,
+          s,
+          layerBounds ?? local.inflate(4000),
+          toLocal(s.offset),
+          effectShape,
+        );
+      }
       void inner(
         Offset docOffset,
         double blurPx,
@@ -458,16 +489,17 @@ class DocumentRenderer {
     for (final job in _bevelJobs(layer, pixelScale, shape, band)) {
       final r = job.result;
       if (r == null) continue;
+      final hl = r.masks[0], sh = r.masks[1];
       final src = Rect.fromLTWH(
         0,
         0,
-        r.shadow.width.toDouble(),
-        r.shadow.height.toDouble(),
+        sh.width.toDouble(),
+        sh.height.toDouble(),
       );
       final q = job.params;
       canvas
         ..drawImageRect(
-          r.shadow,
+          sh,
           src,
           r.rect,
           Paint()
@@ -479,7 +511,7 @@ class DocumentRenderer {
             ),
         )
         ..drawImageRect(
-          r.highlight,
+          hl,
           src,
           r.rect,
           Paint()
@@ -493,20 +525,29 @@ class DocumentRenderer {
     }
     band?.dispose();
 
+    if (maskAfter) {
+      _applyMask(canvas, layer, layerBounds);
+      canvas.restore();
+    }
     if (needsGroup) canvas.restore();
     canvas.restore();
     stamp?.dispose();
+    src.dispose();
   }
 
-  /// The bevels of [layer] with their cache keys, each already computed
-  /// or started now (from the layer's shape — or its stroke, for Stroke
-  /// Emboss — rendered at the bevel resolution).
+  /// The bevels of [layer] with their cache keys and the best result at
+  /// hand: the exact one, else a quick low-resolution preview, else the
+  /// last result for the same effect (so a bevel never vanishes while a
+  /// slider moves). Missing work is started (from the layer's shape — or
+  /// its stroke, for Stroke Emboss — rendered at the bevel resolution);
+  /// with [now] (export) it runs at once, at full resolution only.
   List<_BevelJob> _bevelJobs(
     Layer layer,
     double pixelScale,
     void Function(Canvas) shape,
     _Stamp? band, {
     bool start = true,
+    bool now = false,
   }) {
     final jobs = <_BevelJob>[];
     for (final e in layer.props.effects) {
@@ -533,42 +574,113 @@ class DocumentRenderer {
       // at hand, so every caller agrees on the key.
       final capBox = layerLocalRect(layer)
           .inflate(p.reach + (layer.props.stroke?.outside ?? 0) + 4);
-      res = math.min(res, 1536 / math.max(capBox.width, capBox.height));
-      final key = (_bevelShape(layer, emboss), p.computeKey, res);
-      final cache = BevelCache.instance;
-      var result = cache.lookup(key);
-      if (result == null && start && !cache.isPending(key)) {
-        final w = math.max(1, (box.width * res).ceil());
-        final h = math.max(1, (box.height * res).ceil());
+      final longest = math.max(capBox.width, capBox.height);
+      res = math.min(res, 1536 / longest);
+      final shapeKey = _bevelShape(layer, emboss);
+      final key = (shapeKey, p.computeKey, res);
+      final cache = MaskJobCache.instance;
+      final slot = ('bevel', layer.id, e.id);
+
+      ui.Image alphaAt(double r) {
+        final w = math.max(1, (box.width * r).ceil());
+        final h = math.max(1, (box.height * r).ceil());
         final recorder = ui.PictureRecorder();
         final c = Canvas(recorder)
           ..scale(w / box.width, h / box.height)
-          ..translate(-box.left, -box.top);
+          ..translate(-box.left, -box.top)
+          ..saveLayer(box, Paint());
         if (emboss) {
           band!.draw(c);
         } else {
           shape(c);
         }
+        // Texture heights ride along in the red channel.
+        final tile = p.texture == null
+            ? null
+            : Patterns.tile(
+                p.texture!,
+                fg: const Color(0xFFFFFFFF),
+                bg: const Color(0xFF000000),
+              );
+        if (tile != null) {
+          final k = p.textureScale;
+          c.drawRect(
+            box,
+            Paint()
+              ..blendMode = BlendMode.srcATop
+              ..shader = ImageShader(
+                tile,
+                TileMode.repeated,
+                TileMode.repeated,
+                Float64List.fromList([
+                  k, 0, 0, 0, //
+                  0, k, 0, 0, //
+                  0, 0, 1, 0, //
+                  0, 0, 0, 1, //
+                ]),
+              ),
+          );
+        }
+        c.restore();
         final pic = recorder.endRecording();
-        final alpha = pic.toImageSync(w, h);
+        final img = pic.toImageSync(w, h);
         pic.dispose();
-        unawaited(cache.request(key, alpha, box, res, p));
-        result = cache.lookup(key);
+        return img;
       }
-      jobs.add(_BevelJob(key, p, result));
+
+      var result = cache.lookup(key);
+      final exact = result != null;
+      if (result == null) {
+        // A small version follows sliders live.
+        final pres = math.min(res, _previewSide / longest);
+        final preview = !now && pres < res * 0.75;
+        final pkey = (shapeKey, p.computeKey, pres);
+        final quick = preview ? cache.lookup(pkey) : null;
+        if (start) {
+          if (preview && quick == null && !cache.isPending(pkey)) {
+            cache.request(
+              pkey,
+              slot,
+              alphaAt(pres),
+              box,
+              BevelEngine.job(p, pres),
+              lane: MaskLane.preview,
+            );
+          }
+          if (!cache.isPending(key)) {
+            cache.request(
+              key,
+              slot,
+              alphaAt(res),
+              box,
+              BevelEngine.job(p, res),
+              lane: now ? MaskLane.now : MaskLane.full,
+            );
+          }
+        }
+        result = quick ?? (now ? null : cache.latest(slot));
+      }
+      jobs.add(_BevelJob(key, p, result, exact: exact));
     }
     return jobs;
   }
 
+  /// Longest side (pixels) of live previews of background effects.
+  static const _previewSide = 320.0;
+
   /// What a bevel's shape depends on: the layer without its placement and
   /// its other effects.
-  static Layer _bevelShape(Layer l, bool withStroke) => l.withProps(
+  Layer _bevelShape(Layer l, bool withStroke) => l.withProps(
     l.props.copyWith(
       transform: const LayerTransform(),
       opacity: 1,
       blendMode: PixBlendMode.normal,
       clip: false,
-      effects: const [],
+      // Pixel filters change the shape; styles do not.
+      effects: [
+        for (final e in l.props.effects)
+          if (e.enabled && _fx[e.type]?.filter != null) e,
+      ],
       fillOpacity: 1,
       clearStroke: !withStroke,
     ),
@@ -587,19 +699,31 @@ class DocumentRenderer {
         if (!l.props.effects.any((e) => e.enabled && e.type == 'bevel')) {
           continue;
         }
-        void shape(Canvas c) => _paintMasked(c, l, const {}, null);
+        final src = _ShapeSource.of(this, l, const {});
+        final maskAfter = l.props.maskHidesEffects && l.props.hasMask;
+        void shape(Canvas c) => maskAfter
+            ? src.draw(c)
+            : _paintMasked(c, l, const {}, null, content: src.draw);
         final stamp = l.props.stroke?.visible ?? false
-            ? _Stamp.of(l, shape, pixelScale)
+            ? _Stamp.of(l, shape, pixelScale, extra: src.reach)
             : null;
         final band = stamp == null
             ? null
-            : (_vectorBand(l, l.props.stroke!, stamp, layerLocalRect(l)) ??
+            : ((src.reach > 0
+                      ? null
+                      : _vectorBand(
+                          l,
+                          l.props.stroke!,
+                          stamp,
+                          layerLocalRect(l),
+                        )) ??
                   stamp.strokeBand(l.props.stroke!, layerLocalRect(l)));
-        for (final job in _bevelJobs(l, pixelScale, shape, band)) {
-          waits.add(BevelCache.instance.wait(job.key));
+        for (final job in _bevelJobs(l, pixelScale, shape, band, now: true)) {
+          waits.add(MaskJobCache.instance.wait(job.key));
         }
         band?.dispose();
         stamp?.dispose();
+        src.dispose();
       }
     }
 
@@ -673,8 +797,10 @@ class DocumentRenderer {
     if (layer is TextLayer && layer.curve.abs() >= 0.5) return true;
     for (final e in p.effects) {
       if (!e.enabled) continue;
+      if (e.type == 'satin' || e.type == 'bevel') return true;
       final d = _fx[e.type];
       if (d == null) continue;
+      if (d.filter != null) return true;
       if (d.shadow != null ||
           d.inner != null ||
           d.bevel != null ||
@@ -736,7 +862,7 @@ class DocumentRenderer {
         null,
         start: false,
       );
-      if (jobs.any((j) => j.result == null)) return null;
+      if (jobs.any((j) => !j.exact)) return null;
     }
     final w = math.max(1, (rect.width * s).ceil());
     final h = math.max(1, (rect.height * s).ceil());
@@ -844,19 +970,31 @@ class DocumentRenderer {
   }
 
   /// Content with the layer mask applied (vector strokes, white = visible).
+  /// [content] draws the (filtered) pixels; the plain content by default.
   void _paintMasked(
     Canvas canvas,
     Layer layer,
     Set<String> hidden,
-    Rect? bounds,
-  ) {
-    final props = layer.props;
-    if (!props.hasMask) {
-      _paintContent(canvas, layer, hidden);
+    Rect? bounds, {
+    void Function(Canvas c)? content,
+  }) {
+    void draw() => content == null
+        ? _paintContent(canvas, layer, hidden)
+        : content(canvas);
+    if (!layer.props.hasMask) {
+      draw();
       return;
     }
     canvas.saveLayer(bounds, Paint());
-    _paintContent(canvas, layer, hidden);
+    draw();
+    _applyMask(canvas, layer, bounds);
+    canvas.restore();
+  }
+
+  /// Multiplies what is in the current layer by [layer]'s mask (with its
+  /// density and feather).
+  void _applyMask(Canvas canvas, Layer layer, Rect? bounds) {
+    final props = layer.props;
     final maskPaint = Paint()..blendMode = BlendMode.dstIn;
     // Density: alpha' = d·alpha + (1 − d) — a weaker mask.
     final d = props.maskDensity;
@@ -882,6 +1020,82 @@ class DocumentRenderer {
       f * 3 + 2,
     );
     paintMask(canvas, props.mask, area, images: assets.imageOf);
+    canvas.restore();
+  }
+
+  static const _invertRgb = ColorFilter.matrix([
+    -1, 0, 0, 0, 255, //
+    0, -1, 0, 0, 255, //
+    0, 0, -1, 0, 255, //
+    0, 0, 0, 1, 0, //
+  ]);
+
+  /// Photoshop's Satin: |A − B| of two blurred copies of the shape moved
+  /// ±[offset] (as exact grey arithmetic: `A − B = 1 − ((1 − A) + B)`),
+  /// optionally inverted, coloured, clipped to the shape and composited
+  /// with the satin's blend mode.
+  void _paintSatin(
+    Canvas canvas,
+    SatinSpec s,
+    Rect area,
+    Offset offset,
+    void Function(Canvas) shape,
+  ) {
+    final blur = s.size > 0
+        ? ui.ImageFilter.blur(
+            sigmaX: s.size / 2,
+            sigmaY: s.size / 2,
+            tileMode: TileMode.decal,
+          )
+        : null;
+    void copy(Offset o, Color color, BlendMode mode) {
+      canvas
+        ..saveLayer(
+          area,
+          Paint()
+            ..blendMode = mode
+            ..colorFilter = ColorFilter.mode(color, BlendMode.srcIn)
+            ..imageFilter = blur,
+        )
+        ..translate(o.dx, o.dy);
+      shape(canvas);
+      canvas.restore();
+    }
+
+    const black = Color(0xFF000000), white = Color(0xFFFFFFFF);
+    void minus(Offset a, Offset b, BlendMode mode) {
+      canvas.saveLayer(
+        area,
+        Paint()
+          ..colorFilter = _invertRgb
+          ..blendMode = mode,
+      );
+      canvas.drawRect(area, Paint()..color = white);
+      copy(a, black, BlendMode.srcOver);
+      copy(b, white, BlendMode.plus);
+      canvas.restore();
+    }
+
+    final c = s.color, op = s.opacity;
+    final r = c.r * 255, g = c.g * 255, b = c.b * 255;
+    final a = c.a * op;
+    canvas.saveLayer(area, Paint()..blendMode = s.blend.engine);
+    canvas.saveLayer(
+      area,
+      Paint()
+        ..colorFilter = ColorFilter.matrix([
+          0, 0, 0, 0, r, //
+          0, 0, 0, 0, g, //
+          0, 0, 0, 0, b, //
+          if (s.invert) ...[-a, 0, 0, 0, a * 255] else ...[a, 0, 0, 0, 0],
+        ]),
+    );
+    canvas.drawRect(area, Paint()..color = black);
+    minus(offset, -offset, BlendMode.srcOver); // A − B
+    minus(-offset, offset, BlendMode.plus); // + (B − A)
+    canvas.restore();
+    canvas.saveLayer(area, Paint()..blendMode = BlendMode.dstIn);
+    shape(canvas);
     canvas
       ..restore()
       ..restore();
@@ -1232,6 +1446,16 @@ class DocumentRenderer {
           own = math.max(own, x.depth + 2);
         }
         if (e.type == 'bevel') own = math.max(own, BevelParams.of(e).reach);
+        if (e.type == 'satin') {
+          final st = SatinSpec.of(e);
+          own = math.max(own, st.size * 1.5 + st.distance);
+        }
+      }
+      // Pixel filters spread the layer's pixels (in layer units).
+      final filterReach = _ShapeSource.reachOf(this, l);
+      if (filterReach > 0) {
+        final t = l.props.transform;
+        own += filterReach * math.max(t.scaleX.abs(), t.scaleY.abs());
       }
       // Shadows and glows start from the stroke's edge.
       final st = l.props.stroke;
@@ -1247,10 +1471,14 @@ class DocumentRenderer {
 }
 
 class _BevelJob {
-  _BevelJob(this.key, this.params, this.result);
+  _BevelJob(this.key, this.params, this.result, {required this.exact});
   final Object key;
   final BevelParams params;
-  final BevelResult? result;
+  final MaskResult? result;
+
+  /// Whether [result] is for exactly these settings at full resolution
+  /// (not a preview or a previous result).
+  final bool exact;
 }
 
 /// A layer's shape (content + mask) rendered once into a bitmap in its
@@ -1261,10 +1489,11 @@ class _Stamp {
   static _Stamp of(
     Layer layer,
     void Function(Canvas) shape,
-    double pixelScale,
-  ) {
+    double pixelScale, {
+    double extra = 0,
+  }) {
     final t = layer.props.transform;
-    final local = layerLocalRect(layer).inflate(4);
+    final local = layerLocalRect(layer).inflate(4 + extra);
     final layerScale = math.max(t.scaleX.abs(), t.scaleY.abs());
     var rs = pixelScale * layerScale;
     rs = math.min(rs, 4096 / math.max(local.width, local.height));
@@ -1377,4 +1606,73 @@ class _Stamp {
   }
 
   void dispose() => image.dispose();
+}
+
+/// A layer's own pixels as effects see them: the content, run through the
+/// layer's pixel filters (blur, noise…) when it has any. Filtered content
+/// is rendered once, at the output resolution, and drawn from a bitmap.
+class _ShapeSource {
+  _ShapeSource._(
+    this._r,
+    this._layer,
+    this._hidden,
+    this._filtered,
+    this.reach,
+  );
+
+  static _ShapeSource of(DocumentRenderer r, Layer layer, Set<String> hidden) {
+    final local = layerLocalRect(layer);
+    final filters = _filters(r, layer, local);
+    if (filters.isEmpty) return _ShapeSource._(r, layer, hidden, null, 0);
+    var reach = 0.0;
+    for (final f in filters) {
+      reach += f.reach;
+    }
+    final box = local.inflate(reach + 2);
+    if (box.isEmpty || !box.isFinite) {
+      return _ShapeSource._(r, layer, hidden, null, 0);
+    }
+    final t = layer.props.transform;
+    var rs = r.pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs());
+    rs = math.min(rs, 4096 / math.max(box.width, box.height));
+    rs = math.max(rs, 0.05);
+    final plain = _Stamp._make(
+      box,
+      rs,
+      (c) => r._paintContent(c, layer, hidden),
+    );
+    final out = FilterEngine.apply(plain.image, box, filters);
+    plain.dispose();
+    return _ShapeSource._(r, layer, hidden, _Stamp._(out, box), reach + 2);
+  }
+
+  static List<PixFilter> _filters(DocumentRenderer r, Layer layer, Rect box) =>
+      [
+        for (final e in layer.props.effects)
+          if (e.enabled) ?r._fx[e.type]?.filter?.call(e, box),
+      ];
+
+  /// How far [layer]'s filters spread its pixels (layer units).
+  static double reachOf(DocumentRenderer r, Layer layer) {
+    var reach = 0.0;
+    for (final f in _filters(r, layer, layerLocalRect(layer))) {
+      reach += f.reach;
+    }
+    return reach == 0 ? 0 : reach + 2;
+  }
+
+  final DocumentRenderer _r;
+  final Layer _layer;
+  final Set<String> _hidden;
+  final _Stamp? _filtered;
+
+  /// Extra room the filtered pixels need around the layer box.
+  final double reach;
+
+  void draw(Canvas c) {
+    final f = _filtered;
+    f == null ? _r._paintContent(c, _layer, _hidden) : f.draw(c);
+  }
+
+  void dispose() => _filtered?.dispose();
 }

@@ -30,7 +30,7 @@ double at(Float32List m, int x, int y) => m[y * w + x];
 void main() {
   test('inner bevel: lit from the upper left, flat in the middle', () {
     // Photoshop's default light: 120°, 30° altitude.
-    final (hl, sh) = BevelCache.shade(
+    final (hl, sh) = BevelEngine.shade(
       square(),
       w,
       h,
@@ -47,7 +47,7 @@ void main() {
   });
 
   test('direction down swaps the lit and shaded sides', () {
-    final (hl, sh) = BevelCache.shade(
+    final (hl, sh) = BevelEngine.shade(
       square(),
       w,
       h,
@@ -59,7 +59,7 @@ void main() {
   });
 
   test('outer bevel paints only outside; emboss and pillow both sides', () {
-    final (hl, sh) = BevelCache.shade(
+    final (hl, sh) = BevelEngine.shade(
       square(),
       w,
       h,
@@ -73,7 +73,7 @@ void main() {
     expect(at(hl, 12, 30), greaterThan(0.1));
     expect(at(sh, 47, 30), greaterThan(0.1));
     for (final k in [BevelKind.emboss, BevelKind.pillow]) {
-      final (h2, s2) = BevelCache.shade(
+      final (h2, s2) = BevelEngine.shade(
         square(),
         w,
         h,
@@ -89,7 +89,7 @@ void main() {
 
   test('depth, altitude and gloss contour change the shading', () {
     double edge(BevelParams p) =>
-        at(BevelCache.shade(square(), w, h, 1, p).$1, 17, 30);
+        at(BevelEngine.shade(square(), w, h, 1, p).$1, 17, 30);
     final base = edge(const BevelParams(size: 6));
     expect(edge(const BevelParams(size: 6, depth: 3)), greaterThan(base));
     expect(
@@ -98,7 +98,7 @@ void main() {
     );
     // Light straight above: no highlight or shadow on a symmetric bevel
     // is impossible to tell apart — both sides get the same amount.
-    final (hl, _) = BevelCache.shade(
+    final (hl, _) = BevelEngine.shade(
       square(),
       w,
       h,
@@ -109,14 +109,14 @@ void main() {
   });
 
   test('contour and texture reshape the surface', () {
-    final plain = BevelCache.shade(
+    final plain = BevelEngine.shade(
       square(),
       w,
       h,
       1,
       const BevelParams(size: 10),
     ).$1;
-    final ring = BevelCache.shade(
+    final ring = BevelEngine.shade(
       square(),
       w,
       h,
@@ -133,7 +133,7 @@ void main() {
     for (var i = 0; i < tex.length; i++) {
       tex[i] = (i ~/ w) % 8 < 4 ? 1 : 0;
     }
-    final (hl, sh) = BevelCache.shade(
+    final (hl, sh) = BevelEngine.shade(
       square(),
       w,
       h,

@@ -36,6 +36,7 @@ import '../../projects/project_store.dart';
 import '../../ui/layer_style.dart';
 import '../home/widgets/new_canvas_dialog.dart';
 import 'dialogs/crop_page.dart';
+import 'dialogs/effects_page.dart';
 import '../home/widgets/text_prompt.dart';
 import 'editor_scope.dart';
 import 'panels/tool_panel_host.dart';
@@ -650,7 +651,21 @@ class _EditorPageState extends State<EditorPage> {
     deleteLayers: (ids) => unawaited(_confirmDeleteLayers(ids)),
     changeIcon: (l) => unawaited(_changeIcon(l)),
     runAsync: (job) => runWithProgress(context, job),
+    openEffects: (l) => unawaited(_openEffects(l.id)),
   );
+
+  /// The Layer effects page; what was picked opens in its panel.
+  Future<void> _openEffects(String layerId) async {
+    final r = await showEffectsPage(context, editor: _editor, layerId: layerId);
+    if (r == null || !mounted) return;
+    _editor.select(layerId);
+    if (!ScreenClass.of(context).isWide) _ui.showLayers = false;
+    _ui
+      ..effectId = r.effectId
+      ..innerTab = r.inner
+      ..panel = null
+      ..panel = r.panel;
+  }
 
   /// Photoshop-compatible shortcuts (⌘ on Apple platforms, Ctrl elsewhere).
   Map<ShortcutActivator, VoidCallback> get _shortcuts {

@@ -1,14 +1,12 @@
-import 'dart:async';
-import 'dart:collection';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../model/blend.dart';
 import '../model/effect.dart';
-import '../model/patterns.dart';
+import 'mask_jobs.dart';
+import 'pixel_ops.dart';
 
 /// Photoshop's Bevel & Emboss styles.
 enum BevelKind { inner, outer, emboss, pillow, strokeEmboss }
@@ -298,186 +296,24 @@ class BevelParams {
   ]);
 }
 
-/// The two shading masks (highlight, shadow) of a computed bevel, over
-/// [rect] (layer space).
-class BevelResult {
-  BevelResult(this.highlight, this.shadow, this.rect);
-  final ui.Image highlight;
-  final ui.Image shadow;
-  final Rect rect;
-
-  void dispose() {
-    highlight.dispose();
-    shadow.dispose();
-  }
-}
-
-/// Computes Photoshop-accurate Bevel & Emboss shading off the paint path
-/// and caches the results; listeners are told when a bevel is ready so the
-/// canvas can repaint. Export awaits [ensure] instead.
-class BevelCache extends ChangeNotifier {
-  BevelCache._();
-  static final BevelCache instance = BevelCache._();
-
-  static const _max = 32;
-  final LinkedHashMap<Object, BevelResult> _done = LinkedHashMap();
-  final Map<Object, Future<BevelResult?>> _pending = {};
-
-  BevelResult? lookup(Object key) {
-    final hit = _done.remove(key);
-    if (hit != null) _done[key] = hit;
-    return hit;
-  }
-
-  bool isReady(Object key) => _done.containsKey(key);
-  bool isPending(Object key) => _pending.containsKey(key);
-
-  /// Completes when [key] is computed (at once if it is not running).
-  Future<void> wait(Object key) async {
-    await _pending[key];
-  }
-
-  /// Starts computing (once) from [alpha], the layer's shape rendered over
-  /// [rect] at [res] pixels per layer unit. [alpha] is disposed here.
-  Future<BevelResult?> request(
-    Object key,
-    ui.Image alpha,
-    Rect rect,
-    double res,
-    BevelParams p,
-  ) {
-    final hit = _done[key];
-    if (hit != null) {
-      alpha.dispose();
-      return Future.value(hit);
-    }
-    final running = _pending[key];
-    if (running != null) {
-      alpha.dispose();
-      return running;
-    }
-    final f = _compute(alpha, rect, res, p).then((r) {
-      _pending.remove(key);
-      if (r != null) {
-        _done[key] = r;
-        while (_done.length > _max) {
-          _done.remove(_done.keys.first)?.dispose();
-        }
-        notifyListeners();
+/// Bevel & Emboss shading maths. The renderer runs it through the
+/// `MaskJobCache` (in the background, with live previews).
+abstract final class BevelEngine {
+  /// The job for [p] at [res] pixels per layer unit: the shape in alpha
+  /// (and, with a texture, its heights in the red channel) → highlight
+  /// and shadow masks.
+  static MaskCompute job(BevelParams p, double res) => (rgba, w, h) {
+    final a = alphaOf(rgba);
+    Float32List? tex;
+    if (p.texture != null) {
+      tex = Float32List(w * h);
+      for (var i = 0; i < tex.length; i++) {
+        tex[i] = rgba[i * 4] / 255;
       }
-      return r;
-    });
-    _pending[key] = f;
-    return f;
-  }
-
-  Future<BevelResult?> _compute(
-    ui.Image alpha,
-    Rect rect,
-    double res,
-    BevelParams p,
-  ) async {
-    try {
-      final data = await alpha.toByteData(
-        format: ui.ImageByteFormat.rawStraightRgba,
-      );
-      final w = alpha.width, h = alpha.height;
-      alpha.dispose();
-      if (data == null) return null;
-      final a = Float32List(w * h);
-      final bytes = data.buffer.asUint8List();
-      for (var i = 0; i < a.length; i++) {
-        a[i] = bytes[i * 4 + 3] / 255;
-      }
-      Float32List? tex;
-      if (p.texture != null) tex = await _texture(p, w, h, res);
-      final (hl, sh) = shade(a, w, h, res, p, texture: tex);
-      // Pure coverage masks (grey = alpha, valid premultiplied or not);
-      // colours, opacities and modes are applied when drawing.
-      Future<ui.Image> image(Float32List amount) {
-        final px = Uint8List(w * h * 4);
-        for (var i = 0; i < amount.length; i++) {
-          final j = i * 4;
-          final v = (amount[i] * 255).round().clamp(0, 255);
-          px[j] = v;
-          px[j + 1] = v;
-          px[j + 2] = v;
-          px[j + 3] = v;
-        }
-        final done = Completer<ui.Image>();
-        ui.decodeImageFromPixels(
-          px,
-          w,
-          h,
-          ui.PixelFormat.rgba8888,
-          done.complete,
-        );
-        return done.future;
-      }
-
-      return BevelResult(await image(hl), await image(sh), rect);
-    } catch (e) {
-      debugPrint('Pixora: bevel failed: $e');
-      return null;
     }
-  }
-
-  /// Texture heights (0..1) laid over the bevel's pixels.
-  static Future<Float32List?> _texture(
-    BevelParams p,
-    int w,
-    int h,
-    double res,
-  ) async {
-    final tile = Patterns.tile(
-      p.texture!,
-      fg: const Color(0xFFFFFFFF),
-      bg: const Color(0xFF000000),
-    );
-    if (tile == null) return null;
-    final rec = ui.PictureRecorder();
-    final k = p.textureScale * res;
-    Canvas(rec).drawRect(
-      Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
-      Paint()
-        ..shader = ImageShader(
-          tile,
-          TileMode.repeated,
-          TileMode.repeated,
-          Float64List.fromList([
-            k,
-            0,
-            0,
-            0,
-            0,
-            k,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            1,
-          ]),
-        ),
-    );
-    final pic = rec.endRecording();
-    final img = await pic.toImage(w, h);
-    pic.dispose();
-    final data = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
-    img.dispose();
-    if (data == null) return null;
-    final b = data.buffer.asUint8List();
-    final out = Float32List(w * h);
-    for (var i = 0; i < out.length; i++) {
-      final j = i * 4;
-      out[i] = (0.2126 * b[j] + 0.7152 * b[j + 1] + 0.0722 * b[j + 2]) / 255;
-    }
-    return out;
-  }
+    final (hl, sh) = shade(a, w, h, res, p, texture: tex);
+    return [toBytes(hl), toBytes(sh)];
+  };
 
   // ------------------------------------------------------------ the math
 
@@ -504,8 +340,18 @@ class BevelCache extends ChangeNotifier {
     for (var i = 0; i < n; i++) {
       inside[i] = alpha[i] >= 0.5 ? 1 : 0;
     }
-    final dIn = _edt(inside, w, h, 0); // distance to nearest outside pixel
-    final dOut = _edt(inside, w, h, 1); // distance to nearest inside pixel
+    final dIn = edtSquared(
+      inside,
+      w,
+      h,
+      0,
+    ); // distance to nearest outside pixel
+    final dOut = edtSquared(
+      inside,
+      w,
+      h,
+      1,
+    ); // distance to nearest inside pixel
     final sd = Float32List(n);
     for (var i = 0; i < n; i++) {
       sd[i] = inside[i] == 1
@@ -536,12 +382,12 @@ class BevelCache extends ChangeNotifier {
     // Hard keeps the exact distance ramp (crisp ridges).
     switch (p.technique) {
       case BevelTechnique.smooth:
-        height = _blur(height, w, h, math.max(1, (sizePx / 3).round()));
+        height = blur3(height, w, h, math.max(1, (sizePx / 3).round()));
       case BevelTechnique.chiselSoft:
-        height = _blur(height, w, h, math.max(1, (sizePx / 10).round()));
+        height = blur3(height, w, h, math.max(1, (sizePx / 10).round()));
       case BevelTechnique.chiselHard:
         // Just enough to hide pixel steps; ridges stay crisp.
-        height = _box(height, w, h, 1);
+        height = boxBlur(height, w, h, 1);
     }
 
     // Contour (profile), over the range.
@@ -596,13 +442,13 @@ class BevelCache extends ChangeNotifier {
 
     // Anti-aliased gloss: smooth the contour's steps a little.
     if (p.antiAlias) {
-      hl = _blur(hl, w, h, 1);
-      sh = _blur(sh, w, h, 1);
+      hl = blur3(hl, w, h, 1);
+      sh = blur3(sh, w, h, 1);
     }
     final soft = (p.soften * res).round();
     if (soft > 0) {
-      hl = _blur(hl, w, h, soft);
-      sh = _blur(sh, w, h, soft);
+      hl = blur3(hl, w, h, soft);
+      sh = blur3(sh, w, h, soft);
     }
 
     // Where each style shows: inside (inner), outside (outer), both.
@@ -616,104 +462,5 @@ class BevelCache extends ChangeNotifier {
       sh[i] *= m;
     }
     return (hl, sh);
-  }
-
-  /// Squared Euclidean distance from each pixel to the nearest pixel whose
-  /// [set] value is [target] (Felzenszwalb & Huttenlocher, two 1D passes).
-  static Float32List _edt(Uint8List set, int w, int h, int target) {
-    const inf = 1e20;
-    final f = Float32List(math.max(w, h));
-    final d = Float32List(math.max(w, h));
-    final v = Int32List(math.max(w, h));
-    final z = Float32List(math.max(w, h) + 1);
-    final grid = Float32List(w * h);
-    for (var i = 0; i < w * h; i++) {
-      grid[i] = set[i] == target ? 0 : inf;
-    }
-    void pass(int len) {
-      var k = 0;
-      v[0] = 0;
-      z[0] = -inf;
-      z[1] = inf;
-      for (var q = 1; q < len; q++) {
-        var s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
-        while (s <= z[k]) {
-          k--;
-          s = ((f[q] + q * q) - (f[v[k]] + v[k] * v[k])) / (2 * q - 2 * v[k]);
-        }
-        k++;
-        v[k] = q;
-        z[k] = s;
-        z[k + 1] = inf;
-      }
-      k = 0;
-      for (var q = 0; q < len; q++) {
-        while (z[k + 1] < q) {
-          k++;
-        }
-        final dq = q - v[k];
-        d[q] = dq * dq + f[v[k]];
-      }
-    }
-
-    for (var x = 0; x < w; x++) {
-      for (var y = 0; y < h; y++) {
-        f[y] = grid[y * w + x];
-      }
-      pass(h);
-      for (var y = 0; y < h; y++) {
-        grid[y * w + x] = d[y];
-      }
-    }
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        f[x] = grid[y * w + x];
-      }
-      pass(w);
-      for (var x = 0; x < w; x++) {
-        grid[y * w + x] = d[x];
-      }
-    }
-    return grid;
-  }
-
-  /// Three box blurs (≈ Gaussian) of radius [r].
-  static Float32List _blur(Float32List src, int w, int h, int r) {
-    var a = src;
-    for (var k = 0; k < 3; k++) {
-      a = _box(a, w, h, r);
-    }
-    return a;
-  }
-
-  static Float32List _box(Float32List src, int w, int h, int r) {
-    final tmp = Float32List(src.length), out = Float32List(src.length);
-    final n = 2 * r + 1;
-    for (var y = 0; y < h; y++) {
-      final row = y * w;
-      var sum = 0.0;
-      for (var k = -r; k <= r; k++) {
-        sum += src[row + k.clamp(0, w - 1)];
-      }
-      for (var x = 0; x < w; x++) {
-        tmp[row + x] = sum / n;
-        sum +=
-            src[row + math.min(w - 1, x + r + 1)] -
-            src[row + math.max(0, x - r)];
-      }
-    }
-    for (var x = 0; x < w; x++) {
-      var sum = 0.0;
-      for (var k = -r; k <= r; k++) {
-        sum += tmp[k.clamp(0, h - 1) * w + x];
-      }
-      for (var y = 0; y < h; y++) {
-        out[y * w + x] = sum / n;
-        sum +=
-            tmp[math.min(h - 1, y + r + 1) * w + x] -
-            tmp[math.max(0, y - r) * w + x];
-      }
-    }
-    return out;
   }
 }

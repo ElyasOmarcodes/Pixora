@@ -19,6 +19,7 @@ import '../pen_targets.dart';
 import '../../../editor/tools/select_tool.dart';
 import 'selection_panel.dart';
 import 'bevel_panel.dart';
+import 'filter_panels.dart';
 
 /// Page-level actions panels need.
 class PanelHooks {
@@ -132,7 +133,19 @@ class ToolPanelHost extends StatelessWidget {
         editor: editor,
         layer: layer,
       ),
-      ToolPanel.glow => GlowPanel(editor: editor, layer: layer),
+      ToolPanel.glow => GlowPanel(
+        key: ValueKey(('glow', ui.innerTab)),
+        editor: editor,
+        layer: layer,
+        initialInner: ui.innerTab,
+      ),
+      ToolPanel.satin => SatinPanel(editor: editor, layer: layer),
+      ToolPanel.effect when ui.effectId != null => FilterEffectPanel(
+        key: ValueKey(ui.effectId),
+        editor: editor,
+        layer: layer,
+        effectId: ui.effectId!,
+      ),
       ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
       ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),
       ToolPanel.colorFill => ColorFillPanel(editor: editor, layer: layer),
@@ -143,12 +156,16 @@ class ToolPanelHost extends StatelessWidget {
               layer is PathLayer ||
               layer is DrawingLayer =>
         FillPanel(editor: editor, layer: layer),
-      ToolPanel.stroke
-          when layer is TextLayer ||
-              layer is ShapeLayer ||
-              layer is IconLayer =>
-        StrokePanel(editor: editor, layer: layer),
-      ToolPanel.shadow => ShadowPanel(editor: editor, layer: layer),
+      ToolPanel.stroke when layer is! GroupLayer => StrokePanel(
+        editor: editor,
+        layer: layer,
+      ),
+      ToolPanel.shadow => ShadowPanel(
+        key: ValueKey(('shadow', ui.innerTab)),
+        editor: editor,
+        layer: layer,
+        initialInner: ui.innerTab,
+      ),
       ToolPanel.adjust => AdjustPanel(editor: editor, layer: layer),
       ToolPanel.filters => FiltersPanel(editor: editor, layer: layer),
       ToolPanel.opacity => OpacityPanel(editor: editor, layer: layer),
@@ -192,7 +209,7 @@ class ToolPanelHost extends StatelessWidget {
             child: panel == null
                 ? const SizedBox(width: double.infinity, key: ValueKey('none'))
                 : Column(
-                    key: ValueKey(ui.panel),
+                    key: ValueKey((ui.panel, ui.effectId)),
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _PanelHeader(onClose: () => ui.panel = null),

@@ -37,6 +37,7 @@ class LayerProps {
     this.maskFeather = 0,
     this.fillOpacity = 1,
     this.blendInterior = false,
+    this.maskHidesEffects = false,
     this.stroke,
   }) : id = id ?? newId('ly'),
        effects = List.unmodifiable(effects),
@@ -79,6 +80,11 @@ class LayerProps {
   /// shadow / glow, inner bevel) fade together with the fill.
   final bool blendInterior;
 
+  /// Photoshop's "Layer Mask Hides Effects": off (default) = layer styles
+  /// follow the masked shape; on = styles are made from the whole layer
+  /// and the mask then hides them along with the pixels.
+  final bool maskHidesEffects;
+
   /// Stroke layer style (null = none).
   final LayerStroke? stroke;
 
@@ -106,6 +112,7 @@ class LayerProps {
     double? maskFeather,
     double? fillOpacity,
     bool? blendInterior,
+    bool? maskHidesEffects,
     LayerStroke? stroke,
     bool clearStroke = false,
   }) => LayerProps(
@@ -124,6 +131,7 @@ class LayerProps {
     maskFeather: maskFeather ?? this.maskFeather,
     fillOpacity: fillOpacity ?? this.fillOpacity,
     blendInterior: blendInterior ?? this.blendInterior,
+    maskHidesEffects: maskHidesEffects ?? this.maskHidesEffects,
     stroke: clearStroke ? null : (stroke ?? this.stroke),
   );
 
@@ -143,6 +151,7 @@ class LayerProps {
     if (maskFeather != 0) 'maskFeather': maskFeather,
     if (fillOpacity != 1) 'fill': fillOpacity,
     if (blendInterior) 'blendInterior': true,
+    if (maskHidesEffects) 'maskHidesFx': true,
     if (stroke != null) 'stroke': stroke!.toJson(),
   };
 
@@ -168,6 +177,7 @@ class LayerProps {
     maskFeather: readDouble(m['maskFeather']).clamp(0.0, 1000.0),
     fillOpacity: readDouble(m['fill'], 1).clamp(0.0, 1.0),
     blendInterior: readBool(m['blendInterior']),
+    maskHidesEffects: readBool(m['maskHidesFx']),
     stroke: m['stroke'] is Map
         ? LayerStroke.fromJson(readMap(m['stroke']))
         : null,
@@ -189,6 +199,7 @@ class LayerProps {
       other.maskFeather == maskFeather &&
       other.fillOpacity == fillOpacity &&
       other.blendInterior == blendInterior &&
+      other.maskHidesEffects == maskHidesEffects &&
       other.stroke == stroke &&
       listEquals(other.effects, effects) &&
       listEquals(other.mask, mask);
@@ -208,6 +219,7 @@ class LayerProps {
     maskFeather,
     fillOpacity,
     blendInterior,
+    maskHidesEffects,
     stroke,
     Object.hashAll(effects),
     Object.hashAll(mask),

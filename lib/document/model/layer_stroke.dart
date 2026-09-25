@@ -21,6 +21,7 @@ class LayerStroke {
     this.position = StrokePosition.outside,
     this.opacity = 1,
     this.blend = PixBlendMode.normal,
+    this.enabled = true,
   });
 
   /// Width of the band in layer pixels.
@@ -30,7 +31,10 @@ class LayerStroke {
   final double opacity;
   final PixBlendMode blend;
 
-  bool get visible => size > 0 && opacity > 0;
+  /// Switched off from the layer's effects list (kept, not drawn).
+  final bool enabled;
+
+  bool get visible => enabled && size > 0 && opacity > 0;
 
   /// How far it reaches outside the shape.
   double get outside => switch (position) {
@@ -52,12 +56,14 @@ class LayerStroke {
     PixFill? fill,
     double? opacity,
     PixBlendMode? blend,
+    bool? enabled,
   }) => LayerStroke(
     size: size ?? this.size,
     position: position ?? this.position,
     fill: fill ?? this.fill,
     opacity: opacity ?? this.opacity,
     blend: blend ?? this.blend,
+    enabled: enabled ?? this.enabled,
   );
 
   Json toJson() => {
@@ -66,6 +72,7 @@ class LayerStroke {
     'fill': fill.toJson(),
     if (opacity != 1) 'opacity': opacity,
     if (blend != PixBlendMode.normal) 'blend': blend.name,
+    if (!enabled) 'off': true,
   };
 
   static LayerStroke fromJson(Json m) => LayerStroke(
@@ -74,6 +81,7 @@ class LayerStroke {
     fill: PixFill.fromJson(m['fill'], PixFill.color(const Color(0xFF000000))),
     opacity: readDouble(m['opacity'], 1).clamp(0.0, 1.0),
     blend: readEnum(PixBlendMode.values, m['blend'], PixBlendMode.normal),
+    enabled: !readBool(m['off']),
   );
 
   @override
@@ -83,8 +91,10 @@ class LayerStroke {
       other.position == position &&
       other.fill == fill &&
       other.opacity == opacity &&
-      other.blend == blend;
+      other.blend == blend &&
+      other.enabled == enabled;
 
   @override
-  int get hashCode => Object.hash(size, position, fill, opacity, blend);
+  int get hashCode =>
+      Object.hash(size, position, fill, opacity, blend, enabled);
 }
