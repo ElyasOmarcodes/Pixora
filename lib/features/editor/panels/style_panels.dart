@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../document/model/fill.dart';
@@ -219,10 +221,15 @@ class StrokePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final current = strokeOf(layer);
+    // Sizes are shown in canvas pixels (as in Photoshop), whatever the
+    // layer's scale — a photo fitted to the canvas is often scaled well
+    // down — and kept in the layer's own units.
+    final t = layer.props.transform;
+    final k = math.max(1e-3, math.max(t.scaleX.abs(), t.scaleY.abs()));
     final maxSize = layer is TextLayer
-        ? ((layer as TextLayer).fontSize * 0.4).clamp(20.0, 200.0)
+        ? ((layer as TextLayer).fontSize * 0.4 * k).clamp(20.0, 200.0)
         : 100.0;
-    final defaultSize = (maxSize * 0.1).clamp(2.0, 12.0);
+    final defaultSize = (maxSize * 0.1).clamp(2.0, 12.0) / k;
     final s =
         current ??
         LayerStroke(size: 0, fill: PixFill.color(const Color(0xFF000000)));
@@ -247,11 +254,11 @@ class StrokePanel extends StatelessWidget {
       children: [
         PixSlider(
           label: l.size,
-          value: s.size.clamp(0, maxSize).toDouble(),
+          value: (s.size * k).clamp(0, maxSize).toDouble(),
           min: 0,
           max: maxSize.toDouble(),
           defaultValue: 0,
-          onChanged: (v) => set(s.copyWith(size: v), live: true),
+          onChanged: (v) => set(s.copyWith(size: v / k), live: true),
           onChangeEnd: (_) => editor.commit('stroke'),
         ),
         Padding(

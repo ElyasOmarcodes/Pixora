@@ -254,6 +254,7 @@ class ContextDock extends StatelessWidget {
         ),
         ...look,
         div,
+        DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
         ...effects,
       ],
       IconLayer i => [
@@ -279,6 +280,7 @@ class ContextDock extends StatelessWidget {
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
         ...look,
         div,
+        DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
         ...effects,
       ],
       DrawingLayer _ => [
@@ -288,6 +290,7 @@ class ContextDock extends StatelessWidget {
         DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.fill),
         ...look,
         div,
+        DockItem(Icons.border_style_rounded, l.stroke, panel: ToolPanel.stroke),
         ...effects,
       ],
       GroupLayer g => [

@@ -214,6 +214,7 @@ List<QuickAction> quickActionsFor(
       ),
       QuickAction(Icons.crop_rounded, l.crop, () => cmd.cropImage(r)),
       panel(Icons.format_color_fill_rounded, l.colorFill, ToolPanel.colorFill),
+      panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
       fill,
@@ -260,6 +261,7 @@ List<QuickAction> quickActionsFor(
       ),
       panel(Icons.palette_rounded, l.color, ToolPanel.fill),
       panel(Icons.style_rounded, l.style, ToolPanel.iconStyle),
+      panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
       fill,
@@ -278,6 +280,7 @@ List<QuickAction> quickActionsFor(
     PathLayer _ => [
       panel(Icons.draw_rounded, l.editPath, ToolPanel.pen),
       panel(Icons.line_style_rounded, l.lineStyle, ToolPanel.line),
+      panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
       fill,
@@ -296,6 +299,7 @@ List<QuickAction> quickActionsFor(
     DrawingLayer _ => [
       panel(Icons.brush_rounded, l.draw, ToolPanel.brush),
       panel(Icons.palette_rounded, l.color, ToolPanel.fill),
+      panel(Icons.border_style_rounded, l.stroke, ToolPanel.stroke),
       shadow,
       blend,
       fill,
