@@ -1,13 +1,18 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../document/model/layer.dart';
+import '../../../document/render/document_renderer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../editor/selection/pixel_selection.dart';
 import '../../../editor/selection/selection_controller.dart';
 import '../../../editor/tools/select_tool.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui/layer_style.dart';
+import '../../../ui/widgets/checkerboard.dart';
 import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../editor_scope.dart';
@@ -172,15 +177,26 @@ class SelectionPanel extends StatelessWidget {
                   Expanded(
                     child: _Choice(
                       icon: Icons.layers_rounded,
-                      label:
-                          targetLayer?.props.name ??
-                          (picked == null
-                              ? l.thisLayer
-                              : '${l.thisLayer}: ${picked.props.name}'),
+                      label: targetLayer?.props.name ?? l.thisLayer,
                       selected: targetLayer != null,
-                      onTap: picked == null && targetLayer == null
-                          ? () => _toast(context, l.needLayerFirst)
-                          : () => sel.targetId = picked?.id ?? targetLayer!.id,
+                      trailing: Icons.expand_more_rounded,
+                      // Choose the target from the list of layers.
+                      onTap: () async {
+                        if (editor.document.allLayers.isEmpty) {
+                          _toast(context, l.needLayerFirst);
+                          return;
+                        }
+                        final id = await showModalBottomSheet<String>(
+                          context: context,
+                          isScrollControlled: true,
+                          showDragHandle: true,
+                          builder: (_) => _LayerPickSheet(
+                            editor: editor,
+                            current: targetLayer?.id ?? picked?.id,
+                          ),
+                        );
+                        if (id != null) sel.targetId = id;
+                      },
                     ),
                   ),
                 ],
@@ -721,11 +737,13 @@ class _Choice extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.trailing,
   });
   final IconData icon;
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final IconData? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -765,9 +783,133 @@ class _Choice extends StatelessWidget {
                 ),
               ),
             ),
+            if (trailing != null)
+              Icon(
+                trailing,
+                size: 18,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),
     );
   }
+}
+
+/// The layers (top first, groups indented) to choose a selection target.
+class _LayerPickSheet extends StatelessWidget {
+  const _LayerPickSheet({required this.editor, required this.current});
+  final EditorController editor;
+  final String? current;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final rows = <(Layer, int)>[];
+    void walk(List<Layer> list, int depth) {
+      for (final layer in list.reversed) {
+        rows.add((layer, depth));
+        if (layer is GroupLayer) walk(layer.children, depth + 1);
+      }
+    }
+
+    walk(editor.document.layers, 0);
+    return SafeArea(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                l.targetLayer,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 12),
+                children: [
+                  for (final (layer, depth) in rows)
+                    ListTile(
+                      selected: layer.id == current,
+                      contentPadding: EdgeInsetsDirectional.only(
+                        start: 16 + depth * 18.0,
+                        end: 16,
+                      ),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: LayerStyle.color(layer.kind),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: CustomPaint(
+                          painter: _ThumbPainter(layer, editor),
+                        ),
+                      ),
+                      title: Text(
+                        layer.props.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(LayerStyle.label(l, layer.kind)),
+                      trailing: layer.id == current
+                          ? const Icon(Icons.check_rounded)
+                          : null,
+                      onTap: () => Navigator.of(context).pop(layer.id),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ThumbPainter extends CustomPainter {
+  _ThumbPainter(this.layer, this.editor);
+  final Layer layer;
+  final EditorController editor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintCheckerboard(
+      canvas,
+      Offset.zero & size,
+      const Color(0xFFFFFFFF),
+      const Color(0xFFE6E6EE),
+      cell: 6,
+    );
+    final box = layerDocumentBounds(layer);
+    if (box.isEmpty || !box.isFinite) return;
+    final s = math.min(
+      (size.width - 4) / box.width,
+      (size.height - 4) / box.height,
+    );
+    canvas
+      ..save()
+      ..translate(size.width / 2, size.height / 2)
+      ..scale(s)
+      ..translate(-box.center.dx, -box.center.dy);
+    editor.viewRenderer(s * 2).paintLayer(canvas, layer);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ThumbPainter old) => old.layer != layer;
 }
