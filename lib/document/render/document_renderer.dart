@@ -1438,6 +1438,19 @@ class DocumentRenderer {
         (x.backScale - 1).abs() * half * outPx +
         (x.twist * math.pi / 180).abs() * half * outPx;
 
+    // Darker towards the back, per copy (no offscreen layers needed).
+    Paint shaded(double u) {
+      final f = 1 - x.shade * u;
+      return Paint()
+        ..filterQuality = FilterQuality.medium
+        ..colorFilter = ColorFilter.matrix([
+          f, 0, 0, 0, 0, //
+          0, f, 0, 0, 0, //
+          0, 0, f, 0, 0, //
+          0, 0, 0, 1, 0, //
+        ]);
+    }
+
     if (solid) {
       // A real solid: each slice sits at its depth behind the layer, in
       // the layer's 3D rotation and perspective, drawn far to near.
@@ -1464,37 +1477,19 @@ class DocumentRenderer {
             ]),
           );
         taperTwist(u);
-        lit.draw(canvas);
+        lit.draw(canvas, Offset.zero, shaded(u));
         canvas.restore();
       }
 
-      const bands = 8;
-      for (var k = 0; k < bands; k++) {
-        // Far band first.
-        final band = facing ? bands - 1 - k : k;
-        final f = 1 - x.shade * band / (bands - 1);
-        canvas.saveLayer(
-          null,
-          Paint()
-            ..colorFilter = ColorFilter.matrix([
-              f, 0, 0, 0, 0, //
-              0, f, 0, 0, 0, //
-              0, 0, f, 0, 0, //
-              0, 0, 0, 1, 0, //
-            ]),
-        );
-        final from = (steps * band / bands).floor() + 1;
-        final to = (steps * (band + 1) / bands).floor();
-        if (facing) {
-          for (var i = to; i >= from; i--) {
-            slice(i);
-          }
-        } else {
-          for (var i = from; i <= to; i++) {
-            slice(i);
-          }
+      // Far to near.
+      if (facing) {
+        for (var i = steps; i >= 1; i--) {
+          slice(i);
         }
-        canvas.restore();
+      } else {
+        for (var i = 1; i <= steps; i++) {
+          slice(i);
+        }
       }
       if (!facing) {
         // The back face, lit as a flat face pointing away.
@@ -1548,32 +1543,14 @@ class DocumentRenderer {
     // About one copy per output pixel of travel (depth, taper, twist).
     final travel = x.depth * pixelScale + shapeTravel;
     final steps = travel.ceil().clamp(1, 360);
-    const bands = 8;
-    for (var band = bands - 1; band >= 0; band--) {
-      // band 0 = front, bands-1 = back.
-      final f = 1 - x.shade * band / (bands - 1);
-      canvas.saveLayer(
-        bounds,
-        Paint()
-          ..colorFilter = ColorFilter.matrix([
-            f, 0, 0, 0, 0, //
-            0, f, 0, 0, 0, //
-            0, 0, f, 0, 0, //
-            0, 0, 0, 1, 0, //
-          ]),
-      );
-      final from = (steps * band / bands).floor() + 1;
-      final to = (steps * (band + 1) / bands).floor();
-      for (var i = to; i >= from; i--) {
-        final u = i / steps;
-        final o = toLocal(dir * (x.depth * u));
-        canvas
-          ..save()
-          ..translate(o.dx, o.dy);
-        taperTwist(u);
-        lit.draw(canvas);
-        canvas.restore();
-      }
+    for (var i = steps; i >= 1; i--) {
+      final u = i / steps;
+      final o = toLocal(dir * (x.depth * u));
+      canvas
+        ..save()
+        ..translate(o.dx, o.dy);
+      taperTwist(u);
+      lit.draw(canvas, Offset.zero, shaded(u));
       canvas.restore();
     }
     lit.dispose();
@@ -1626,12 +1603,118 @@ class DocumentRenderer {
     }
     // A feathered mask spills outside the layer box while blurring.
     canvas.saveLayer(f > 0 ? null : bounds, maskPaint);
-    final area = (bounds ?? layerLocalRect(layer).inflate(4000)).inflate(
-      f * 3 + 2,
-    );
-    paintMask(canvas, props.mask, area, images: assets.imageOf);
+    final area =
+        (bounds ?? layerLocalRect(layer).inflate(_effectSpill([layer]) + 64))
+            .inflate(f * 3 + 2);
+    final img = _maskImage(layer, area);
+    if (img != null) {
+      canvas.drawImageRect(
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        area,
+        Paint()..filterQuality = FilterQuality.medium,
+      );
+    } else {
+      paintMask(canvas, props.mask, area, images: assets.imageOf);
+    }
     canvas.restore();
   }
+
+  /// The layer's mask rendered once as an image and reused: masks made of
+  /// many soft brush strokes are slow to redraw, and the mask rarely
+  /// changes while everything else about a layer does.
+  ui.Image? _maskImage(Layer layer, Rect area) {
+    final props = layer.props;
+    for (final id in props.maskAssets) {
+      if (assets.imageOf(id) == null) return null;
+    }
+    if (area.isEmpty || !area.isFinite) return null;
+    final t = props.transform;
+    final want = math.max(
+      1e-3,
+      pixelScale * math.max(t.scaleX.abs(), t.scaleY.abs()),
+    );
+    var res = math.pow(2, (math.log(want) / math.ln2).ceil()).toDouble();
+    final cap = cache != null ? 2048.0 : 4096.0;
+    res = math.min(res, cap / area.longestSide);
+    final key = (_Identity(props.mask), area, res);
+    final hit = _maskImages.remove(key);
+    if (hit != null) {
+      _maskImages[key] = hit;
+      return hit;
+    }
+    final w = math.max(1, (area.width * res).ceil());
+    final h = math.max(1, (area.height * res).ceil());
+    // Masks change by strokes added (or the last one growing, while
+    // painting): start from the image of the earlier strokes.
+    ui.Image render(ui.Image? from, Iterable<MaskStroke> strokes) {
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder)
+        ..scale(w / area.width, h / area.height)
+        ..translate(-area.left, -area.top);
+      if (from == null) {
+        c.drawRect(area, Paint()..color = const Color(0xFFFFFFFF));
+      } else {
+        c.drawImageRect(
+          from,
+          Rect.fromLTWH(0, 0, from.width.toDouble(), from.height.toDouble()),
+          area,
+          Paint()..blendMode = BlendMode.src,
+        );
+      }
+      for (final st in strokes) {
+        paintMaskStroke(c, st, area, assets.imageOf);
+      }
+      final pic = recorder.endRecording();
+      final out = pic.toImageSync(w, h);
+      pic.dispose();
+      return out;
+    }
+
+    final strokes = props.mask;
+    final n = strokes.length;
+    var done = 0;
+    ui.Image? from;
+    final base = _maskBases[layer.id];
+    if (base != null &&
+        base.area == area &&
+        base.res == res &&
+        base.strokes.length <= n) {
+      var same = true;
+      for (var i = 0; i < base.strokes.length; i++) {
+        if (!identical(base.strokes[i], strokes[i])) {
+          same = false;
+          break;
+        }
+      }
+      if (same) {
+        done = base.strokes.length;
+        from = base.image;
+      }
+    }
+    if (n - 1 > done) {
+      from = render(from, strokes.sublist(done, n - 1));
+      done = n - 1;
+      _maskBases[layer.id] = _MaskBase(
+        strokes.sublist(0, n - 1),
+        area,
+        res,
+        from,
+      );
+      if (_maskBases.length > 8) _maskBases.remove(_maskBases.keys.first);
+    }
+    final img = render(from, strokes.sublist(done));
+    _maskImages[key] = img;
+    // Evicted images are left to the garbage collector (a picture being
+    // painted may still use them).
+    while (_maskImages.length > 12) {
+      _maskImages.remove(_maskImages.keys.first);
+    }
+    return img;
+  }
+
+  static final LinkedHashMap<Object, ui.Image> _maskImages = LinkedHashMap();
+  static final LinkedHashMap<String, _MaskBase> _maskBases = LinkedHashMap();
 
   /// Outer / Inner Glow on the GPU: the (inverted, for inner) shape
   /// blurred over the glow size, its alpha scaled by 1 / Range (the
@@ -2541,4 +2624,24 @@ class _LayerPlan {
   }
 
   void dispose() => onDispose();
+}
+
+/// Compares by identity (for caching by an immutable object).
+class _Identity {
+  const _Identity(this.value);
+  final Object value;
+  @override
+  bool operator ==(Object other) =>
+      other is _Identity && identical(other.value, value);
+  @override
+  int get hashCode => identityHashCode(value);
+}
+
+/// A mask's earlier strokes, already rendered (see `_maskImage`).
+class _MaskBase {
+  _MaskBase(this.strokes, this.area, this.res, this.image);
+  final List<MaskStroke> strokes;
+  final Rect area;
+  final double res;
+  final ui.Image image;
 }

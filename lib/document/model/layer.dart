@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -40,8 +41,14 @@ class LayerProps {
     this.maskHidesEffects = false,
     this.stroke,
   }) : id = id ?? newId('ly'),
-       effects = List.unmodifiable(effects),
-       mask = List.unmodifiable(mask);
+       effects = effects is UnmodifiableListView<LayerEffect>
+           ? effects
+           : UnmodifiableListView(List.of(effects)),
+       // Kept as the same object through edits of other properties, so
+       // renderers can cache what a mask looks like by identity.
+       mask = mask is UnmodifiableListView<MaskStroke>
+           ? mask
+           : UnmodifiableListView(List.of(mask));
 
   final String id;
   final String name;
