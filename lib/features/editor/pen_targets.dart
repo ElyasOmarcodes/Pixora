@@ -18,6 +18,9 @@ class PathLayerPenTarget implements PenTarget {
   }
 
   @override
+  String? get layerId => id;
+
+  @override
   LayerTransform get transform =>
       _layer?.props.transform ?? const LayerTransform();
 
@@ -45,6 +48,9 @@ class MaskPenTarget extends ChangeNotifier implements PenTarget {
   final EditorController editor;
 
   List<PathContour> _contours = const [];
+
+  @override
+  String? get layerId => null;
 
   @override
   LayerTransform get transform =>

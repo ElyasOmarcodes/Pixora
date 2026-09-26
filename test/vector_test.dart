@@ -13,6 +13,8 @@ import 'package:pixora/projects/pixora_format.dart';
 class _Target implements PenTarget {
   List<PathContour> value = [];
   @override
+  String? get layerId => null;
+  @override
   LayerTransform get transform => const LayerTransform();
   @override
   List<PathContour> get contours => value;

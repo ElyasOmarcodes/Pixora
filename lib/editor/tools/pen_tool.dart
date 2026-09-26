@@ -8,9 +8,13 @@ import '../../document/model/layer.dart';
 import '../../document/model/layer_transform.dart';
 import '../../document/render/vector_paths.dart';
 import 'editor_tool.dart';
+import 'snapping.dart';
 
 /// What the pen edits: bezier contours in some layer-local space.
 abstract class PenTarget {
+  /// The layer whose outline is edited (left out of snapping), if any.
+  String? get layerId;
+
   LayerTransform get transform;
   List<PathContour> get contours;
 
@@ -314,6 +318,11 @@ class PenTool extends EditorTool {
 
   static const double _hit = 18;
 
+  /// What drags snap to (built when a gesture starts) and the guide lines
+  /// currently hit.
+  SnapTargets? _snap;
+  final List<double> _guidesX = [], _guidesY = [];
+
   @override
   String get id => 'pen';
 
@@ -352,6 +361,61 @@ class PenTool extends EditorTool {
     return null;
   }
 
+  /// Snap targets for dragging: canvas, guides, other layers, plus this
+  /// outline's other shapes (moving a shape) or other nodes (moving a
+  /// node, skipping [skipNode] of the active shape).
+  SnapTargets _targets(ToolContext ctx, {bool shape = false, int? skipNode}) {
+    final t = _t!;
+    final targets = SnapTargets.of(ctx, skip: (l) => l.id == t.layerId);
+    final contours = t.contours;
+    for (var ci = 0; ci < contours.length; ci++) {
+      final c = contours[ci];
+      if (c.nodes.isEmpty) continue;
+      if (shape) {
+        if (ci != state.active) targets.addBox(_docBounds(c));
+      } else {
+        for (var i = 0; i < c.nodes.length; i++) {
+          if (ci == state.active && i == skipNode) continue;
+          targets.addPoint(t.transform.toDocument(c.nodes[i].point));
+        }
+      }
+    }
+    return targets;
+  }
+
+  /// A shape's bounding box on the canvas.
+  Rect _docBounds(PathContour c) {
+    final b = contourPath(c).getBounds();
+    final tf = _t!.transform;
+    final pts = [
+      b.topLeft,
+      b.topRight,
+      b.bottomLeft,
+      b.bottomRight,
+    ].map(tf.toDocument).toList();
+    var r = Rect.fromPoints(pts[0], pts[1]);
+    for (final p in pts.skip(2)) {
+      r = r.expandToInclude(Rect.fromPoints(p, p));
+    }
+    return r;
+  }
+
+  /// Snaps a local point on the canvas (nodes, handles).
+  Offset _snapLocal(ToolContext ctx, Offset local, SnapTargets? targets) {
+    _guidesX.clear();
+    _guidesY.clear();
+    if (targets == null || !ctx.snap.positions) return local;
+    final tf = _t!.transform;
+    final (p, gx, gy) = targets.snapPoint(
+      tf.toDocument(local),
+      SnapTargets.snapPx / ctx.viewport.scale,
+    );
+    if (gx == null && gy == null) return local;
+    if (gx != null) _guidesX.add(gx);
+    if (gy != null) _guidesY.add(gy);
+    return tf.toLocal(p);
+  }
+
   @override
   void onTap(ToolContext ctx, Offset screen) {
     if (_t == null) return;
@@ -372,7 +436,9 @@ class PenTool extends EditorTool {
       state.node = i;
       return;
     }
-    _append(ctx, _local(ctx, screen), null);
+    _append(ctx, _snapLocal(ctx, _local(ctx, screen), _targets(ctx)), null);
+    _guidesX.clear();
+    _guidesY.clear();
   }
 
   @override
@@ -429,6 +495,7 @@ class PenTool extends EditorTool {
       _grab = _Grab.contour;
       _startLocal = local;
       _startFocalLocal = local;
+      _snap = _targets(ctx, shape: true);
       return true;
     }
     if (d.pointerCount > 1) return false;
@@ -438,10 +505,13 @@ class PenTool extends EditorTool {
       _nodeIndex = hit.$1;
       _grab = hit.$2;
       state.node = hit.$1;
+      _snap = _targets(ctx, skipNode: hit.$2 == _Grab.node ? hit.$1 : null);
       return true;
     }
     // Drag on empty canvas: a new smooth node pulled out into handles.
     _grab = _Grab.newNode;
+    _snap = _targets(ctx);
+    _startLocal = _snapLocal(ctx, _startLocal, _snap);
     _append(ctx, _startLocal, null, live: true);
     _start = _t!.contours;
     _nodeIndex = state.node!;
@@ -470,7 +540,31 @@ class PenTool extends EditorTool {
             delta;
       }
 
-      contours[ci] = c.copyWith(nodes: [for (final n in c.nodes) n.mapped(f)]);
+      var moved = c.copyWith(nodes: [for (final n in c.nodes) n.mapped(f)]);
+      _guidesX.clear();
+      _guidesY.clear();
+      // A plain move snaps the shape's box (edges or centre).
+      final targets = _snap;
+      if (targets != null &&
+          ctx.snap.positions &&
+          (s - 1).abs() < 1e-3 &&
+          r.abs() < 1e-3) {
+        final box = _docBounds(moved);
+        final (shift, gx, gy) = targets.snapBox(
+          box,
+          SnapTargets.snapPx / ctx.viewport.scale,
+        );
+        if (shift != Offset.zero) {
+          final tf = t.transform;
+          final fix = tf.toLocal(box.center + shift) - tf.toLocal(box.center);
+          moved = moved.copyWith(
+            nodes: [for (final n in moved.nodes) n.shifted(fix)],
+          );
+        }
+        if (gx != null) _guidesX.add(gx);
+        if (gy != null) _guidesY.add(gy);
+      }
+      contours[ci] = moved;
       t.setContours(contours, live: true);
       return;
     }
@@ -481,23 +575,26 @@ class PenTool extends EditorTool {
     PathNode updated;
     switch (_grab) {
       case _Grab.node:
-        updated = n.shifted(p - _startLocal);
+        final to = _snapLocal(ctx, n.point + (p - _startLocal), _snap);
+        updated = n.shifted(to - n.point);
       case _Grab.newNode:
         // Pull symmetric handles out of the new node.
-        updated = (p - n.point).distance < 4 / ctx.viewport.scale
+        final h = _snapLocal(ctx, p, _snap);
+        updated = (h - n.point).distance < 4 / ctx.viewport.scale
             ? n
             : PathNode(
                 n.point,
-                outHandle: p,
-                inHandle: n.point * 2 - p,
+                outHandle: h,
+                inHandle: n.point * 2 - h,
                 type: PathNodeType.symmetric,
               );
       case _Grab.inHandle || _Grab.outHandle:
+        final hp = _snapLocal(ctx, p, _snap);
         final isIn = _grab == _Grab.inHandle;
         final other = isIn ? n.outHandle : n.inHandle;
         Offset? opp = other;
         if (other != null && n.type != PathNodeType.corner) {
-          final v = n.point - p;
+          final v = n.point - hp;
           if (v.distance > 0) {
             final len = n.type == PathNodeType.symmetric
                 ? v.distance
@@ -506,8 +603,8 @@ class PenTool extends EditorTool {
           }
         }
         updated = isIn
-            ? n.copyWith(inHandle: p, outHandle: opp)
-            : n.copyWith(outHandle: p, inHandle: opp);
+            ? n.copyWith(inHandle: hp, outHandle: opp)
+            : n.copyWith(outHandle: hp, inHandle: opp);
       case _Grab.none || _Grab.contour:
         return;
     }
@@ -520,6 +617,9 @@ class PenTool extends EditorTool {
   void onScaleEnd(ToolContext ctx, ScaleEndDetails d) {
     if (_grab != _Grab.none) _t?.commit();
     _grab = _Grab.none;
+    _snap = null;
+    _guidesX.clear();
+    _guidesY.clear();
     state.touch();
   }
 
@@ -536,6 +636,7 @@ class PenTool extends EditorTool {
   void paintOverlay(Canvas canvas, Size size, ToolContext ctx) {
     final t = _t;
     if (t == null) return;
+    paintSnapGuides(canvas, ctx, _guidesX, _guidesY);
     const accent = Color(0xFF3D7BFF);
     final contours = t.contours;
     // All shapes: thin outline; active one: stronger.

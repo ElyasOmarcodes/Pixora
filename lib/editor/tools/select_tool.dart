@@ -243,6 +243,9 @@ class SelectionPenTarget extends ChangeNotifier implements PenTarget {
   List<PathContour> _contours = const [];
 
   @override
+  String? get layerId => null;
+
+  @override
   LayerTransform get transform => const LayerTransform();
 
   @override
