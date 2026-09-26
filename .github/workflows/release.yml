@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -239,3 +240,24 @@ jobs:
             | iOS | `*-ios-unsigned.ipa` — must be signed (e.g. AltStore / Sideloadly) before installing |
             | Web | `*-web.zip` |
           files: dist/*
+      # Keeps the repository small: only the newest release, its run and
+      # its artifacts stay.
+      - name: Remove older releases, runs and artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CUR: ${{ steps.tag.outputs.tag }}
+          RUN: ${{ github.run_id }}
+        run: |
+          gh release list --limit 500 --json tagName -q '.[].tagName' |
+            while read -r t; do
+              [ -n "$t" ] && [ "$t" != "$CUR" ] && gh release delete "$t" --cleanup-tag -y || true
+            done
+          gh run list --limit 1000 --json databaseId,status -q '.[] | select(.status == "completed") | .databaseId' |
+            while read -r id; do
+              [ -n "$id" ] && [ "$id" != "$RUN" ] && gh run delete "$id" || true
+            done
+          gh api --paginate "repos/$GH_REPO/actions/artifacts" -q ".artifacts[] | select(.workflow_run.id != $RUN) | .id" |
+            while read -r a; do
+              [ -n "$a" ] && gh api -X DELETE "repos/$GH_REPO/actions/artifacts/$a" || true
+            done
