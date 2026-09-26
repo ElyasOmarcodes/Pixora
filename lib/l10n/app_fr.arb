@@ -640,5 +640,6 @@
   "patternBackground": "Arrière-plan",
   "invertColors": "Inverser",
   "thickness": "Épaisseur",
-  "mirrorTile": "Sans raccord (miroir)"
+  "mirrorTile": "Sans raccord (miroir)",
+  "rulerShowLayer": "Afficher le calque sélectionné sur les règles"
 }

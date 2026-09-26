@@ -52,6 +52,7 @@ class AppSettings extends ChangeNotifier {
   static const _kSnapLayers = 'snapLayers';
   static const _kSnapAngles = 'snapAngles';
   static const _kRulers = 'rulers';
+  static const _kRulerLayer = 'rulerLayer';
 
   /// `null` follows the system language.
   Locale? get locale {
@@ -113,6 +114,10 @@ class AppSettings extends ChangeNotifier {
 
   bool get showRulers => _prefs.getBool(_kRulers) ?? false;
   set showRulers(bool v) => _setBool(_kRulers, v);
+
+  /// Marks the selected layer's span and size on the rulers.
+  bool get rulerLayer => _prefs.getBool(_kRulerLayer) ?? true;
+  set rulerLayer(bool v) => _setBool(_kRulerLayer, v);
 
   /// 'png' or 'jpg'.
   String get exportFormat => _prefs.getString(_kExportFormat) ?? 'png';

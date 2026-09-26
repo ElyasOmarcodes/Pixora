@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
+import '../../../document/render/document_renderer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../core/units/units.dart';
 import '../../../editor/tools/editor_tool.dart';
@@ -37,6 +38,7 @@ class CanvasView extends StatefulWidget {
     required this.tool,
     required this.snap,
     this.showRulers = false,
+    this.rulerLayer = true,
     this.rulerUnit = MeasureUnit.px,
     this.guideColor = const Color(0xFF00C2FF),
     this.controller,
@@ -50,6 +52,9 @@ class CanvasView extends StatefulWidget {
   final EditorTool tool;
   final SnapOptions snap;
   final bool showRulers;
+
+  /// Marks the selected layers' span on the rulers, with their size.
+  final bool rulerLayer;
   final MeasureUnit rulerUnit;
   final Color guideColor;
   final CanvasViewController? controller;
@@ -332,36 +337,79 @@ class _CanvasViewState extends State<CanvasView>
           ),
         );
         if (!widget.showRulers) return canvasWidget;
-        return Stack(
-          children: [
-            Positioned.fill(child: canvasWidget),
-            Positioned(
-              left: _Ruler.thickness,
-              right: 0,
-              top: 0,
-              height: _Ruler.thickness,
-              child: _ruler(horizontal: true),
-            ),
-            Positioned(
-              left: 0,
-              top: _Ruler.thickness,
-              bottom: 0,
-              width: _Ruler.thickness,
-              child: _ruler(horizontal: false),
-            ),
-            Positioned(
-              left: 0,
-              top: 0,
-              width: _Ruler.thickness,
-              height: _Ruler.thickness,
-              child: ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        // Rebuilt with the document, so the layer marks follow edits.
+        return ListenableBuilder(
+          listenable: widget.editor,
+          builder: (context, _) => Stack(
+            children: [
+              Positioned.fill(child: canvasWidget),
+              Positioned(
+                left: _Ruler.thickness,
+                right: 0,
+                top: 0,
+                height: _Ruler.thickness,
+                child: _ruler(horizontal: true),
               ),
-            ),
-          ],
+              Positioned(
+                left: 0,
+                top: _Ruler.thickness,
+                bottom: 0,
+                width: _Ruler.thickness,
+                child: _ruler(horizontal: false),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                width: _Ruler.thickness,
+                height: _Ruler.thickness,
+                child: ColoredBox(
+                  color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                ),
+              ),
+              if (widget.rulerLayer)
+                Positioned(
+                  left: _Ruler.thickness,
+                  top: _Ruler.thickness,
+                  right: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _RulerSizeLabels(
+                        span: _selectionSpan(),
+                        unit: widget.rulerUnit,
+                        dpi: widget.editor.document.dpi,
+                        docSize: widget.editor.document.size,
+                        scale: _vp.scale,
+                        origin:
+                            _vp.offset -
+                            const Offset(_Ruler.thickness, _Ruler.thickness),
+                        color: Theme.of(context).colorScheme.onSurface,
+                        background: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHigh,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
+  }
+
+  /// The selected layers' box on the canvas (document px), if any.
+  Rect? _selectionSpan() {
+    final e = widget.editor;
+    final doc = e.document;
+    Rect? r;
+    for (final id in e.topLevelSelection) {
+      final l = doc.layerById(id);
+      if (l == null) continue;
+      final b = layerDocumentBounds(l);
+      r = r == null ? b : r.expandToInclude(b);
+    }
+    return r;
   }
 
   /// A ruler strip. Dragging out of the top ruler creates a horizontal
@@ -415,6 +463,11 @@ class _CanvasViewState extends State<CanvasView>
                 : _vp.offset.dy - _Ruler.thickness,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             background: Theme.of(context).colorScheme.surfaceContainerHigh,
+            span: switch (widget.rulerLayer ? _selectionSpan() : null) {
+              final Rect r =>
+                horizontal ? (r.left, r.right) : (r.top, r.bottom),
+              null => null,
+            },
           ),
         ),
       ),
@@ -433,9 +486,13 @@ class _Ruler extends CustomPainter {
     required this.origin,
     required this.color,
     required this.background,
+    this.span,
   });
 
   static const double thickness = 22;
+
+  /// The selected layers' extent along this ruler (document px).
+  final (double, double)? span;
 
   final bool horizontal;
   final MeasureUnit unit;
@@ -454,6 +511,16 @@ class _Ruler extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = background);
     final length = horizontal ? size.width : size.height;
+    if (span case (final a, final b)) {
+      // Where the selected layer lies, shaded (Photoshop-like).
+      final p0 = a * scale + origin, p1 = b * scale + origin;
+      canvas.drawRect(
+        horizontal
+            ? Rect.fromLTRB(p0, 0, p1, size.height)
+            : Rect.fromLTRB(0, p0, size.width, p1),
+        Paint()..color = color.withValues(alpha: 0.22),
+      );
+    }
     // Pick a step giving labels at least ~64 px apart.
     // Work in the ruler's unit: `k` document px per unit.
     final k = unit.pixelsPerUnit(dpi, reference: reference);
@@ -546,7 +613,90 @@ class _Ruler extends CustomPainter {
       old.reference != reference ||
       old.origin != origin ||
       old.color != color ||
-      old.background != background;
+      old.background != background ||
+      old.span != span;
+}
+
+/// The selected layers' width and height, written just inside the canvas
+/// area next to each ruler, centred on the shaded span.
+class _RulerSizeLabels extends CustomPainter {
+  _RulerSizeLabels({
+    required this.span,
+    required this.unit,
+    required this.dpi,
+    required this.docSize,
+    required this.scale,
+    required this.origin,
+    required this.color,
+    required this.background,
+  });
+
+  final Rect? span;
+  final MeasureUnit unit;
+  final double dpi;
+  final Size docSize;
+  final double scale;
+  final Offset origin;
+  final Color color;
+  final Color background;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = span;
+    if (r == null) return;
+    String fmt(double px, double reference) =>
+        '${unit.format(unit.fromPx(px, dpi, reference: reference))} ${unit.suffix}';
+    void label(String text, Offset at, {required bool vertical}) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      canvas.save();
+      canvas.translate(at.dx, at.dy);
+      if (vertical) canvas.rotate(-math.pi / 2);
+      final box = Rect.fromLTWH(
+        -tp.width / 2 - 4,
+        0,
+        tp.width + 8,
+        tp.height + 2,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(box, const Radius.circular(4)),
+        Paint()..color = background.withValues(alpha: 0.9),
+      );
+      tp.paint(canvas, Offset(-tp.width / 2, 1));
+      canvas.restore();
+      tp.dispose();
+    }
+
+    final cx = (r.left + r.right) / 2 * scale + origin.dx;
+    final cy = (r.top + r.bottom) / 2 * scale + origin.dy;
+    label(
+      fmt(r.width, docSize.width),
+      Offset(cx.clamp(30, size.width - 30), 2),
+      vertical: false,
+    );
+    label(
+      fmt(r.height, docSize.height),
+      Offset(2, cy.clamp(30, size.height - 30)),
+      vertical: true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RulerSizeLabels old) =>
+      old.span != span ||
+      old.unit != unit ||
+      old.scale != scale ||
+      old.origin != origin ||
+      old.color != color;
 }
 
 class _DocumentPainter extends CustomPainter {

@@ -640,5 +640,6 @@
   "patternBackground": "الخلفية",
   "invertColors": "عكس",
   "thickness": "السماكة",
-  "mirrorTile": "بلا فواصل (مرآة)"
+  "mirrorTile": "بلا فواصل (مرآة)",
+  "rulerShowLayer": "إظهار الطبقة المحددة على المساطر"
 }

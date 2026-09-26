@@ -640,5 +640,6 @@
   "patternBackground": "Fondo",
   "invertColors": "Invertir",
   "thickness": "Grosor",
-  "mirrorTile": "Sin costuras (espejo)"
+  "mirrorTile": "Sin costuras (espejo)",
+  "rulerShowLayer": "Mostrar capa seleccionada en reglas"
 }

@@ -640,5 +640,6 @@
   "patternBackground": "Arka plan",
   "invertColors": "Ters çevir",
   "thickness": "Kalınlık",
-  "mirrorTile": "Kesintisiz (ayna)"
+  "mirrorTile": "Kesintisiz (ayna)",
+  "rulerShowLayer": "Seçili katmanı cetvellerde göster"
 }

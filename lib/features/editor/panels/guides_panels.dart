@@ -312,6 +312,14 @@ class _RulerPanelState extends State<RulerPanel> {
               value: s.showRulers,
               onChanged: (v) => s.showRulers = v,
             ),
+            SwitchListTile.adaptive(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+              secondary: const Icon(Icons.width_normal_rounded),
+              title: Text(l.rulerShowLayer),
+              value: s.rulerLayer,
+              onChanged: s.showRulers ? (v) => s.rulerLayer = v : null,
+            ),
             PanelLabel(l.units),
             SizedBox(
               height: 44,

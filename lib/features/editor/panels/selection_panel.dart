@@ -190,7 +190,7 @@ class SelectionPanel extends StatelessWidget {
                           context: context,
                           isScrollControlled: true,
                           showDragHandle: true,
-                          builder: (_) => _LayerPickSheet(
+                          builder: (_) => LayerPickSheet(
                             editor: editor,
                             current: targetLayer?.id ?? picked?.id,
                           ),
@@ -796,11 +796,20 @@ class _Choice extends StatelessWidget {
   }
 }
 
-/// The layers (top first, groups indented) to choose a selection target.
-class _LayerPickSheet extends StatelessWidget {
-  const _LayerPickSheet({required this.editor, required this.current});
+/// The layers (top first, groups indented, with thumbnails) to choose
+/// one from: a selection target, a pattern source…
+class LayerPickSheet extends StatelessWidget {
+  const LayerPickSheet({
+    super.key,
+    required this.editor,
+    required this.current,
+    this.title,
+  });
   final EditorController editor;
   final String? current;
+
+  /// Heading; "Target layer" when null.
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -827,7 +836,7 @@ class _LayerPickSheet extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
-                l.targetLayer,
+                title ?? l.targetLayer,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),

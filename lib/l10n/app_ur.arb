@@ -640,5 +640,6 @@
   "patternBackground": "پس منظر",
   "invertColors": "الٹا",
   "thickness": "موٹائی",
-  "mirrorTile": "بغیر درز (آئینہ)"
+  "mirrorTile": "بغیر درز (آئینہ)",
+  "rulerShowLayer": "منتخب لیئر رولر پر دکھائیں"
 }

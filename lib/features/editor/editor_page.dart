@@ -29,6 +29,7 @@ import 'dialogs/close_dialog.dart';
 import '../../ui/widgets/confirm_dialog.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
+import 'panels/selection_panel.dart' show LayerPickSheet;
 import '../../ui/widgets/color_picker.dart';
 import '../../projects/pixora_format.dart';
 import '../../projects/project_share.dart';
@@ -809,7 +810,7 @@ class _EditorPageState extends State<EditorPage> {
           pickImage: _pickPatternImage,
           fromLayer: _patternFromLayer,
           fromSelection: _patternFromSelection,
-          hasLayer: () => _editor.selectedId != null,
+          hasLayer: () => _editor.document.allLayers.isNotEmpty,
           hasSelection: () => _ui.selection.hasSelection,
           child: CallbackShortcuts(
             bindings: _shortcuts,
@@ -872,8 +873,18 @@ class _EditorPageState extends State<EditorPage> {
     return r?.bytes;
   }
 
+  /// Pattern from a layer chosen in the layers list (as in Selection).
   Future<Uint8List?> _patternFromLayer() async {
-    final id = _editor.selectedId;
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => LayerPickSheet(
+        editor: _editor,
+        current: _editor.selectedId,
+        title: AppLocalizations.of(context).fromLayer,
+      ),
+    );
     return id == null ? null : _editor.renderLayerPng(id);
   }
 
@@ -929,6 +940,7 @@ class _EditorPageState extends State<EditorPage> {
           angles: s.snapAngles,
         ),
         showRulers: s.showRulers,
+        rulerLayer: s.rulerLayer,
         rulerUnit: s.rulerUnit,
         guideColor: s.guideColor,
         controller: _canvas,

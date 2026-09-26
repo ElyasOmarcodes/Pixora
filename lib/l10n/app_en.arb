@@ -725,5 +725,6 @@
   "patternBackground": "Background",
   "invertColors": "Invert",
   "thickness": "Thickness",
-  "mirrorTile": "Seamless (mirror)"
+  "mirrorTile": "Seamless (mirror)",
+  "rulerShowLayer": "Show selected layer on rulers"
 }
