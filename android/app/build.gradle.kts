@@ -38,12 +38,20 @@ android {
     }
 
     signingConfigs {
+        // v1 (JAR) signatures too: file managers and some installers only
+        // verify those, and minSdk 24 would otherwise drop them.
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
         if (keyProperties.isNotEmpty()) {
             create("release") {
                 storeFile = file(keyProperties.getProperty("storeFile"))
                 storePassword = keyProperties.getProperty("storePassword")
                 keyAlias = keyProperties.getProperty("keyAlias")
                 keyPassword = keyProperties.getProperty("keyPassword")
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }
