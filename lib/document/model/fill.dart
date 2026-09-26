@@ -32,6 +32,8 @@ class PixFill {
     this.center = Offset.zero,
     this.pattern,
     this.mirror = false,
+    this.detail = 1,
+    this.tint = false,
   });
 
   factory PixFill.color(Color color) =>
@@ -83,6 +85,8 @@ class PixFill {
     double scale = 1,
     Offset center = Offset.zero,
     bool mirror = false,
+    double detail = 1,
+    bool tint = false,
   }) => PixFill._(
     FillKind.pattern,
     List.unmodifiable([fg, bg]),
@@ -92,6 +96,8 @@ class PixFill {
     center: center,
     pattern: id,
     mirror: mirror,
+    detail: detail,
+    tint: tint,
   );
 
   final FillKind kind;
@@ -102,6 +108,13 @@ class PixFill {
 
   /// Mirror the pattern tile 2×2 so any image repeats without seams.
   final bool mirror;
+
+  /// Size of a built-in pattern's elements (dots, lines, shapes…) within
+  /// its tile; 1 = the standard look.
+  final double detail;
+
+  /// Image patterns drawn in the fill's colours (their shape as a stencil).
+  final bool tint;
   final List<double>? stops;
 
   /// Gradient direction in degrees (0 = left→right, 90 = top→bottom).
@@ -159,6 +172,8 @@ class PixFill {
     Offset? center,
     String? pattern,
     bool? mirror,
+    double? detail,
+    bool? tint,
   }) => PixFill._(
     kind ?? this.kind,
     List.unmodifiable(colors ?? this.colors),
@@ -170,6 +185,8 @@ class PixFill {
     center: center ?? this.center,
     pattern: pattern ?? this.pattern,
     mirror: mirror ?? this.mirror,
+    detail: detail ?? this.detail,
+    tint: tint ?? this.tint,
   );
 
   /// The same gradient with its colours in the opposite order.
@@ -255,6 +272,8 @@ class PixFill {
       fg: colors.isEmpty ? const Color(0xFF000000) : colors.first,
       bg: colors.length > 1 ? colors[1] : const Color(0x00000000),
       mirror: mirror,
+      detail: detail,
+      tint: tint,
     );
     if (img == null) {
       paint
@@ -291,6 +310,8 @@ class PixFill {
     if (stops != null) 'stops': stops,
     if (pattern != null) 'pattern': pattern,
     if (mirror) 'mirror': true,
+    if (detail != 1) 'detail': detail,
+    if (tint) 'tint': true,
     if (kind != FillKind.solid && kind != FillKind.radial) 'angle': angle,
     if (scale != 1) 'scale': scale,
     if (center != Offset.zero) 'cx': center.dx,
@@ -320,6 +341,8 @@ class PixFill {
         scale: readDouble(m['scale'], 1).clamp(0.02, 50.0),
         center: Offset(readDouble(m['cx']), readDouble(m['cy'])),
         mirror: readBool(m['mirror']),
+        detail: readDouble(m['detail'], 1).clamp(0.1, 4.0),
+        tint: readBool(m['tint']),
       );
     }
     if (kind == FillKind.solid ||
@@ -346,6 +369,8 @@ class PixFill {
       other.center == center &&
       other.pattern == pattern &&
       other.mirror == mirror &&
+      other.detail == detail &&
+      other.tint == tint &&
       listEquals(other._effectiveColors, _effectiveColors) &&
       listEquals(other.stops, stops);
 
@@ -357,6 +382,8 @@ class PixFill {
     center,
     pattern,
     mirror,
+    detail,
+    tint,
     Object.hashAll(_effectiveColors),
     stops == null ? null : Object.hashAll(stops!),
   );

@@ -12,6 +12,7 @@ import 'package:pixora/document/model/layer_transform.dart';
 import 'package:pixora/document/model/patterns.dart';
 import 'package:pixora/document/render/document_renderer.dart';
 import 'package:pixora/editor/editor_controller.dart';
+import 'package:pixora/ui/widgets/pattern_maker.dart';
 
 Future<Color Function(int, int)> render(PixDocument doc, AssetStore a) async {
   final img = await DocumentRenderer(a).renderImage(doc);
@@ -128,4 +129,64 @@ void main() {
     final f = await codec.getNextFrame();
     expect(f.image.width, 8);
   });
+
+  Future<double> inkCover(ui.Image img) async {
+    final d = (await img.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    var ink = 0;
+    for (var i = 0; i < img.width * img.height; i++) {
+      if (d.getUint8(i * 4 + 3) > 128) ink++;
+    }
+    return ink / (img.width * img.height);
+  }
+
+  test('element size grows the dots, not the tile', () async {
+    final small = Patterns.tile('dots', detail: 0.5)!;
+    final big = Patterns.tile('dots', detail: 2)!;
+    expect(small.width, big.width);
+    expect(await inkCover(big), greaterThan(await inkCover(small) * 4));
+    final f = PixFill.pattern('dots', detail: 1.7, tint: true);
+    final back = PixFill.fromJson(f.toJson());
+    expect(back.detail, 1.7);
+    expect(back.tint, isTrue);
+  });
+
+  test(
+    'pattern maker lays motifs out in a grid, bricks or half-drops',
+    () async {
+      final rec = ui.PictureRecorder();
+      Canvas(rec).drawRect(
+        const Rect.fromLTWH(0, 0, 20, 10),
+        Paint()..color = const Color(0xFF000000),
+      );
+      final src = rec.endRecording().toImageSync(20, 10);
+      final grid = buildPatternTile(src, const PatternMakerOptions(spacing: 1));
+      expect(grid.width, 40);
+      expect(grid.height, 20);
+      expect(await inkCover(grid), closeTo(0.25, 0.03));
+      final brick = buildPatternTile(
+        src,
+        const PatternMakerOptions(
+          spacing: 1,
+          arrangement: PatternArrangement.brick,
+        ),
+      );
+      expect(brick.height, 40);
+      final drop = buildPatternTile(
+        src,
+        const PatternMakerOptions(arrangement: PatternArrangement.halfDrop),
+      );
+      expect(drop.width, 40);
+      final mirrored = buildPatternTile(
+        src,
+        const PatternMakerOptions(mirror: true),
+      );
+      expect(mirrored.width, 40);
+      // Stencil: dark pixels become (white) ink.
+      final stencil = buildPatternTile(
+        src,
+        const PatternMakerOptions(recolor: true),
+      );
+      expect(await inkCover(stencil), closeTo(1, 0.02));
+    },
+  );
 }
