@@ -24,8 +24,10 @@ class LayerTransform {
     this.tiltY = 0,
   });
 
-  /// Viewer distance (document px) for the 3D perspective.
-  static const double perspective = 1600;
+  /// Viewer distance (document px) for the 3D perspective: infinite, so
+  /// 3D rotation is orthographic — a turned layer keeps its true size,
+  /// with no near side growing and far side shrinking.
+  static const double perspective = double.infinity;
 
   final double x;
   final double y;
