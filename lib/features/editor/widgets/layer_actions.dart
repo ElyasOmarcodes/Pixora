@@ -164,6 +164,17 @@ List<QuickAction> quickActionsFor(
     l.copyEffects,
     () => e.copyStyle(id),
   );
+  final linked = e.isLinked(id);
+  final selectLinked = QuickAction(
+    Icons.link_rounded,
+    l.selectLinked,
+    () => e.selectLinked(id),
+  );
+  final unlink = QuickAction(
+    Icons.link_off_rounded,
+    l.unlinkLayers,
+    () => e.unlinkLayers(ids),
+  );
   final pasteFx = QuickAction(
     Icons.content_paste_rounded,
     l.pasteEffects,
@@ -326,7 +337,11 @@ List<QuickAction> quickActionsFor(
   final at = list.indexOf(shadow);
   list.insert(at < 0 ? 0 : at, addFx);
   final dup = list.indexOf(duplicate);
-  list.insertAll(dup < 0 ? list.length - 1 : dup + 1, [copyFx, pasteFx]);
+  list.insertAll(dup < 0 ? list.length - 1 : dup + 1, [
+    copyFx,
+    pasteFx,
+    if (linked) ...[selectLinked, unlink],
+  ]);
   return list;
 }
 

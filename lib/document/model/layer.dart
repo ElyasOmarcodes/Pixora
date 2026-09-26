@@ -40,6 +40,7 @@ class LayerProps {
     this.blendInterior = false,
     this.maskHidesEffects = false,
     this.stroke,
+    this.link,
   }) : id = id ?? newId('ly'),
        effects = effects is UnmodifiableListView<LayerEffect>
            ? effects
@@ -95,6 +96,10 @@ class LayerProps {
   /// Stroke layer style (null = none).
   final LayerStroke? stroke;
 
+  /// Photoshop's linked layers: layers sharing this id move and transform
+  /// together (null = not linked).
+  final String? link;
+
   /// Whether the layer has a mask at all (it may be disabled).
   bool get hasMaskLayer => mask.isNotEmpty;
 
@@ -122,6 +127,8 @@ class LayerProps {
     bool? maskHidesEffects,
     LayerStroke? stroke,
     bool clearStroke = false,
+    String? link,
+    bool clearLink = false,
   }) => LayerProps(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -140,6 +147,7 @@ class LayerProps {
     blendInterior: blendInterior ?? this.blendInterior,
     maskHidesEffects: maskHidesEffects ?? this.maskHidesEffects,
     stroke: clearStroke ? null : (stroke ?? this.stroke),
+    link: clearLink ? null : (link ?? this.link),
   );
 
   Json toJson() => {
@@ -160,6 +168,7 @@ class LayerProps {
     if (blendInterior) 'blendInterior': true,
     if (maskHidesEffects) 'maskHidesFx': true,
     if (stroke != null) 'stroke': stroke!.toJson(),
+    if (link != null) 'link': link,
   };
 
   static LayerProps fromJson(Json m) => LayerProps(
@@ -188,6 +197,7 @@ class LayerProps {
     stroke: m['stroke'] is Map
         ? LayerStroke.fromJson(readMap(m['stroke']))
         : null,
+    link: m['link'] is String ? m['link'] as String : null,
   );
 
   @override
@@ -208,6 +218,7 @@ class LayerProps {
       other.blendInterior == blendInterior &&
       other.maskHidesEffects == maskHidesEffects &&
       other.stroke == stroke &&
+      other.link == link &&
       listEquals(other.effects, effects) &&
       listEquals(other.mask, mask);
 
@@ -228,6 +239,7 @@ class LayerProps {
     blendInterior,
     maskHidesEffects,
     stroke,
+    link,
     Object.hashAll(effects),
     Object.hashAll(mask),
   );

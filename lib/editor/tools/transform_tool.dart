@@ -88,10 +88,14 @@ class TransformTool extends EditorTool {
 
   // ------------------------------------------------------------ selection
 
+  /// The selection plus the layers linked to it (they move together).
+  List<String> _targets(ToolContext ctx) =>
+      ctx.editor.withLinked(ctx.editor.topLevelSelection);
+
   List<String> _movable(ToolContext ctx) {
     final e = ctx.editor;
     return [
-      for (final id in e.topLevelSelection)
+      for (final id in _targets(ctx))
         if (!e.document.isEffectivelyLocked(id)) id,
     ];
   }
@@ -99,7 +103,7 @@ class TransformTool extends EditorTool {
   /// The single leaf layer being edited, if the selection is exactly one
   /// non-group layer (type-specific handles apply).
   Layer? _singleLeaf(ToolContext ctx) {
-    final ids = ctx.editor.topLevelSelection;
+    final ids = _targets(ctx);
     if (ids.length != 1) return null;
     final l = ctx.editor.document.layerById(ids.single);
     return l is GroupLayer ? null : l;
@@ -107,7 +111,7 @@ class TransformTool extends EditorTool {
 
   List<Offset>? _selectionCorners(ToolContext ctx) {
     final e = ctx.editor;
-    final ids = e.topLevelSelection;
+    final ids = _targets(ctx);
     if (ids.isEmpty) return null;
     if (ids.length == 1) {
       final l = e.document.layerById(ids.single);
@@ -259,8 +263,14 @@ class TransformTool extends EditorTool {
     return true;
   }
 
-  void _begin(_Mode mode, List<String> ids, ToolContext ctx, Offset focal) {
+  void _begin(
+    _Mode mode,
+    List<String> layerIds,
+    ToolContext ctx,
+    Offset focal,
+  ) {
     final doc = ctx.editor.document;
+    final ids = ctx.editor.withLinked(layerIds);
     _mode = mode;
     _start = {for (final id in ids) id: ?doc.layerById(id)};
     _startBounds = unionBounds(_start.values);

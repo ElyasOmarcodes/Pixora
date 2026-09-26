@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Alignment;
 
+import '../core/utils/ids.dart';
 import '../document/assets/asset_store.dart';
 import '../document/effects/effect_registry.dart';
 import '../document/model/document.dart';
@@ -593,8 +594,12 @@ class EditorController extends ChangeNotifier {
     String label = 'transform',
     bool live = false,
   }) {
-    PixDocument op(PixDocument d) =>
-        ids.fold(d, (d, id) => d.updateLayer(id, (l) => applySimilarity(l, s)));
+    // Linked layers go along (Photoshop).
+    final targets = withLinked(ids);
+    PixDocument op(PixDocument d) => targets.fold(
+      d,
+      (d, id) => d.updateLayer(id, (l) => applySimilarity(l, s)),
+    );
     live ? preview(op) : apply(label, op);
   }
 
@@ -917,8 +922,117 @@ class EditorController extends ChangeNotifier {
   void flip(String id, {bool horizontal = true}) =>
       flipLayers([id], horizontal: horizontal);
 
+  // --------------------------------------------------------- linked layers
+
+  /// Layers linked to [id] (not including it).
+  List<String> linkedTo(String id) {
+    final link = _document.layerById(id)?.props.link;
+    if (link == null) return const [];
+    return [
+      for (final l in _document.allLayers)
+        if (l.id != id && l.props.link == link) l.id,
+    ];
+  }
+
+  bool isLinked(String id) => linkedTo(id).isNotEmpty;
+
+  /// [ids] plus every layer linked to them, as top-level units (a layer
+  /// inside a group that is also included is dropped) and without locked
+  /// partners — what a move or transform acts on, like Photoshop.
+  List<String> withLinked(List<String> ids) {
+    final all = {...ids};
+    for (final id in ids) {
+      for (final other in linkedTo(id)) {
+        if (!_document.isEffectivelyLocked(other)) all.add(other);
+      }
+    }
+    if (all.length == ids.length) return ids;
+    return [
+      for (final l in _document.allLayers)
+        if (all.contains(l.id) &&
+            !_document.ancestorsOf(l.id).any((g) => all.contains(g.id)))
+          l.id,
+    ];
+  }
+
+  /// Links [ids] (and whatever they are already linked to) into one set.
+  void linkLayers(List<String> ids) {
+    if (ids.length < 2) return;
+    final existing = {
+      for (final id in ids) ?_document.layerById(id)?.props.link,
+    };
+    final link = existing.isNotEmpty ? existing.first : newId('lk');
+    final members = {
+      ...ids,
+      for (final l in _document.allLayers)
+        if (l.props.link != null && existing.contains(l.props.link)) l.id,
+    };
+    apply('link', (d) {
+      var doc = d;
+      for (final id in members) {
+        doc = doc.updateLayer(
+          id,
+          (l) => l.update((p) => p.copyWith(link: link)),
+        );
+      }
+      return doc;
+    });
+  }
+
+  /// Unlinks [ids]; a set left with a single layer dissolves.
+  void unlinkLayers(List<String> ids) {
+    final links = {for (final id in ids) ?_document.layerById(id)?.props.link};
+    if (links.isEmpty) return;
+    apply('unlink', (d) {
+      var doc = d;
+      for (final id in ids) {
+        doc = doc.updateLayer(
+          id,
+          (l) => l.update((p) => p.copyWith(clearLink: true)),
+        );
+      }
+      for (final link in links) {
+        final left = [
+          for (final l in doc.allLayers)
+            if (l.props.link == link) l.id,
+        ];
+        if (left.length == 1) {
+          doc = doc.updateLayer(
+            left.single,
+            (l) => l.update((p) => p.copyWith(clearLink: true)),
+          );
+        }
+      }
+      return doc;
+    });
+  }
+
+  /// Selects a layer together with the layers linked to it.
+  void selectLinked(String id) => selectMany([id, ...linkedTo(id)]);
+
+  /// Link button: links the selection, or unlinks it when it already is
+  /// one linked set (or a single linked layer).
+  void toggleLinkSelection() {
+    final ids = topLevelSelection;
+    if (ids.isEmpty) return;
+    if (selectionIsLinked) {
+      unlinkLayers(ids);
+    } else {
+      linkLayers(ids);
+    }
+  }
+
+  /// Whether the selection is all one linked set.
+  bool get selectionIsLinked {
+    final ids = topLevelSelection;
+    if (ids.isEmpty) return false;
+    final links = {for (final id in ids) _document.layerById(id)?.props.link};
+    return links.length == 1 && links.first != null;
+  }
+
   /// Mirrors layers around the centre of their combined bounds.
-  void flipLayers(List<String> ids, {required bool horizontal}) {
+  void flipLayers(List<String> layerIds, {required bool horizontal}) {
+    final ids = withLinked(layerIds);
     final axis = boundsOf(ids).center;
     apply(
       'flip',
@@ -934,7 +1048,7 @@ class EditorController extends ChangeNotifier {
 
   void rotateLayers(List<String> ids, double radians) => transformLayers(
     ids,
-    Similarity(pivot: boundsOf(ids).center, rotation: radians),
+    Similarity(pivot: boundsOf(withLinked(ids)).center, rotation: radians),
     label: 'rotate',
   );
 

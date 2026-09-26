@@ -167,6 +167,13 @@ class _LayersPanelState extends State<LayersPanel> {
             AnimatedSize(
               duration: PixTokens.medium,
               curve: PixTokens.emphasized,
+              child: _selectMode && count > 0
+                  ? _selectBar(l, theme, rows)
+                  : const SizedBox(width: double.infinity),
+            ),
+            AnimatedSize(
+              duration: PixTokens.medium,
+              curve: PixTokens.emphasized,
               child: _searching
                   ? _searchBar(l)
                   : const SizedBox(width: double.infinity),
@@ -257,6 +264,58 @@ class _LayersPanelState extends State<LayersPanel> {
               onPressed: widget.onClose,
               icon: const Icon(Icons.close_rounded),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Select mode: a tri-state "all" box, the count, Select all / Unselect
+  /// all and Done — the standard multi-select bar.
+  Widget _selectBar(AppLocalizations l, ThemeData theme, List<_Row> rows) {
+    final ids = [for (final r in rows) r.layer.id];
+    final picked = ids.where(e.isSelected).length;
+    final all = picked == ids.length && ids.isNotEmpty;
+    void selectAll() => e.selectMany(ids.reversed.toList());
+    final scheme = theme.colorScheme;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 2, 8, 6),
+      padding: const EdgeInsetsDirectional.fromSTEB(4, 0, 4, 0),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(PixTokens.radiusM),
+      ),
+      child: Row(
+        children: [
+          Checkbox(
+            tristate: true,
+            value: all ? true : (picked == 0 ? false : null),
+            onChanged: (_) => all ? e.deselect() : selectAll(),
+          ),
+          Expanded(
+            child: Text(
+              l.selectedCount(picked),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: scheme.primary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: all ? null : selectAll,
+            child: Text(l.selectAll),
+          ),
+          TextButton(
+            onPressed: picked == 0 ? null : e.deselect,
+            child: Text(l.unselectAll),
+          ),
+          IconButton(
+            tooltip: l.done,
+            visualDensity: VisualDensity.compact,
+            onPressed: () => setState(() => _selectMode = false),
+            icon: const Icon(Icons.check_rounded),
+          ),
         ],
       ),
     );
@@ -493,6 +552,7 @@ class _LayerRow extends StatelessWidget {
     final dim = !p.visible;
     final effects = listedEffects(layer);
     final hasFx = effects.isNotEmpty || p.stroke != null;
+    final linked = p.link != null && editor.isLinked(layer.id);
 
     final leading = selectMode
         ? Checkbox(
@@ -590,6 +650,23 @@ class _LayerRow extends StatelessWidget {
               ),
             ),
           ),
+          // Linked layers: tap to select the whole linked set.
+          if (linked)
+            Tooltip(
+              message: l.selectLinked,
+              child: InkResponse(
+                onTap: () => editor.selectLinked(layer.id),
+                radius: 18,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.link_rounded,
+                    size: 18,
+                    color: scheme.primary.withValues(alpha: dim ? 0.45 : 1),
+                  ),
+                ),
+              ),
+            ),
           if (hasFx) _FxBadge(open: fxOpen, dim: dim, onTap: onToggleFx),
           _MiniToggle(
             tooltip: p.locked ? l.unlock : l.lock,
@@ -1219,6 +1296,7 @@ class _ActionBar extends StatelessWidget {
     }) => IconButton(
       tooltip: tip,
       isSelected: active,
+      visualDensity: VisualDensity.compact,
       onPressed: onTap,
       icon: Icon(icon),
     );
@@ -1236,6 +1314,15 @@ class _ActionBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
+              // Photoshop's link button: link the selection, or unlink it.
+              action(
+                e.selectionIsLinked
+                    ? Icons.link_off_rounded
+                    : Icons.link_rounded,
+                e.selectionIsLinked ? l.unlinkLayers : l.linkLayers,
+                (multi || e.selectionIsLinked) ? e.toggleLinkSelection : null,
+                active: e.selectionIsLinked,
+              ),
               action(
                 Icons.create_new_folder_rounded,
                 sel.isEmpty ? l.newGroup : l.group,
@@ -1296,6 +1383,8 @@ class _ActionBar extends StatelessWidget {
 enum _More {
   selectAll,
   deselect,
+  link,
+  selectLinked,
   rename,
   showOnly,
   moveOut,
@@ -1343,6 +1432,10 @@ class _MoreMenu extends StatelessWidget {
             e.selectAll();
           case _More.deselect:
             e.deselect();
+          case _More.link:
+            e.toggleLinkSelection();
+          case _More.selectLinked:
+            e.selectLinked(primary!.id);
           case _More.rename:
             onRename(primary!.id);
           case _More.showOnly:
@@ -1372,6 +1465,19 @@ class _MoreMenu extends StatelessWidget {
           Icons.deselect_rounded,
           l.deselect,
           enabled: e.selectedIds.isNotEmpty,
+        ),
+        const PopupMenuDivider(),
+        item(
+          _More.link,
+          e.selectionIsLinked ? Icons.link_off_rounded : Icons.link_rounded,
+          e.selectionIsLinked ? l.unlinkLayers : l.linkLayers,
+          enabled: e.topLevelSelection.length > 1 || e.selectionIsLinked,
+        ),
+        item(
+          _More.selectLinked,
+          Icons.select_all_rounded,
+          l.selectLinked,
+          enabled: primary != null && e.isLinked(primary.id),
         ),
         const PopupMenuDivider(),
         item(
