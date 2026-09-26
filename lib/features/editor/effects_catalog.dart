@@ -162,15 +162,21 @@ IconData fxIcon(String type) {
 /// big photos and small stickers alike (distances in layer pixels).
 Map<String, Object> suggestedParams(String type, Layer layer, Size size) {
   final side = math.max(1.0, math.max(size.width, size.height));
+  // Filters measure in document pixels (Photoshop's smart filters), so
+  // they follow the layer's on-canvas size.
+  final t = layer.props.transform;
+  final docSide = side * math.max(t.scaleX.abs(), t.scaleY.abs());
   double px(double f, double min, double max) =>
       (side * f).clamp(min, max).roundToDouble();
+  double doc(double f, double min, double max) =>
+      (docSide * f).clamp(min, max).roundToDouble();
   return switch (type) {
-    'gaussianBlur' => {'radius': px(0.012, 2, 250)},
-    'boxBlur' => {'radius': px(0.012, 2, 500)},
-    'motionBlur' => {'distance': px(0.06, 8, 1000)},
-    'tiltShift' => {'blur': px(0.015, 3, 100)},
-    'filmGrain' => {'size': (side / 900).clamp(1.0, 8.0)},
-    'saltPepper' => {'size': (side / 900).clamp(1.0, 8.0).roundToDouble()},
+    'gaussianBlur' => {'radius': doc(0.012, 2, 250)},
+    'boxBlur' => {'radius': doc(0.012, 2, 500)},
+    'motionBlur' => {'distance': doc(0.06, 8, 1000)},
+    'tiltShift' => {'blur': doc(0.015, 3, 100)},
+    'filmGrain' => {'size': (docSide / 900).clamp(1.0, 8.0)},
+    'saltPepper' => {'size': (docSide / 900).clamp(1.0, 8.0).roundToDouble()},
     'glow' || 'innerGlow' => {'size': px(0.03, 5, 250)},
     'extrude' => {'depth': px(0.08, 10, 500)},
     _ => const {},

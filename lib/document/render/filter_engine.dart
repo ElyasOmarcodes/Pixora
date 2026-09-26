@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/painting.dart';
 
 /// A pixel filter (Photoshop's Filter menu, applied as a smart filter):
@@ -10,12 +11,15 @@ import 'package:flutter/painting.dart';
 sealed class PixFilter {
   const PixFilter();
 
-  /// How far (layer units) the filter can move pixels outwards.
+  /// How far (document pixels) the filter can move pixels outwards.
   double get reach => 0;
+
+  /// [reach] in layer units.
+  double reachIn(FilterSpace space) => reach * space.maxPer;
 }
 
-/// Filter ▸ Blur ▸ Gaussian Blur. [radius] in pixels (≈ standard
-/// deviation, as in Photoshop).
+/// Filter ▸ Blur ▸ Gaussian Blur. [radius] in document pixels: the
+/// standard deviation of the Gaussian, as in Photoshop.
 class GaussianBlurFilter extends PixFilter {
   const GaussianBlurFilter(this.radius);
   final double radius;
@@ -59,8 +63,12 @@ class RadialBlurFilter extends PixFilter {
   /// The layer box [center] refers to.
   final Rect box;
 
+  /// In layer units: the zoom follows the layer box.
   @override
   double get reach => zoom ? box.longestSide * amount / 100 * 0.35 : 0;
+
+  @override
+  double reachIn(FilterSpace space) => reach;
 }
 
 /// Blur Gallery ▸ Tilt-Shift: sharp band, blur growing away from it.
@@ -134,6 +142,54 @@ class SaltPepperFilter extends PixFilter {
   final int seed;
 }
 
+/// How document pixels map to the layer's own units (the inverse of the
+/// layer's scale and rotation): `local = [a b; c d] · doc`.
+///
+/// Like Photoshop's smart filters, every distance and angle a filter
+/// takes is in document pixels, whatever the layer's size: a 10 px blur
+/// on a photo scaled down to fit the canvas is 10 canvas pixels, not 10
+/// of the photo's own pixels, and a motion blur keeps its angle when the
+/// layer turns.
+@immutable
+class FilterSpace {
+  const FilterSpace(this.a, this.b, this.c, this.d);
+  static const identity = FilterSpace(1, 0, 0, 1);
+
+  /// The inverse of a layer's `rotate(rotation) · scale(sx, sy)`.
+  factory FilterSpace.inverseOf(double rotation, double sx, double sy) {
+    final cs = math.cos(rotation), sn = math.sin(rotation);
+    final ix = sx.abs() < 1e-6 ? 1e6 * sx.sign : 1 / sx;
+    final iy = sy.abs() < 1e-6 ? 1e6 * sy.sign : 1 / sy;
+    return FilterSpace(cs * ix, sn * ix, -sn * iy, cs * iy);
+  }
+
+  final double a, b, c, d;
+
+  /// A document-space vector in layer units.
+  Offset map(Offset v) => Offset(a * v.dx + b * v.dy, c * v.dx + d * v.dy);
+
+  /// Layer units per document pixel along the layer's x / y axes.
+  double get perX => math.sqrt(a * a + b * b);
+  double get perY => math.sqrt(c * c + d * d);
+
+  /// The most layer units one document pixel can span.
+  double get maxPer => math.max(perX, perY);
+
+  /// The average (area) scale.
+  double get meanPer => math.sqrt(perX * perY);
+
+  @override
+  bool operator ==(Object other) =>
+      other is FilterSpace &&
+      other.a == a &&
+      other.b == b &&
+      other.c == c &&
+      other.d == d;
+
+  @override
+  int get hashCode => Object.hash(a, b, c, d);
+}
+
 /// A filter with its Blending Options.
 class FilterStep {
   const FilterStep(
@@ -155,41 +211,57 @@ abstract final class FilterEngine {
   /// Applies [filters] in order to [src], an image of the layer covering
   /// [rect] (layer units). Returns a new image of the same size; [src] is
   /// left alone.
-  static ui.Image apply(ui.Image src, Rect rect, List<FilterStep> steps) {
+  ///
+  /// Filter distances are in document pixels; [space] maps them into the
+  /// layer (see [FilterSpace]).
+  static ui.Image apply(
+    ui.Image src,
+    Rect rect,
+    List<FilterStep> steps, {
+    FilterSpace space = FilterSpace.identity,
+  }) {
     var img = src;
     final res = src.width / rect.width;
+    // Image pixels per document pixel.
+    final grain = res * space.meanPer;
     for (final step in steps) {
       final f = step.filter;
       var next = switch (f) {
-        GaussianBlurFilter g => _gaussian(img, g.radius * res),
-        BoxBlurFilter b => _box(img, b.radius * res),
-        MotionBlurFilter m => _motion(img, m, res),
+        GaussianBlurFilter g => _gaussian(
+          img,
+          g.radius * space.perX * res,
+          g.radius * space.perY * res,
+        ),
+        BoxBlurFilter b => _box(img, b.radius, space, res),
+        MotionBlurFilter m => _motion(img, m, space, res),
         RadialBlurFilter r => _radial(img, r, rect, res),
-        TiltShiftFilter t => _tiltShift(img, t, rect, res),
+        TiltShiftFilter t => _tiltShift(img, t, rect, res, space.meanPer),
         AddNoiseFilter n => _addNoise(img, [
           _NoisePass(
             NoiseTiles.signed(n.gaussian, n.mono, n.seed),
-            res,
-            n.amount * (n.gaussian ? 1.05 : 0.5),
+            grain,
+            n.gaussian
+                ? n.amount * _levels * NoiseTiles.gaussianSpan
+                : n.amount * _levels,
             smooth: false,
           ),
         ]),
         FilmGrainFilter g => _addNoise(img, [
           _NoisePass(
             NoiseTiles.signed(true, true, g.seed),
-            res * math.max(1, g.size),
+            grain * math.max(1, g.size),
             g.amount * 0.9 * (1 - g.roughness * 0.5),
             smooth: true,
           ),
           if (g.roughness > 0)
             _NoisePass(
               NoiseTiles.signed(true, true, g.seed + 7),
-              res,
+              grain,
               g.amount * 0.9 * g.roughness * 0.5,
               smooth: false,
             ),
         ]),
-        SaltPepperFilter s => _saltPepper(img, s, res),
+        SaltPepperFilter s => _saltPepper(img, s, grain),
       };
       if (next == null) continue;
       // Photoshop's filter Blending Options: the result laid over the
@@ -234,15 +306,21 @@ abstract final class FilterEngine {
   static Rect _full(ui.Image i) =>
       Rect.fromLTWH(0, 0, i.width.toDouble(), i.height.toDouble());
 
-  static ui.Image? _gaussian(ui.Image src, double sigma) {
-    if (sigma < 0.05) return null;
+  /// Photoshop's Add Noise: at Amount 100 % Uniform noise moves each
+  /// channel by up to ±256 levels (12.5 % → ±32), and Gaussian noise has
+  /// that as its standard deviation, so its tails reach past the range.
+  static const _levels = 256 / 255;
+
+  static ui.Image? _gaussian(ui.Image src, double sigma, [double? sigmaY]) {
+    final sy = sigmaY ?? sigma;
+    if (sigma < 0.05 && sy < 0.05) return null;
     return _draw(src.width, src.height, (c) {
       c.saveLayer(
         _full(src),
         Paint()
           ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: sigma,
-            sigmaY: sigma,
+            sigmaX: math.max(0, sigma),
+            sigmaY: math.max(0, sy),
             tileMode: TileMode.decal,
           ),
       );
@@ -318,17 +396,35 @@ abstract final class FilterEngine {
     return out;
   }
 
-  static ui.Image? _box(ui.Image src, double r) {
+  /// A (2r+1)² square of the document: two even averages along the
+  /// document's axes, as seen in the layer.
+  static ui.Image? _box(ui.Image src, double r, FilterSpace space, double res) {
     final len = 2 * r + 1;
-    final h = _line(src, const Offset(1, 0), len);
-    final v = _line(h ?? src, const Offset(0, 1), len);
+    final h = _lineDoc(src, space.map(const Offset(1, 0)) * res, len);
+    final v = _lineDoc(h ?? src, space.map(const Offset(0, 1)) * res, len);
     if (v != null && h != null) h.dispose();
     return v ?? h;
   }
 
-  static ui.Image? _motion(ui.Image src, MotionBlurFilter m, double res) {
+  /// An even average over [length] document pixels along [step] (one
+  /// document pixel, in image pixels).
+  static ui.Image? _lineDoc(ui.Image src, Offset step, double length) {
+    final d = step.distance;
+    if (d < 1e-9) return null;
+    return _line(src, step / d, length * d);
+  }
+
+  /// Photoshop's angle is on the canvas (counter-clockwise), whatever the
+  /// layer's rotation or flip.
+  static ui.Image? _motion(
+    ui.Image src,
+    MotionBlurFilter m,
+    FilterSpace space,
+    double res,
+  ) {
     final a = m.angle * math.pi / 180;
-    return _line(src, Offset(math.cos(a), -math.sin(a)), m.distance * res);
+    final dir = space.map(Offset(math.cos(a), -math.sin(a))) * res;
+    return _lineDoc(src, dir, m.distance);
   }
 
   static ui.Image? _radial(
@@ -382,8 +478,9 @@ abstract final class FilterEngine {
     TiltShiftFilter t,
     Rect rect,
     double res,
+    double per,
   ) {
-    final sigma = t.blur * res;
+    final sigma = t.blur * per * res;
     if (sigma < 0.05) return null;
     final soft = _gaussian(src, sigma)!;
     final half = _gaussian(src, sigma * 0.45);
@@ -575,12 +672,17 @@ class _NoisePass {
 /// Noise tiles, generated once per kind (synchronously, by drawing each
 /// grey level's pixels as one batch of points).
 abstract final class NoiseTiles {
-  static const size = 256;
+  /// Large enough that the repeat is never noticed.
+  static const size = 512;
+
+  /// Gaussian tiles hold z / [gaussianSpan] (z standard normal), so tails
+  /// reach 4 σ.
+  static const gaussianSpan = 4.0;
   static final Map<(bool, bool, int), (ui.Image, ui.Image)> _signed = {};
   static final Map<int, ui.Image> _uniform = {};
 
   /// Positive and negative parts of signed noise in −1..1 (Gaussian: the
-  /// standard normal / 3), per channel or [mono].
+  /// standard normal / [gaussianSpan]), per channel or [mono].
   static (ui.Image, ui.Image) signed(bool gaussian, bool mono, int seed) {
     final key = (gaussian, mono, seed);
     final hit = _signed[key];
@@ -594,7 +696,7 @@ abstract final class NoiseTiles {
         if (gaussian) {
           final u1 = math.max(1e-9, rnd.nextDouble()), u2 = rnd.nextDouble();
           final z = math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * u2);
-          v[i] = (z / 3).clamp(-1.0, 1.0);
+          v[i] = (z / gaussianSpan).clamp(-1.0, 1.0);
         } else {
           v[i] = rnd.nextDouble() * 2 - 1;
         }

@@ -2445,9 +2445,10 @@ class _ShapeSource {
     final local = layerLocalRect(layer);
     final filters = _filters(r, layer, local);
     if (filters.isEmpty) return _ShapeSource._(r, layer, hidden, null, 0);
+    final space = _space(layer);
     var reach = 0.0;
     for (final f in filters) {
-      reach += f.filter.reach;
+      reach += f.filter.reachIn(space);
     }
     final box = local.inflate(reach + 2);
     if (box.isEmpty || !box.isFinite) {
@@ -2481,6 +2482,7 @@ class _ShapeSource {
               ),
             ),
             rs,
+            space,
             TextLayoutCache.generation,
           )
         : null;
@@ -2494,7 +2496,7 @@ class _ShapeSource {
       rs.toDouble(),
       (c) => r._paintContent(c, layer, hidden),
     );
-    final out = FilterEngine.apply(plain.image, box, filters);
+    final out = FilterEngine.apply(plain.image, box, filters, space: space);
     plain.dispose();
     final stamp = _Stamp._(out, box);
     if (key != null) {
@@ -2529,11 +2531,20 @@ class _ShapeSource {
               ),
       ];
 
+  /// Document pixels → [layer]'s units, for filter distances (rounded,
+  /// so tiny transform changes reuse the filtered pixels).
+  static FilterSpace _space(Layer layer) {
+    final t = layer.props.transform;
+    double q(double v) => (v * 1000).roundToDouble() / 1000;
+    return FilterSpace.inverseOf(q(t.rotation), q(t.scaleX), q(t.scaleY));
+  }
+
   /// How far [layer]'s filters spread its pixels (layer units).
   static double reachOf(DocumentRenderer r, Layer layer) {
+    final space = _space(layer);
     var reach = 0.0;
     for (final f in _filters(r, layer, layerLocalRect(layer))) {
-      reach += f.filter.reach;
+      reach += f.filter.reachIn(space);
     }
     return reach == 0 ? 0 : reach + 2;
   }

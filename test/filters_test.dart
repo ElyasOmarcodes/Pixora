@@ -20,6 +20,8 @@ Future<Color Function(int, int)> render(
   List<LayerEffect> effects, {
   List<MaskStroke> mask = const [],
   bool maskHidesEffects = false,
+  double scale = 1,
+  double rotation = 0,
 }) async {
   final doc = PixDocument(
     name: 't',
@@ -32,11 +34,17 @@ Future<Color Function(int, int)> render(
           effects: effects,
           mask: mask,
           maskHidesEffects: maskHidesEffects,
-          transform: const LayerTransform(x: 50, y: 50),
+          transform: LayerTransform(
+            x: 50,
+            y: 50,
+            scaleX: scale,
+            scaleY: scale,
+            rotation: rotation,
+          ),
         ),
         shape: ShapeKind.rectangle,
-        width: 40,
-        height: 40,
+        width: 40 / scale,
+        height: 40 / scale,
         fill: PixFill.color(grey),
       ),
     ],
@@ -68,6 +76,64 @@ void main() {
     expect(px(30, 50).a, closeTo(0.5, 0.15));
     expect(px(25, 50).a, greaterThan(0.02));
     expect(px(25, 50).a, lessThan(0.3));
+  });
+
+  test('blur distances are canvas pixels, whatever the layer scale', () async {
+    // The same 40 px square on the canvas, drawn from an 80 px layer
+    // scaled to half: Photoshop's 4 px blur is still 4 canvas pixels.
+    final px = await render([
+      fx('gaussianBlur', {'radius': 4}),
+    ], scale: 0.5);
+    expect(px(50, 50).a, closeTo(1, 0.02));
+    expect(px(30, 50).a, closeTo(0.5, 0.15));
+    expect(px(25, 50).a, greaterThan(0.02));
+    expect(px(25, 50).a, lessThan(0.3));
+    expect(px(22, 50).a, lessThan(0.05));
+  });
+
+  test('motion blur keeps its canvas angle on a turned layer', () async {
+    final px = await render([
+      fx('motionBlur', {'angle': 0, 'distance': 20}),
+    ], rotation: 1.5707963267948966);
+    expect(px(30, 50).a, closeTo(0.5, 0.1));
+    expect(px(25, 50).a, closeTo(0.25, 0.1));
+    expect(px(50, 28).a, lessThan(0.05));
+    expect(px(50, 32).a, greaterThan(0.95));
+  });
+
+  test('add noise matches Photoshop amounts', () async {
+    // Uniform 12.5 %: every channel moves by at most ±32 levels.
+    final u = await render([
+      fx('addNoise', {'amount': 12.5}),
+    ]);
+    var maxDev = 0;
+    for (var y = 32; y < 68; y++) {
+      for (var x = 32; x < 68; x++) {
+        final c = u(x, y);
+        for (final v in [c.r, c.g, c.b]) {
+          final d = ((v * 255).round() - 0x80).abs();
+          if (d > maxDev) maxDev = d;
+        }
+      }
+    }
+    expect(maxDev, inInclusiveRange(26, 33));
+    // Gaussian 10 %: standard deviation ≈ 25.6 levels.
+    final g = await render([
+      fx('addNoise', {'amount': 10, 'distribution': 1, 'mono': 1}),
+    ]);
+    var sum = 0.0, sq = 0.0, n = 0;
+    for (var y = 32; y < 68; y++) {
+      for (var x = 32; x < 68; x++) {
+        final d = g(x, y).r * 255 - 0x80;
+        sum += d;
+        sq += d * d;
+        n++;
+      }
+    }
+    final mean = sum / n;
+    final sd = (sq / n - mean * mean);
+    expect(mean.abs(), lessThan(3));
+    expect(sd, inInclusiveRange(22.0 * 22, 29.0 * 29));
   });
 
   test('motion blur spreads along its angle only', () async {
