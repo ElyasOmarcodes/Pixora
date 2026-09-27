@@ -1457,11 +1457,13 @@ class DocumentRenderer {
       final base = t.homographyAt(0);
       final inv = _invert3(base);
       final side = math.sqrt(az[0] * az[0] + az[1] * az[1]);
-      // Two slices per output pixel of side: seamless faces.
+      // About one slice per output pixel of side (seamless, as each
+      // slice is antialiased), capped: hundreds of full-layer draws per
+      // frame made 3D + bevel heavy.
       final steps =
-          ((x.depth * pixelScale * math.max(side, 0.04) + shapeTravel) * 2)
+          ((x.depth * pixelScale * math.max(side, 0.04) + shapeTravel) * 1.1)
               .ceil()
-              .clamp(2, 600);
+              .clamp(2, 220);
       final facing = az[2] >= 0;
       void slice(int i) {
         final u = i / steps;
