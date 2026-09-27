@@ -726,5 +726,6 @@
   "invertColors": "Invert",
   "thickness": "Thickness",
   "mirrorTile": "Seamless (mirror)",
-  "rulerShowLayer": "Show selected layer on rulers"
+  "rulerShowLayer": "Show selected layer on rulers",
+  "moveIntoGroup": "Move into group"
 }

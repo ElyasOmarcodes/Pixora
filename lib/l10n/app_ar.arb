@@ -641,5 +641,6 @@
   "invertColors": "عكس",
   "thickness": "السماكة",
   "mirrorTile": "بلا فواصل (مرآة)",
-  "rulerShowLayer": "إظهار الطبقة المحددة على المساطر"
+  "rulerShowLayer": "إظهار الطبقة المحددة على المساطر",
+  "moveIntoGroup": "نقل إلى مجموعة"
 }

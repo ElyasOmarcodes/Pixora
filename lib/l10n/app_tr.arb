@@ -641,5 +641,6 @@
   "invertColors": "Ters çevir",
   "thickness": "Kalınlık",
   "mirrorTile": "Kesintisiz (ayna)",
-  "rulerShowLayer": "Seçili katmanı cetvellerde göster"
+  "rulerShowLayer": "Seçili katmanı cetvellerde göster",
+  "moveIntoGroup": "Gruba taşı"
 }

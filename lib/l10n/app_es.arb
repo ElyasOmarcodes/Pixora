@@ -641,5 +641,6 @@
   "invertColors": "Invertir",
   "thickness": "Grosor",
   "mirrorTile": "Sin costuras (espejo)",
-  "rulerShowLayer": "Mostrar capa seleccionada en reglas"
+  "rulerShowLayer": "Mostrar capa seleccionada en reglas",
+  "moveIntoGroup": "Mover al grupo"
 }

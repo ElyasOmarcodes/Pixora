@@ -337,6 +337,36 @@ List<QuickAction> quickActionsFor(
       delete,
     ],
   };
+  // Groups: out of the myGroup group, or into the nearest sibling group.
+  final d0 = e.document;
+  final myGroup = d0.parentOf(id);
+  final peers = myGroup?.children ?? d0.layers;
+  final myIndex = peers.indexWhere((x) => x.id == id);
+  GroupLayer? intoGroup;
+  var nearest = 1 << 30;
+  for (var i = 0; i < peers.length; i++) {
+    final g = peers[i];
+    if (g is GroupLayer &&
+        g.id != id &&
+        (i - myIndex).abs().toInt() < nearest) {
+      nearest = (i - myIndex).abs().toInt();
+      intoGroup = g;
+    }
+  }
+  final groupMoves = [
+    if (myGroup != null)
+      QuickAction(Icons.drive_file_move_rtl_rounded, l.moveOut, () {
+        final grand = d0.parentOf(myGroup.id)?.id;
+        e.moveLayer(id, parentId: grand, index: d0.indexOf(myGroup.id) + 1);
+      }),
+    if (intoGroup case final g?)
+      QuickAction(Icons.drive_file_move_rounded, l.moveIntoGroup, () {
+        e.moveLayer(id, parentId: g.id, index: g.children.length);
+      }),
+  ];
+  final del = list.lastIndexOf(delete);
+  list.insertAll(del < 0 ? list.length : del, groupMoves);
+
   // Effects: add next to the styles, copy / paste next to Duplicate.
   final at = list.indexOf(shadow);
   list.insert(at < 0 ? 0 : at, addFx);

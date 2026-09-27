@@ -641,5 +641,6 @@
   "invertColors": "سرچپه",
   "thickness": "پنډوالی",
   "mirrorTile": "بې درزه (هنداره)",
-  "rulerShowLayer": "ټاکل شوی لایر په رولر کې وښیه"
+  "rulerShowLayer": "ټاکل شوی لایر په رولر کې وښیه",
+  "moveIntoGroup": "ګروپ ته یې یوسه"
 }

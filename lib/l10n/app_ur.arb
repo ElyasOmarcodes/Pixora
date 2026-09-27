@@ -641,5 +641,6 @@
   "invertColors": "الٹا",
   "thickness": "موٹائی",
   "mirrorTile": "بغیر درز (آئینہ)",
-  "rulerShowLayer": "منتخب لیئر رولر پر دکھائیں"
+  "rulerShowLayer": "منتخب لیئر رولر پر دکھائیں",
+  "moveIntoGroup": "گروپ میں منتقل کریں"
 }

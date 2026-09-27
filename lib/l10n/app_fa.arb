@@ -641,5 +641,6 @@
   "invertColors": "معکوس",
   "thickness": "ضخامت",
   "mirrorTile": "بی‌درز (آینه)",
-  "rulerShowLayer": "نمایش لایه انتخاب‌شده روی خط‌کش"
+  "rulerShowLayer": "نمایش لایه انتخاب‌شده روی خط‌کش",
+  "moveIntoGroup": "انتقال به گروه"
 }

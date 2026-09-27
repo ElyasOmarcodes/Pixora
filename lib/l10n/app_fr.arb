@@ -641,5 +641,6 @@
   "invertColors": "Inverser",
   "thickness": "Épaisseur",
   "mirrorTile": "Sans raccord (miroir)",
-  "rulerShowLayer": "Afficher le calque sélectionné sur les règles"
+  "rulerShowLayer": "Afficher le calque sélectionné sur les règles",
+  "moveIntoGroup": "Déplacer dans le groupe"
 }

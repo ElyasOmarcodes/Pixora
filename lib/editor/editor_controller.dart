@@ -381,7 +381,13 @@ class EditorController extends ChangeNotifier {
       final t = r.props.transform;
       final k = r.width * t.scaleX.abs() / size.width;
       return r
-          .copyWith(assetId: assetId, width: size.width, height: size.height)
+          .copyWith(
+            assetId: assetId,
+            width: size.width,
+            height: size.height,
+            // A new picture: re-crops start from it, not the old one.
+            clearCrop: true,
+          )
           .update(
             (p) => p.copyWith(
               transform: t.copyWith(
