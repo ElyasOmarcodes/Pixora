@@ -1148,7 +1148,9 @@ class DocumentRenderer {
     final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
     if (rect.isEmpty || !rect.isFinite) return null;
     final longest = math.max(rect.width, rect.height);
-    final s = math.min(bucket, 4096 / longest);
+    // Capped: several 4096² bitmaps (64 MB each) made zoomed-in panning
+    // on big projects heavy.
+    final s = math.min(bucket, 2560 / longest);
     // A style still computing: paint directly until it is ready.
     if (layer.props.effects.any((e) => e.enabled && _isSlowStyle(e))) {
       final jobs = _styleJobs(base, s, (_) {}, null, start: false);
