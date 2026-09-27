@@ -9,6 +9,7 @@ import '../../document/model/layer_geometry.dart';
 import '../../document/render/document_renderer.dart';
 import '../../document/render/text_layout.dart';
 import 'editor_tool.dart';
+import 'snapping.dart';
 
 enum _Mode { none, move, pinch, handle }
 
@@ -340,6 +341,32 @@ class TransformTool extends EditorTool {
       }
       applyToAll(Similarity(pivot: pivot, rotation: rot));
       return;
+    }
+
+    // Resize handles snap like moves: the dragged edge or corner lands
+    // on canvas edges / centre, guides, grid lines and other layers.
+    _guidesX.clear();
+    _guidesY.clear();
+    if (ctx.snap.positions) {
+      final moving = _start.keys.toSet();
+      final doc = ctx.editor.document;
+      final targets = SnapTargets.of(
+        ctx,
+        skip: (l) =>
+            moving.contains(l.id) ||
+            doc.ancestorsOf(l.id).any((g) => moving.contains(g.id)),
+      );
+      final at = vp.toDoc(pointer);
+      final th = SnapTargets.snapPx / vp.scale;
+      final (dx, gx) = h.unit.dx != 0
+          ? SnapTargets.nearest(targets.xs, [at.dx], th)
+          : (0.0, null);
+      final (dy, gy) = h.unit.dy != 0
+          ? SnapTargets.nearest(targets.ys, [at.dy], th)
+          : (0.0, null);
+      if (gx != null) _guidesX.add(gx);
+      if (gy != null) _guidesY.add(gy);
+      pointer = vp.toScreen(at + Offset(dx, dy));
     }
 
     final leaf = _start.length == 1 ? _start.values.single : null;
