@@ -943,6 +943,12 @@ class DocumentRenderer {
         result = quick ?? cache.latest(slot);
       }
     }
+    // A previous result (other size or settings) shows while the new one
+    // computes: fitted to the current box, so a resized layer's bevel or
+    // glow stays on the layer instead of where the old box was.
+    if (result != null && !exact && result.rect != box) {
+      result = MaskResult(result.masks, box);
+    }
     return _StyleJob(key, result, exact: exact, effectId: effect.id);
   }
 
@@ -1148,7 +1154,12 @@ class DocumentRenderer {
     final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
     if (rect.isEmpty || !rect.isFinite) return null;
     final longest = math.max(rect.width, rect.height);
-    final s = math.min(bucket, 4096 / longest);
+    // At most 4096 px long and 6 M pixels (24 MB) per layer, so a zoomed-in
+    // design never exhausts graphics memory.
+    final s = math.min(
+      bucket,
+      math.min(4096 / longest, math.sqrt(6e6 / (rect.width * rect.height))),
+    );
     // A style still computing: paint directly until it is ready.
     if (layer.props.effects.any((e) => e.enabled && _isSlowStyle(e))) {
       final jobs = _styleJobs(base, s, (_) {}, null, start: false);
@@ -2512,7 +2523,7 @@ class _ShapeSource {
       _filteredCache[key] = stamp;
       // Evicted images are left to the garbage collector: a plan being
       // painted may still hold them.
-      while (_filteredCache.length > 6) {
+      while (_filteredCache.length > 4) {
         _filteredCache.remove(_filteredCache.keys.first);
       }
       return _ShapeSource._(r, layer, hidden, stamp, reach + 2, owned: false);

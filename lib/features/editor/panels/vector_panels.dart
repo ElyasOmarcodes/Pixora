@@ -1246,23 +1246,27 @@ class ShapeStylePanel extends StatelessWidget {
               ),
         ],
         for (final p in shapeParams(k))
-          PixSlider(
-            label: label(p.key),
-            value: layer.param(p.key, p.defaultValue),
-            min: p.min,
-            max: p.max,
-            defaultValue: p.defaultValue,
-            format: switch (p.unit) {
-              ShapeParamUnit.degrees => (v) => '${v.round()}°',
-              ShapeParamUnit.count => (v) => '${v.round()}',
-              ShapeParamUnit.ratio => (v) => '${(v * 100).round()}%',
-            },
-            onChanged: (v) => edit(
-              (x) => x.withParam(p.key, p.step != null ? v.roundToDouble() : v),
-              live: true,
+          // "Roundness" is replaced by the corner radius above on shapes
+          // with corners (it stays for the speech bubble's body).
+          if (!(p.key == 'round' && corners != null))
+            PixSlider(
+              label: label(p.key),
+              value: layer.param(p.key, p.defaultValue),
+              min: p.min,
+              max: p.max,
+              defaultValue: p.defaultValue,
+              format: switch (p.unit) {
+                ShapeParamUnit.degrees => (v) => '${v.round()}°',
+                ShapeParamUnit.count => (v) => '${v.round()}',
+                ShapeParamUnit.ratio => (v) => '${(v * 100).round()}%',
+              },
+              onChanged: (v) => edit(
+                (x) =>
+                    x.withParam(p.key, p.step != null ? v.roundToDouble() : v),
+                live: true,
+              ),
+              onChangeEnd: commit,
             ),
-            onChangeEnd: commit,
-          ),
         PixSlider(
           label: l.width,
           value: layer.width,

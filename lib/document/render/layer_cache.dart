@@ -42,7 +42,10 @@ class CachedLayer {
 /// only a change to its content, effects, rotation, scale or the zoom
 /// level renders it again.
 class LayerRasterCache {
-  LayerRasterCache({this.maxPixels = 64 * 1024 * 1024});
+  /// 24 M pixels (96 MB): phones share graphics memory with the rest of
+  /// the app — a bigger budget at high zoom starved even the text of the
+  /// toolbar (its glyphs vanished).
+  LayerRasterCache({this.maxPixels = 24 * 1024 * 1024});
 
   /// Memory budget in pixels (4 bytes each).
   final int maxPixels;

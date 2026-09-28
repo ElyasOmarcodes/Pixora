@@ -8,6 +8,7 @@ import '../../document/model/layer.dart';
 import '../../document/model/warp.dart';
 import '../../document/render/document_renderer.dart';
 import 'editor_tool.dart';
+import 'snapping.dart';
 
 /// Which warp handles the canvas shows (shared with the warp panel).
 class WarpState extends ChangeNotifier {
@@ -127,10 +128,38 @@ class WarpTool extends EditorTool {
     _grab = _hitTest(ctx, l, g, d.localFocalPoint);
     if (_grab < 0) return false;
     _start = g;
-    _startUnit = _unit(ctx, l, d.localFocalPoint);
+    // Drags follow the handle (not the finger's offset from it), so the
+    // handle itself can snap.
+    _handle0 = _grab >= 100
+        ? _screen(ctx, l, g.project(g.mesh[_grab - 100]))
+        : _screen(ctx, l, g.corners[_grab]);
+    _pointer0 = d.localFocalPoint;
+    _startUnit = _unit(ctx, l, _handle0);
+    _snap = SnapTargets.of(ctx, skip: (x) => x.id == l.id);
     _lockedAxis = -1;
     _axisLock = state.mode;
     return true;
+  }
+
+  Offset _handle0 = Offset.zero, _pointer0 = Offset.zero;
+  SnapTargets? _snap;
+  final List<double> _guidesX = [], _guidesY = [];
+
+  /// Where the grabbed handle goes: following the finger, snapped to the
+  /// canvas, guides, grid and other layers.
+  Offset _target(ToolContext ctx, Layer l, Offset pointer) {
+    final screen = _handle0 + (pointer - _pointer0);
+    _guidesX.clear();
+    _guidesY.clear();
+    final targets = _snap;
+    if (targets == null || !ctx.snap.positions) return _unit(ctx, l, screen);
+    final (p, gx, gy) = targets.snapPoint(
+      ctx.viewport.toDoc(screen),
+      SnapTargets.snapPx / ctx.viewport.scale,
+    );
+    if (gx != null) _guidesX.add(gx);
+    if (gy != null) _guidesY.add(gy);
+    return _unit(ctx, l, ctx.viewport.toScreen(p));
   }
 
   @override
@@ -138,7 +167,7 @@ class WarpTool extends EditorTool {
     final l = _layer(ctx);
     final g0 = _start;
     if (l == null || g0 == null || _grab < 0) return;
-    final unit = _unit(ctx, l, d.localFocalPoint);
+    final unit = _target(ctx, l, d.localFocalPoint);
     final delta = unit - _startUnit;
     final corners = [...g0.corners];
     final mesh = [...g0.mesh];
@@ -174,6 +203,9 @@ class WarpTool extends EditorTool {
     if (_grab >= 0 && ctx.editor.isPreviewing) ctx.editor.commit('warp');
     _grab = -1;
     _start = null;
+    _snap = null;
+    _guidesX.clear();
+    _guidesY.clear();
   }
 
   @override
@@ -190,6 +222,7 @@ class WarpTool extends EditorTool {
     final l = _layer(ctx);
     if (l == null) return;
     final g = _geometry(l);
+    paintSnapGuides(canvas, ctx, _guidesX, _guidesY);
     const accent = Color(0xFF3D7BFF);
     final halo = Paint()
       ..style = PaintingStyle.stroke

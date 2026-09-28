@@ -78,7 +78,7 @@ class MaskJobCache extends ChangeNotifier {
   /// Full-resolution work starts after the settings rest this long.
   static const settle = Duration(milliseconds: 90);
 
-  static const _maxEntries = 40;
+  static const _maxEntries = 16;
 
   final LinkedHashMap<Object, MaskResult> _done = LinkedHashMap();
   final Map<Object, _Req> _waiting = {}; // by key: queued or running
