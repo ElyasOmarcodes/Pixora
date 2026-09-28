@@ -11,7 +11,18 @@ import 'panels/effect_panels.dart';
 import 'panels/panel_common.dart';
 
 /// Sections of the Layer effects page.
-enum FxGroup { blur, noise, style, color }
+/// Photoshop's Filter menu sections, then layer styles and colour.
+enum FxGroup {
+  blur,
+  sharpen,
+  noise,
+  distort,
+  stylize,
+  pixelate,
+  other,
+  style,
+  color,
+}
 
 /// One entry of the Layer effects page.
 class FxEntry {
@@ -37,9 +48,21 @@ const fxCatalog = <FxEntry>[
   FxEntry('motionBlur', FxGroup.blur, Icons.fast_forward_rounded),
   FxEntry('radialBlur', FxGroup.blur, Icons.cyclone_rounded),
   FxEntry('tiltShift', FxGroup.blur, Icons.vertical_align_center_rounded),
+  FxEntry('sharpen', FxGroup.sharpen, Icons.details_rounded),
+  FxEntry('unsharpMask', FxGroup.sharpen, Icons.center_focus_strong_rounded),
   FxEntry('addNoise', FxGroup.noise, Icons.grain_rounded),
   FxEntry('filmGrain', FxGroup.noise, Icons.movie_filter_rounded),
   FxEntry('saltPepper', FxGroup.noise, Icons.scatter_plot_rounded),
+  FxEntry('twirl', FxGroup.distort, Icons.cyclone_rounded),
+  FxEntry('pinch', FxGroup.distort, Icons.compress_rounded),
+  FxEntry('spherize', FxGroup.distort, Icons.circle_outlined),
+  FxEntry('ripple', FxGroup.distort, Icons.waves_rounded),
+  FxEntry('emboss', FxGroup.stylize, Icons.texture_rounded),
+  FxEntry('mosaic', FxGroup.pixelate, Icons.grid_view_rounded),
+  FxEntry('highPass', FxGroup.other, Icons.filter_b_and_w_rounded),
+  FxEntry('maximum', FxGroup.other, Icons.add_circle_outline_rounded),
+  FxEntry('minimum', FxGroup.other, Icons.remove_circle_outline_rounded),
+  FxEntry('offset', FxGroup.other, Icons.open_with_rounded),
   FxEntry(
     'shadow',
     FxGroup.style,
@@ -104,7 +127,12 @@ const fxCatalog = <FxEntry>[
 
 String fxGroupLabel(AppLocalizations l, FxGroup g) => switch (g) {
   FxGroup.blur => l.blur,
+  FxGroup.sharpen => l.fxSharpen,
   FxGroup.noise => l.noise,
+  FxGroup.distort => l.fxDistort,
+  FxGroup.stylize => l.fxStylize,
+  FxGroup.pixelate => l.fxPixelate,
+  FxGroup.other => l.fxOther,
   FxGroup.style => l.layerStyles,
   FxGroup.color => l.color,
 };
@@ -119,6 +147,18 @@ String fxLabel(AppLocalizations l, String key) => switch (key) {
   'addNoise' => l.addNoise,
   'filmGrain' => l.filmGrain,
   'saltPepper' => l.saltPepper,
+  'sharpen' => l.fxSharpen,
+  'unsharpMask' => l.fxUnsharpMask,
+  'highPass' => l.fxHighPass,
+  'emboss' => l.fxEmboss,
+  'mosaic' => l.fxMosaic,
+  'maximum' => l.fxMaximum,
+  'minimum' => l.fxMinimum,
+  'offset' => l.fxOffset,
+  'twirl' => l.fxTwirl,
+  'pinch' => l.fxPinch,
+  'spherize' => l.fxSpherize,
+  'ripple' => l.fxRipple,
   'shadow' => l.dropShadow,
   'innerShadow' => l.innerShadow,
   'glow' => l.outerGlow,
@@ -154,6 +194,8 @@ IconData fxIcon(String type) {
   for (final e in fxCatalog) {
     if (e.key == type) return (e.panel, e.inner ?? false);
   }
+  // Pixel filters are edited by id in the filter panel.
+  if (EffectRegistry.instance[type]?.filter != null) return (null, false);
   return switch (EffectRegistry.instance[type]?.category) {
     EffectCategory.adjust => (ToolPanel.adjust, false),
     EffectCategory.filter => (ToolPanel.filters, false),
@@ -198,6 +240,13 @@ Map<String, Object> previewParams(String type, Size size) {
     'addNoise' => {'amount': 80},
     'filmGrain' => {'amount': 90, 'size': side / 60},
     'saltPepper' => {'density': 16, 'size': side / 60},
+    'unsharpMask' => {'amount': 300, 'radius': side * 0.02},
+    'sharpen' => {'amount': 400},
+    'highPass' => {'radius': side * 0.03},
+    'emboss' => {'height': side * 0.03, 'amount': 200},
+    'mosaic' => {'cell': side / 10},
+    'maximum' || 'minimum' => {'radius': side * 0.04},
+    'offset' => {'dx': side * 0.3, 'dy': side * 0.2},
     'shadow' => {'dx': side * 0.05, 'dy': side * 0.05, 'blur': side * 0.05},
     'innerShadow' => {'distance': side * 0.05, 'blur': side * 0.06},
     // Photoshop's pale Screen glow vanishes on light thumbnails.
@@ -272,6 +321,29 @@ List<FxControl> _filterControls(AppLocalizations l, String type) {
       FxSlider('density', l.density, format: pct),
       FxSlider('size', l.size, format: px),
       FxSeed(l.randomize),
+    ],
+    'sharpen' => [FxSlider('amount', l.amount, format: pct)],
+    'unsharpMask' => [
+      FxSlider('amount', l.amount, format: pct),
+      FxSlider('radius', l.radius, format: px),
+    ],
+    'highPass' => [FxSlider('radius', l.radius, format: px)],
+    'emboss' => [
+      FxSlider('angle', l.angle, format: fxDegrees),
+      FxSlider('height', l.height, format: px),
+      FxSlider('amount', l.amount, format: pct),
+    ],
+    'mosaic' => [FxSlider('cell', l.fxCellSize, format: px)],
+    'maximum' || 'minimum' => [FxSlider('radius', l.radius, format: px)],
+    'offset' => [
+      FxSlider('dx', l.fxHorizontal, format: px),
+      FxSlider('dy', l.fxVertical, format: px),
+    ],
+    'twirl' => [FxSlider('angle', l.angle, format: fxDegrees)],
+    'pinch' || 'spherize' => [FxSlider('amount', l.amount, format: pct)],
+    'ripple' => [
+      FxSlider('amount', l.amount, format: pct),
+      FxSlider('size', l.size, format: pct),
     ],
     _ => const [],
   };

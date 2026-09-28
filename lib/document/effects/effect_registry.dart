@@ -874,6 +874,147 @@ class EffectRegistry {
         ),
       ),
     );
+    // Filter ▸ Sharpen / Other / Stylize / Pixelate / Distort.
+    register(
+      EffectDefinition(
+        type: 'sharpen',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: 0, max: 500, defaultValue: 60),
+        ],
+        filter: (e, _) => UnsharpMaskFilter(e.number('amount', 60) / 100, 1),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'unsharpMask',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: 0, max: 500, defaultValue: 100),
+          EffectParam.number('radius', min: 0.1, max: 250, defaultValue: 2),
+        ],
+        filter: (e, _) => UnsharpMaskFilter(
+          e.number('amount', 100) / 100,
+          e.number('radius', 2),
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'highPass',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('radius', min: 0.1, max: 250, defaultValue: 10),
+        ],
+        filter: (e, _) => HighPassFilter(e.number('radius', 10)),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'emboss',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('angle', min: -180, max: 180, defaultValue: 135),
+          EffectParam.number('height', min: 1, max: 100, defaultValue: 3),
+          EffectParam.number('amount', min: 1, max: 500, defaultValue: 100),
+        ],
+        filter: (e, _) => EmbossFilter(
+          e.number('angle', 135),
+          e.number('height', 3),
+          e.number('amount', 100) / 100,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'mosaic',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('cell', min: 2, max: 200, defaultValue: 12),
+        ],
+        filter: (e, _) => MosaicFilter(e.number('cell', 12)),
+      ),
+    );
+    for (final (type, maximum) in const [
+      ('maximum', true),
+      ('minimum', false),
+    ]) {
+      register(
+        EffectDefinition(
+          type: type,
+          category: EffectCategory.filter,
+          params: const [
+            EffectParam.number('radius', min: 1, max: 100, defaultValue: 3),
+          ],
+          filter: (e, _) =>
+              MorphologyFilter(e.number('radius', 3), maximum: maximum),
+        ),
+      );
+    }
+    register(
+      EffectDefinition(
+        type: 'offset',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('dx', min: -2000, max: 2000, defaultValue: 50),
+          EffectParam.number('dy', min: -2000, max: 2000, defaultValue: 0),
+        ],
+        filter: (e, box) =>
+            OffsetFilter(e.number('dx', 50), e.number('dy', 0), box),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'twirl',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('angle', min: -999, max: 999, defaultValue: 50),
+        ],
+        filter: (e, box) =>
+            DistortFilter(DistortKind.twirl, e.number('angle', 50), box),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'pinch',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: -100, max: 100, defaultValue: 50),
+        ],
+        filter: (e, box) =>
+            DistortFilter(DistortKind.pinch, e.number('amount', 50) / 100, box),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'spherize',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: -100, max: 100, defaultValue: 100),
+        ],
+        filter: (e, box) => DistortFilter(
+          DistortKind.spherize,
+          e.number('amount', 100) / 100,
+          box,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'ripple',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: 0, max: 100, defaultValue: 20),
+          EffectParam.number('size', min: 1, max: 100, defaultValue: 10),
+        ],
+        filter: (e, box) => DistortFilter(
+          DistortKind.ripple,
+          e.number('amount', 20) / 100,
+          box,
+          size: e.number('size', 10) / 100,
+        ),
+      ),
+    );
     register(
       EffectDefinition(
         type: 'addNoise',

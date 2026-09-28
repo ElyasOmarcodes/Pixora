@@ -131,6 +131,80 @@ class FilmGrainFilter extends PixFilter {
   final int seed;
 }
 
+/// Filter ▸ Sharpen ▸ Unsharp Mask (Sharpen is a small fixed one):
+/// `src + amount · (src − blur(src, radius))`.
+class UnsharpMaskFilter extends PixFilter {
+  const UnsharpMaskFilter(this.amount, this.radius);
+
+  /// 0..5 (0–500 %).
+  final double amount;
+
+  /// Document pixels.
+  final double radius;
+}
+
+/// Filter ▸ Other ▸ High Pass: `50 % grey + (src − blur(src, radius))`.
+class HighPassFilter extends PixFilter {
+  const HighPassFilter(this.radius);
+  final double radius;
+}
+
+/// Filter ▸ Stylize ▸ Emboss: grey relief from the luminance, lit from
+/// [angle] degrees, [height] document pixels, [amount] 0..5.
+class EmbossFilter extends PixFilter {
+  const EmbossFilter(this.angle, this.height, this.amount);
+  final double angle;
+  final double height;
+  final double amount;
+  @override
+  double get reach => height + 1;
+}
+
+/// Filter ▸ Pixelate ▸ Mosaic: square cells of [cell] document pixels.
+class MosaicFilter extends PixFilter {
+  const MosaicFilter(this.cell);
+  final double cell;
+}
+
+/// Filter ▸ Other ▸ Maximum (lighter areas grow) or Minimum (darker areas
+/// grow) by [radius] document pixels.
+class MorphologyFilter extends PixFilter {
+  const MorphologyFilter(this.radius, {required this.maximum});
+  final double radius;
+  final bool maximum;
+  @override
+  double get reach => maximum ? radius + 1 : 0;
+}
+
+/// Filter ▸ Other ▸ Offset: shifts the pixels, wrapping around the layer
+/// box ([dx], [dy] in document pixels).
+class OffsetFilter extends PixFilter {
+  const OffsetFilter(this.dx, this.dy, this.box);
+  final double dx, dy;
+  final Rect box;
+}
+
+/// Filter ▸ Distort ▸ Twirl / Pinch / Spherize / Ripple, over the layer
+/// box (mesh distortions, drawn on the GPU).
+enum DistortKind { twirl, pinch, spherize, ripple }
+
+class DistortFilter extends PixFilter {
+  const DistortFilter(this.kind, this.amount, this.box, {this.size = 0.1});
+  final DistortKind kind;
+
+  /// Twirl: degrees (−999…999); pinch / spherize: −1…1; ripple: 0…1 of
+  /// the box's short side.
+  final double amount;
+
+  /// Ripple wavelength, fraction of the short side.
+  final double size;
+  final Rect box;
+
+  /// In layer units: the distortion follows the layer box.
+  @override
+  double reachIn(FilterSpace space) => 0;
+}
+
 /// Salt & pepper: random white and black specks covering [density]
 /// (0..1) of the pixels.
 class SaltPepperFilter extends PixFilter {
@@ -305,6 +379,22 @@ abstract final class FilterEngine {
         ]),
         SaltPepperFilter s => _saltPepper(img, s, grain),
         WarpFilter w => _warp(img, w, rect, res),
+        UnsharpMaskFilter u => _unsharp(
+          img,
+          u.amount,
+          u.radius * space.meanPer * res,
+        ),
+        HighPassFilter h => _highPass(img, h.radius * space.meanPer * res),
+        EmbossFilter e => _emboss(img, e, space, res),
+        MosaicFilter m => _mosaic(img, m.cell * space.meanPer * res),
+        MorphologyFilter m => _morphology(
+          img,
+          m.radius * space.perX * res,
+          m.radius * space.perY * res,
+          m.maximum,
+        ),
+        OffsetFilter o => _offset(img, o, space, rect, res),
+        DistortFilter d => _distort(img, d, rect, res),
       };
       if (!identical(input, img)) input.dispose();
       if (next == null) continue;
@@ -786,6 +876,344 @@ abstract final class FilterEngine {
         ..drawImage(src, Offset.zero, Paint()..blendMode = BlendMode.dstIn)
         ..restore();
     });
+  }
+
+  // ------------------------------------------------ Photoshop filters
+
+  /// The positive and negative parts of `a − b`, per channel:
+  /// `max(a, b) − b` and `b − min(a, b)` (lighten / darken, then
+  /// difference) — signed arithmetic with blend modes, on the GPU.
+  static (ui.Image, ui.Image) _signed(ui.Image a, ui.Image b) {
+    ui.Image part(BlendMode pick) => _draw(a.width, a.height, (c) {
+      c
+        ..drawImage(a, Offset.zero, Paint())
+        ..drawImage(b, Offset.zero, Paint()..blendMode = pick)
+        ..drawImage(b, Offset.zero, Paint()..blendMode = BlendMode.difference);
+    });
+    return (part(BlendMode.lighten), part(BlendMode.darken));
+  }
+
+  /// `base + k·pos − k·neg`, keeping [alpha]'s transparency.
+  static ui.Image _addParts(
+    ui.Image base,
+    ui.Image pos,
+    ui.Image neg,
+    double k,
+    ui.Image alpha,
+  ) => _draw(base.width, base.height, (c) {
+    final full = _full(base);
+    c
+      ..saveLayer(full, Paint())
+      ..saveLayer(full, Paint()..colorFilter = _invert)
+      ..drawImage(base, Offset.zero, Paint()..colorFilter = _invertOpaque)
+      ..drawImage(
+        neg,
+        Offset.zero,
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..colorFilter = _scale(k),
+      )
+      ..restore()
+      ..drawImage(
+        pos,
+        Offset.zero,
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..colorFilter = _scale(k),
+      )
+      ..drawImage(alpha, Offset.zero, Paint()..blendMode = BlendMode.dstIn)
+      ..restore();
+  });
+
+  static ui.Image? _unsharp(ui.Image src, double amount, double sigma) {
+    if (amount <= 0.001 || sigma < 0.05) return null;
+    final blur = _gaussian(src, sigma)!;
+    final (pos, neg) = _signed(src, blur);
+    final out = _addParts(src, pos, neg, amount, src);
+    for (final i in [blur, pos, neg]) {
+      i.dispose();
+    }
+    return out;
+  }
+
+  static ui.Image _grey(ui.Image src, {bool luminance = false}) =>
+      _draw(src.width, src.height, (c) {
+        if (luminance) {
+          c.drawImage(
+            src,
+            Offset.zero,
+            Paint()
+              ..colorFilter = const ColorFilter.matrix([
+                0.299, 0.587, 0.114, 0, 0, //
+                0.299, 0.587, 0.114, 0, 0, //
+                0.299, 0.587, 0.114, 0, 0, //
+                0, 0, 0, 1, 0, //
+              ]),
+          );
+        } else {
+          c.drawRect(_full(src), Paint()..color = const Color(0xFF808080));
+        }
+      });
+
+  static ui.Image? _highPass(ui.Image src, double sigma) {
+    if (sigma < 0.05) return null;
+    final blur = _gaussian(src, sigma)!;
+    final (pos, neg) = _signed(src, blur);
+    final grey = _grey(src);
+    final out = _addParts(grey, pos, neg, 1, src);
+    for (final i in [blur, pos, neg, grey]) {
+      i.dispose();
+    }
+    return out;
+  }
+
+  static ui.Image? _emboss(
+    ui.Image src,
+    EmbossFilter e,
+    FilterSpace space,
+    double res,
+  ) {
+    if (e.amount <= 0.001 || e.height <= 0) return null;
+    final a = e.angle * math.pi / 180;
+    final d = space.map(Offset(math.cos(a), -math.sin(a))) * (e.height * res);
+    final lum = _grey(src, luminance: true);
+    ui.Image shifted(Offset o) => _draw(src.width, src.height, (c) {
+      // Edge pixels repeat, so the relief has no false rim.
+      c.drawRect(
+        _full(src),
+        Paint()
+          ..shader = ImageShader(
+            lum,
+            TileMode.clamp,
+            TileMode.clamp,
+            Float64List.fromList([
+              1, 0, 0, 0, //
+              0, 1, 0, 0, //
+              0, 0, 1, 0, //
+              o.dx, o.dy, 0, 1, //
+            ]),
+          ),
+      );
+    });
+    final lit = shifted(d / 2), shade = shifted(-d / 2);
+    final (pos, neg) = _signed(lit, shade);
+    final grey = _grey(src);
+    final out = _addParts(grey, pos, neg, e.amount, src);
+    for (final i in [lum, lit, shade, pos, neg, grey]) {
+      i.dispose();
+    }
+    return out;
+  }
+
+  static ui.Image? _mosaic(ui.Image src, double cell) {
+    if (cell < 1.5) return null;
+    // Average each cell by halving (every step a 2×2 box average), then
+    // blow the cells back up without smoothing.
+    final cw = math.max(1, (src.width / cell).ceil());
+    final ch = math.max(1, (src.height / cell).ceil());
+    var img = src;
+    while (img.width > cw * 2 || img.height > ch * 2) {
+      final w = math.max(cw, (img.width / 2).ceil());
+      final h = math.max(ch, (img.height / 2).ceil());
+      final cur = img;
+      img = _draw(w, h, (c) {
+        c.drawImageRect(
+          cur,
+          _full(cur),
+          Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+          Paint()..filterQuality = FilterQuality.low,
+        );
+      });
+      if (!identical(cur, src)) cur.dispose();
+    }
+    final small = img;
+    final cells = _draw(cw, ch, (c) {
+      c.drawImageRect(
+        small,
+        _full(small),
+        Rect.fromLTWH(0, 0, cw.toDouble(), ch.toDouble()),
+        Paint()..filterQuality = FilterQuality.low,
+      );
+    });
+    if (!identical(small, src)) small.dispose();
+    final out = _draw(src.width, src.height, (c) {
+      c.drawImageRect(
+        cells,
+        _full(cells),
+        Rect.fromLTWH(0, 0, cw * cell, ch * cell),
+        Paint()..filterQuality = FilterQuality.none,
+      );
+    });
+    cells.dispose();
+    return out;
+  }
+
+  static ui.Image? _morphology(
+    ui.Image src,
+    double rx,
+    double ry,
+    bool maximum,
+  ) {
+    if (rx < 0.5 && ry < 0.5) return null;
+    return _draw(src.width, src.height, (c) {
+      c
+        ..saveLayer(
+          _full(src),
+          Paint()
+            ..imageFilter = maximum
+                ? ui.ImageFilter.dilate(radiusX: rx, radiusY: ry)
+                : ui.ImageFilter.erode(radiusX: rx, radiusY: ry),
+        )
+        ..drawImage(src, Offset.zero, Paint())
+        ..restore();
+    });
+  }
+
+  static ui.Image? _offset(
+    ui.Image src,
+    OffsetFilter o,
+    FilterSpace space,
+    Rect rect,
+    double res,
+  ) {
+    if (o.dx == 0 && o.dy == 0) return null;
+    final b = Rect.fromLTRB(
+      (o.box.left - rect.left) * res,
+      (o.box.top - rect.top) * res,
+      (o.box.right - rect.left) * res,
+      (o.box.bottom - rect.top) * res,
+    );
+    if (b.width < 1 || b.height < 1) return null;
+    final shift = space.map(Offset(o.dx, o.dy)) * res;
+    final tile = _draw(b.width.ceil(), b.height.ceil(), (c) {
+      c.drawImageRect(src, b, Offset.zero & b.size, Paint());
+    });
+    final out = _draw(src.width, src.height, (c) {
+      c
+        ..clipRect(b)
+        ..drawRect(
+          b,
+          Paint()
+            ..shader = ImageShader(
+              tile,
+              TileMode.repeated,
+              TileMode.repeated,
+              Float64List.fromList([
+                1, 0, 0, 0, //
+                0, 1, 0, 0, //
+                0, 0, 1, 0, //
+                b.left + shift.dx, b.top + shift.dy, 0, 1, //
+              ]),
+            ),
+        );
+    });
+    tile.dispose();
+    return out;
+  }
+
+  /// Twirl, Pinch, Spherize and Ripple: a fine mesh over the layer box
+  /// whose vertices stay put and sample where the distortion says.
+  static ui.Image? _distort(
+    ui.Image src,
+    DistortFilter f,
+    Rect rect,
+    double res,
+  ) {
+    if (f.amount == 0) return null;
+    final b = f.box;
+    final c0 = b.center;
+    final r0 = b.shortestSide / 2;
+    Offset source(Offset p) {
+      final v = p - c0;
+      final d = v.distance / r0;
+      switch (f.kind) {
+        case DistortKind.twirl:
+          if (d >= 1) return p;
+          final t = f.amount * math.pi / 180 * (1 - d);
+          final cs = math.cos(t), sn = math.sin(t);
+          return c0 + Offset(v.dx * cs - v.dy * sn, v.dx * sn + v.dy * cs);
+        case DistortKind.pinch:
+          if (d >= 1 || d == 0) return p;
+          // Photoshop-like: positive squeezes towards the centre.
+          final k = math.pow(math.sin(math.pi / 2 * d), -f.amount).toDouble();
+          return c0 + v * k.clamp(0.0, 1 / math.max(d, 1e-6));
+        case DistortKind.spherize:
+          if (d >= 1 || d == 0) return p;
+          // A sphere seen from the front: magnified middle (positive) or
+          // squeezed (negative).
+          final sphere = math.asin(d) / (math.pi / 2);
+          final k = 1 + f.amount * (sphere / d - 1);
+          return c0 + v * k;
+        case DistortKind.ripple:
+          final a = f.amount * r0 * 2 * 0.1;
+          final wl = math.max(2.0, f.size * r0 * 2);
+          return p +
+              Offset(
+                a * math.sin(2 * math.pi * p.dy / wl),
+                a * math.sin(2 * math.pi * p.dx / wl),
+              );
+      }
+    }
+
+    const n = 48;
+    final pos = Float32List((n + 1) * (n + 1) * 2);
+    final tex = Float32List((n + 1) * (n + 1) * 2);
+    var k = 0;
+    for (var i = 0; i <= n; i++) {
+      for (var j = 0; j <= n; j++) {
+        final p = Offset(
+          rect.left + rect.width * j / n,
+          rect.top + rect.height * i / n,
+        );
+        final s = source(p);
+        pos[k] = (p.dx - rect.left) * res;
+        pos[k + 1] = (p.dy - rect.top) * res;
+        tex[k] = (s.dx - rect.left) * res;
+        tex[k + 1] = (s.dy - rect.top) * res;
+        k += 2;
+      }
+    }
+    final idx = Uint16List(n * n * 6);
+    var t = 0;
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        final a = i * (n + 1) + j, c = a + n + 1;
+        idx
+          ..[t++] = a
+          ..[t++] = a + 1
+          ..[t++] = c
+          ..[t++] = a + 1
+          ..[t++] = c + 1
+          ..[t++] = c;
+      }
+    }
+    final vertices = ui.Vertices.raw(
+      ui.VertexMode.triangles,
+      pos,
+      textureCoordinates: tex,
+      indices: idx,
+    );
+    final out = _draw(src.width, src.height, (c) {
+      c.drawVertices(
+        vertices,
+        BlendMode.srcOver,
+        Paint()
+          ..shader = ImageShader(
+            src,
+            TileMode.decal,
+            TileMode.decal,
+            Float64List.fromList([
+              1, 0, 0, 0, //
+              0, 1, 0, 0, //
+              0, 0, 1, 0, //
+              0, 0, 0, 1, //
+            ]),
+            filterQuality: FilterQuality.medium,
+          ),
+      );
+    });
+    vertices.dispose();
+    return out;
   }
 
   static ui.Image? _saltPepper(ui.Image src, SaltPepperFilter s, double res) {

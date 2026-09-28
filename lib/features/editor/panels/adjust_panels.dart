@@ -93,12 +93,15 @@ class FiltersPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    // Colour presets only (pixel filters are added from Layer effects).
     final defs = EffectRegistry.instance
         .inCategory(EffectCategory.filter)
+        .where((d) => d.colorMatrix != null)
         .toList();
     LayerEffect? active;
     for (final e in layer.props.effects) {
-      if (EffectRegistry.instance[e.type]?.category == EffectCategory.filter) {
+      final d = EffectRegistry.instance[e.type];
+      if (d?.category == EffectCategory.filter && d?.colorMatrix != null) {
         active = e;
       }
     }

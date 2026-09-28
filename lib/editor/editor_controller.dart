@@ -1340,10 +1340,16 @@ class EditorController extends ChangeNotifier {
 
   /// Filters are exclusive: applying one replaces any previous filter.
   void applyFilter(String layerId, String? type) => updateProps(layerId, (p) {
+    // Only the colour presets replace each other; pixel filters, warps…
+    // (also in the filter category) stay.
+    bool preset(LayerEffect e) {
+      final d = EffectRegistry.instance[e.type];
+      return d?.category == EffectCategory.filter && d?.colorMatrix != null;
+    }
+
     final kept = [
       for (final e in p.effects)
-        if (EffectRegistry.instance[e.type]?.category != EffectCategory.filter)
-          e,
+        if (!preset(e)) e,
     ];
     final def = type == null ? null : EffectRegistry.instance[type];
     return p.copyWith(effects: def == null ? kept : [...kept, def.create()]);
