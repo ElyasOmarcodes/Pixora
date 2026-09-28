@@ -859,13 +859,10 @@ class EffectRegistry {
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 15),
           EffectParam.number('angle', min: -90, max: 90, defaultValue: 0),
           EffectParam.number('cy', min: 0, max: 1, defaultValue: 0.5),
-          EffectParam.number('focus', min: 0, max: 0.5, defaultValue: 0.12),
-          EffectParam.number(
-            'transition',
-            min: 0,
-            max: 0.5,
-            defaultValue: 0.18,
-          ),
+          EffectParam.number('focus', min: 0, max: 1, defaultValue: 0.12),
+          // Up to twice the layer's short side: a blur that grows across
+          // a whole block of text.
+          EffectParam.number('transition', min: 0, max: 2, defaultValue: 0.18),
         ],
         filter: (e, box) => TiltShiftFilter(
           blur: e.number('blur', 15),

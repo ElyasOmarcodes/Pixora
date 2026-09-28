@@ -641,8 +641,6 @@ abstract final class FilterEngine {
   ) {
     final sigma = t.blur * per * res;
     if (sigma < 0.05) return null;
-    final soft = _gaussian(src, sigma)!;
-    final half = _gaussian(src, sigma * 0.45);
     final center = Offset(
       (t.box.left + t.center.dx * t.box.width - rect.left) * res,
       (t.box.top + t.center.dy * t.box.height - rect.top) * res,
@@ -653,50 +651,71 @@ abstract final class FilterEngine {
     final size = t.box.shortestSide * res;
     final f = math.max(0.5, t.focus * size);
     final tr = math.max(0.5, t.transition * size);
-    ui.Gradient band(double inner, double outer) {
-      final total = inner + outer;
-      return ui.Gradient.linear(
-        center - n * total,
-        center + n * total,
-        const [
-          Color(0x00FFFFFF),
-          Color(0xFFFFFFFF),
-          Color(0xFFFFFFFF),
-          Color(0x00FFFFFF),
+    // Photoshop's Blur Gallery grows the blur smoothly with distance:
+    // several blur levels, each blended into the next over its stretch of
+    // the transition, so no step between them shows.
+    const levels = 8;
+    final images = [
+      for (var i = 0; i < levels; i++)
+        i == 0 ? src : _gaussian(src, sigma * i / (levels - 1)) ?? src,
+    ];
+    final step = tr / (levels - 1);
+    // Level i weighs 1 at distance f + i·step from the band's middle,
+    // falling to 0 at the neighbouring levels' distances: the weights add
+    // up to 1 everywhere, so the levels are summed (a sharp level laid
+    // over blurred ones would leave their halos around transparent
+    // content such as text).
+    final far = f + tr + 1;
+    ui.Gradient weight(int i) {
+      // (distance, weight) breakpoints on one side, mirrored.
+      final pts = <(double, double)>[
+        if (i == 0) ...[
+          (0, 1),
+          (f, 1),
+          (f + step, 0),
+        ] else ...[
+          (0, 0),
+          (f + step * (i - 1), 0),
+          (f + step * i, 1),
+          if (i < levels - 1) (f + step * (i + 1), 0) else (far, 1),
         ],
-        [0, outer / (2 * total), (total + inner) / (2 * total), 1],
+      ];
+      if (pts.last.$1 < far) pts.add((far, pts.last.$2));
+      final colors = <Color>[], stops = <double>[];
+      for (final (d, w) in pts.reversed) {
+        colors.add(Color.fromRGBO(255, 255, 255, w));
+        stops.add(0.5 - d / (2 * far));
+      }
+      for (final (d, w) in pts) {
+        colors.add(Color.fromRGBO(255, 255, 255, w));
+        stops.add(0.5 + d / (2 * far));
+      }
+      return ui.Gradient.linear(
+        center - n * far,
+        center + n * far,
+        colors,
+        stops,
       );
     }
 
     final out = _draw(src.width, src.height, (c) {
       final full = _full(src);
-      c.drawImage(soft, Offset.zero, Paint());
-      // Half-blurred through the fade, sharp in the band.
-      if (half != null) {
+      for (var i = 0; i < levels; i++) {
         c
-          ..saveLayer(full, Paint())
-          ..drawImage(half, Offset.zero, Paint())
+          ..saveLayer(full, Paint()..blendMode = BlendMode.plus)
+          ..drawImage(images[i], Offset.zero, Paint())
           ..drawRect(
             full,
             Paint()
               ..blendMode = BlendMode.dstIn
-              ..shader = band(f + tr * 0.5, tr),
+              ..shader = weight(i),
           )
           ..restore();
       }
-      c
-        ..saveLayer(full, Paint())
-        ..drawImage(src, Offset.zero, Paint())
-        ..drawRect(
-          full,
-          Paint()
-            ..blendMode = BlendMode.dstIn
-            ..shader = band(f, tr),
-        )
-        ..restore();
     });
-    soft.dispose();
-    half?.dispose();
+    for (final img in images) {
+      if (!identical(img, src)) img.dispose();
+    }
     return out;
   }
 
