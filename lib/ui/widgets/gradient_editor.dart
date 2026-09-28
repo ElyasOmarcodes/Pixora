@@ -310,41 +310,47 @@ class _GradientEditorState extends State<_GradientEditor> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-              child: SegmentedButton<FillKind>(
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: [
-                  seg(FillKind.linear, Icons.gradient_rounded, l.linear),
-                  seg(FillKind.radial, Icons.radio_button_checked, l.radial),
-                  seg(FillKind.sweep, Icons.rotate_right_rounded, l.angular),
-                  seg(
-                    FillKind.reflected,
-                    Icons.compare_arrows_rounded,
-                    l.reflected,
+              // Eight styles: scrolls sideways on narrow phones.
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<FillKind>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
                   ),
-                  seg(
-                    FillKind.diamond,
-                    Icons.diamond_outlined,
-                    l.diamondGradient,
-                  ),
-                  seg(
-                    FillKind.square,
-                    Icons.crop_square_rounded,
-                    l.squareGradient,
-                  ),
-                  seg(
-                    FillKind.elliptical,
-                    Icons.panorama_fish_eye_rounded,
-                    l.ellipticalGradient,
-                  ),
-                  seg(
-                    FillKind.conic,
-                    Icons.donut_large_rounded,
-                    l.conicGradient,
-                  ),
-                ],
-                selected: {_kind},
-                onSelectionChanged: (s) => setState(() => _kind = s.first),
+                  segments: [
+                    seg(FillKind.linear, Icons.gradient_rounded, l.linear),
+                    seg(FillKind.radial, Icons.radio_button_checked, l.radial),
+                    seg(FillKind.sweep, Icons.rotate_right_rounded, l.angular),
+                    seg(
+                      FillKind.reflected,
+                      Icons.compare_arrows_rounded,
+                      l.reflected,
+                    ),
+                    seg(
+                      FillKind.diamond,
+                      Icons.diamond_outlined,
+                      l.diamondGradient,
+                    ),
+                    seg(
+                      FillKind.square,
+                      Icons.crop_square_rounded,
+                      l.squareGradient,
+                    ),
+                    seg(
+                      FillKind.elliptical,
+                      Icons.panorama_fish_eye_rounded,
+                      l.ellipticalGradient,
+                    ),
+                    seg(
+                      FillKind.conic,
+                      Icons.donut_large_rounded,
+                      l.conicGradient,
+                    ),
+                  ],
+                  selected: {_kind},
+                  onSelectionChanged: (s) => setState(() => _kind = s.first),
+                ),
               ),
             ),
             // Live preview with draggable start / end handles. Very wide

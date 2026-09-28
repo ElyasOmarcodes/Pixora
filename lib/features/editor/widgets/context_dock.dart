@@ -177,6 +177,8 @@ class ContextDock extends StatelessWidget {
         l.rotation,
         panel: ToolPanel.rotate,
       ),
+      if (layer is! GroupLayer)
+        DockItem(Icons.gesture_rounded, l.warp, panel: ToolPanel.warp),
     ];
     final effects = [
       DockItem(Icons.blur_on_rounded, l.shadow, panel: ToolPanel.shadow),
