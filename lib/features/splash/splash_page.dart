@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_theme.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
+import '../../app/app_scope.dart';
 import '../home/home_page.dart';
+import '../intro/intro_page.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -34,10 +36,11 @@ class _SplashPageState extends State<SplashPage>
 
   void _go() {
     if (!mounted) return;
+    final seen = AppScope.of(context).settings.introSeen;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder<void>(
         transitionDuration: PixTokens.slow,
-        pageBuilder: (_, _, _) => const HomePage(),
+        pageBuilder: (_, _, _) => seen ? const HomePage() : const IntroPage(),
         transitionsBuilder: (_, a, _, child) => FadeTransition(
           opacity: CurvedAnimation(parent: a, curve: PixTokens.curve),
           child: child,

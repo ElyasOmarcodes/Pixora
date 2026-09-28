@@ -1527,6 +1527,16 @@ class EditorController extends ChangeNotifier {
     live ? preview(op) : apply('background', op);
   }
 
+  /// Edits the background effects (blur, noise, vignette, colour …).
+  void updateBackgroundEffects(
+    List<LayerEffect> Function(List<LayerEffect> fx) f, {
+    bool live = false,
+  }) {
+    PixDocument op(PixDocument d) =>
+        d.copyWith(backgroundEffects: f(d.backgroundEffects));
+    live ? preview(op) : apply('background', op);
+  }
+
   /// Changes the grid / ruler guides (undoable, like Photoshop guides).
   void updateGuides(
     CanvasGuides Function(CanvasGuides g) f, {

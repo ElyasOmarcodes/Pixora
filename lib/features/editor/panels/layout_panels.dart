@@ -45,7 +45,7 @@ class _OpacityPanelState extends State<OpacityPanel> {
     final current = layer.props.blendMode;
     final chips = <Widget>[];
     BlendCategory? lastCategory;
-    for (final m in PixBlendMode.values) {
+    for (final m in PixBlendMode.photoshopOrder) {
       if (lastCategory != null && m.category != lastCategory) {
         chips.add(
           Padding(

@@ -11,6 +11,9 @@ import '../../editor/tools/warp_tool.dart';
 enum ToolPanel {
   addShape,
   background,
+
+  /// Blur, noise, vignette … on the canvas background.
+  backgroundEffects,
   fill,
   stroke,
   shadow,
@@ -106,6 +109,21 @@ class EditorUiState extends ChangeNotifier {
 
   /// Shadow / glow panels open on their Inner tab.
   bool innerTab = false;
+
+  bool _backgroundMenu = false;
+
+  /// The dock shows the background sub-menu (colour, effects, size …).
+  bool get backgroundMenu => _backgroundMenu;
+  set backgroundMenu(bool on) {
+    if (_backgroundMenu == on) return;
+    _backgroundMenu = on;
+    if (!on &&
+        (_panel == ToolPanel.background ||
+            _panel == ToolPanel.backgroundEffects)) {
+      _panel = null;
+    }
+    notifyListeners();
+  }
 
   ToolPanel? get panel => _panel;
   bool get showLayers => _showLayers;

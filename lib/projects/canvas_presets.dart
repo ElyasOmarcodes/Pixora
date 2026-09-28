@@ -2,25 +2,56 @@ import 'package:flutter/material.dart';
 
 /// Ready-made canvas sizes offered when creating a project.
 class CanvasPreset {
-  const CanvasPreset(this.id, this.width, this.height, this.icon);
+  const CanvasPreset(this.id, this.width, this.height, this.icon)
+    : dpi = 72,
+      mm = null;
+
+  /// A paper size at its real physical size ([mm], width × height) and
+  /// print resolution [dpi]; the pixel size follows from both.
+  CanvasPreset.paper(this.id, (double, double) this.mm, this.icon)
+    : dpi = 300,
+      width = (mm.$1 / 25.4 * 300).roundToDouble(),
+      height = (mm.$2 / 25.4 * 300).roundToDouble();
+
   final String id;
   final double width;
   final double height;
   final IconData icon;
 
+  /// Pixels per inch the project is created with (print units follow).
+  final double dpi;
+
+  /// Physical size in millimetres for paper presets.
+  final (double, double)? mm;
+
   double get aspect => width / height;
+
+  /// "21 × 29.7 cm" for paper, "1080 × 1080" otherwise.
+  String get sizeLabel {
+    final m = mm;
+    if (m == null) return '${width.round()} × ${height.round()}';
+    String cm(double v) {
+      final c = v / 10;
+      return c == c.roundToDouble() ? c.toStringAsFixed(0) : '$c';
+    }
+
+    return '${cm(m.$1)} × ${cm(m.$2)} cm';
+  }
 }
 
-const List<CanvasPreset> kCanvasPresets = [
-  CanvasPreset('square', 1080, 1080, Icons.crop_square_rounded),
-  CanvasPreset('portrait', 1080, 1350, Icons.crop_portrait_rounded),
-  CanvasPreset('story', 1080, 1920, Icons.smartphone_rounded),
-  CanvasPreset('landscape', 1920, 1080, Icons.crop_landscape_rounded),
-  CanvasPreset('youtube', 1280, 720, Icons.smart_display_rounded),
-  CanvasPreset('a4', 2480, 3508, Icons.description_rounded),
-  CanvasPreset('a3', 3508, 4961, Icons.article_rounded),
-  CanvasPreset('cover', 1640, 624, Icons.panorama_rounded),
-  CanvasPreset('logo', 1000, 1000, Icons.token_rounded),
+final List<CanvasPreset> kCanvasPresets = [
+  const CanvasPreset('square', 1080, 1080, Icons.crop_square_rounded),
+  const CanvasPreset('portrait', 1080, 1350, Icons.crop_portrait_rounded),
+  const CanvasPreset('story', 1080, 1920, Icons.smartphone_rounded),
+  const CanvasPreset('landscape', 1920, 1080, Icons.crop_landscape_rounded),
+  const CanvasPreset('youtube', 1280, 720, Icons.smart_display_rounded),
+  CanvasPreset.paper('a4', (210, 297), Icons.description_rounded),
+  CanvasPreset.paper('a4land', (297, 210), Icons.note_rounded),
+  CanvasPreset.paper('a5', (148, 210), Icons.sticky_note_2_rounded),
+  CanvasPreset.paper('a3', (297, 420), Icons.article_rounded),
+  CanvasPreset.paper('letter', (215.9, 279.4), Icons.mail_rounded),
+  const CanvasPreset('cover', 1640, 624, Icons.panorama_rounded),
+  const CanvasPreset('logo', 1000, 1000, Icons.token_rounded),
 ];
 
 /// Pleasant gradient backgrounds for new projects.

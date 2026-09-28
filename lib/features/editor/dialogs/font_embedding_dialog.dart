@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../projects/project_fonts.dart';
+import '../../../ui/widgets/pix_dialog.dart';
 
 /// Asks how the exported project should carry [families] (fonts that
 /// don't ship with Pixora). Null when cancelled.
 Future<FontEmbedding?> showFontEmbeddingDialog(
   BuildContext context,
   List<String> families,
-) => showDialog<FontEmbedding>(
+) => showPixDialog<FontEmbedding>(
   context: context,
   builder: (context) => _FontEmbeddingDialog(families: families),
 );

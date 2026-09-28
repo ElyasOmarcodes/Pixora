@@ -11,8 +11,9 @@ import '../../core/settings/app_settings.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
+import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.23.0';
+const String kAppVersion = '0.24.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -186,6 +187,17 @@ class SettingsPage extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                       subtitle: Text(l.versionLabel(kAppVersion)),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.auto_stories_rounded),
+                      title: Text(l.showIntro),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          fullscreenDialog: true,
+                          builder: (_) => const IntroPage(replay: true),
+                        ),
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

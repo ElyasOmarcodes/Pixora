@@ -181,8 +181,13 @@ abstract final class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: dark ? const Color(0xFF1A1C23) : Colors.white,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(PixTokens.radiusXL),
+        elevation: 12,
+        shadowColor: scheme.primary.withValues(alpha: 0.25),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        titleTextStyle: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: dark ? Colors.white : const Color(0xFF1B1B1F),
         ),
       ),
       sliderTheme: SliderThemeData(

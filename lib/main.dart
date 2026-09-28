@@ -7,6 +7,7 @@ import 'core/fonts/font_catalog.dart';
 import 'core/patterns/pattern_library.dart';
 import 'core/platform/platform_services.dart';
 import 'core/settings/app_settings.dart';
+import 'document/render/blend_shader.dart';
 import 'editor/actions/action_registry.dart';
 import 'projects/project_repository.dart';
 
@@ -15,6 +16,8 @@ import 'projects/project_repository.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // The blend-mode shader loads alongside the settings (a few ms).
+  final shader = BlendShader.load();
   final platform = PlatformServices.create();
   final settings = await AppSettings.load();
   final store = await platform.openProjectStore(
@@ -26,6 +29,8 @@ Future<void> main(List<String> args) async {
   fonts.init().ignore();
   RecentColors.instance.load().ignore();
   PatternLibrary.instance.load().ignore();
+
+  await shader;
 
   final services = AppServices(
     settings: settings,

@@ -74,6 +74,8 @@ class ToolPanelHost extends StatelessWidget {
         );
       case ToolPanel.background:
         return BackgroundPanel(editor: editor);
+      case ToolPanel.backgroundEffects:
+        return BackgroundEffectsPanel(editor: editor);
       case ToolPanel.grid:
         return GridPanel(editor: editor, ui: ui);
       case ToolPanel.snap:

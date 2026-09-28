@@ -965,6 +965,21 @@ class EffectRegistry {
     );
     register(
       EffectDefinition(
+        type: 'vignette',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('amount', min: -100, max: 100, defaultValue: -50),
+          EffectParam.number('midpoint', min: 0, max: 100, defaultValue: 40),
+        ],
+        filter: (e, box) => VignetteFilter(
+          e.number('amount', -50) / 100,
+          e.number('midpoint', 40) / 100,
+          box,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
         type: 'twirl',
         category: EffectCategory.filter,
         params: const [

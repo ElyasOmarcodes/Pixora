@@ -70,6 +70,41 @@ class ContextDock extends StatelessWidget {
   final bool vertical;
 
   List<DockItem> _items(AppLocalizations l, Layer? layer) {
+    if (layer == null && ui.backgroundMenu) {
+      final transparent = editor.document.background == null;
+      return [
+        DockItem(
+          Icons.arrow_back_rounded,
+          l.back,
+          onTap: () => ui.backgroundMenu = false,
+        ),
+        const DockItem.divider(),
+        DockItem(Icons.palette_rounded, l.color, panel: ToolPanel.background),
+        DockItem(
+          Icons.auto_awesome_rounded,
+          l.effects,
+          panel: ToolPanel.backgroundEffects,
+          enabled: !transparent,
+        ),
+        DockItem(
+          Icons.aspect_ratio_rounded,
+          l.canvasSize,
+          onTap: onResizeCanvas,
+        ),
+        DockItem(
+          Icons.texture_rounded,
+          l.transparent,
+          onTap: () => editor.setBackground(null),
+          enabled: !transparent,
+        ),
+        DockItem(
+          Icons.layers_clear_rounded,
+          l.clearEffects,
+          onTap: () => editor.updateBackgroundEffects((_) => const []),
+          enabled: editor.document.backgroundEffects.isNotEmpty,
+        ),
+      ];
+    }
     if (layer == null) {
       return [
         DockItem(Icons.title_rounded, l.text, onTap: onAddText),
@@ -78,12 +113,10 @@ class ContextDock extends StatelessWidget {
         DockItem(
           Icons.format_color_fill_rounded,
           l.background,
-          panel: ToolPanel.background,
-        ),
-        DockItem(
-          Icons.aspect_ratio_rounded,
-          l.canvasSize,
-          onTap: onResizeCanvas,
+          onTap: () {
+            ui.backgroundMenu = true;
+            ui.panel = ToolPanel.background;
+          },
         ),
       ];
     }
@@ -358,7 +391,11 @@ class ContextDock extends StatelessWidget {
             ),
           ),
           child: KeyedSubtree(
-            key: ValueKey(editor.hasMultiSelection ? 'multi' : layer?.kind),
+            key: ValueKey(
+              editor.hasMultiSelection
+                  ? 'multi'
+                  : layer?.kind ?? (ui.backgroundMenu ? 'bg' : null),
+            ),
             child: SizedBox(
               height: vertical ? null : 76,
               width: vertical ? 84 : null,

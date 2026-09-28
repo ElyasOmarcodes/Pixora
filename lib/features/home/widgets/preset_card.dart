@@ -74,7 +74,7 @@ class PresetCard extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                '${preset.width.round()} × ${preset.height.round()}',
+                preset.sizeLabel,
                 textDirection: TextDirection.ltr,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.onSurfaceVariant,

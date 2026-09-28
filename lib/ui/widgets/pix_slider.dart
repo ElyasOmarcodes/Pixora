@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../l10n/app_localizations.dart';
+import 'pix_dialog.dart';
 
 /// A labelled slider row: `Label ━━━━●──── [42]`.
 ///
@@ -118,7 +119,7 @@ class _PixSliderState extends State<PixSlider>
     final c = TextEditingController(
       text: _text(_value).replaceAll(RegExp(r'[^0-9.\-]'), ''),
     );
-    final r = await showDialog<double>(
+    final r = await showPixDialog<double>(
       context: context,
       builder: (context) {
         final scheme = Theme.of(context).colorScheme;

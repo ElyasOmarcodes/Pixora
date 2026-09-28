@@ -184,6 +184,14 @@ class OffsetFilter extends PixFilter {
   final Rect box;
 }
 
+/// Lens Correction ▸ Vignette: darkens (amount < 0) or lightens the
+/// corners of the layer box. [midpoint] 0…1: how far in the falloff starts.
+class VignetteFilter extends PixFilter {
+  const VignetteFilter(this.amount, this.midpoint, this.box);
+  final double amount, midpoint;
+  final Rect box;
+}
+
 /// Filter ▸ Distort ▸ Twirl / Pinch / Spherize / Ripple, over the layer
 /// box (mesh distortions, drawn on the GPU).
 enum DistortKind { twirl, pinch, spherize, ripple }
@@ -394,6 +402,7 @@ abstract final class FilterEngine {
           m.maximum,
         ),
         OffsetFilter o => _offset(img, o, space, rect, res),
+        VignetteFilter v => _vignette(img, v, rect, res),
         DistortFilter d => _distort(img, d, rect, res),
       };
       if (!identical(input, img)) input.dispose();
@@ -1068,6 +1077,54 @@ abstract final class FilterEngine {
                 : ui.ImageFilter.erode(radiusX: rx, radiusY: ry),
         )
         ..drawImage(src, Offset.zero, Paint())
+        ..restore();
+    });
+  }
+
+  static ui.Image? _vignette(
+    ui.Image src,
+    VignetteFilter v,
+    Rect rect,
+    double res,
+  ) {
+    if (v.amount == 0) return null;
+    final b = Rect.fromLTRB(
+      (v.box.left - rect.left) * res,
+      (v.box.top - rect.top) * res,
+      (v.box.right - rect.left) * res,
+      (v.box.bottom - rect.top) * res,
+    );
+    if (b.width < 1 || b.height < 1) return null;
+    final k = v.amount.abs().clamp(0.0, 1.0);
+    final edge = v.amount < 0
+        ? const Color(0xFF000000)
+        : const Color(0xFFFFFFFF);
+    final start = v.midpoint.clamp(0.0, 0.95);
+    // An elliptical falloff over the box that reaches the corners: drawn
+    // in a space where the box is (-1,-1)…(1,1), corners at radius √2.
+    final shader = ui.Gradient.radial(
+      Offset.zero,
+      math.sqrt2,
+      [
+        edge.withValues(alpha: 0),
+        edge.withValues(alpha: 0),
+        edge.withValues(alpha: k),
+      ],
+      [0, start, 1],
+    );
+    return _draw(src.width, src.height, (c) {
+      c
+        ..drawImage(src, Offset.zero, Paint())
+        ..save()
+        ..translate(b.center.dx, b.center.dy)
+        ..scale(b.width / 2, b.height / 2)
+        // Only where there are pixels, like Photoshop.
+        ..drawRect(
+          const Rect.fromLTRB(-1, -1, 1, 1),
+          Paint()
+            ..shader = shader
+            ..blendMode = BlendMode.srcATop,
+        )
         ..restore();
     });
   }

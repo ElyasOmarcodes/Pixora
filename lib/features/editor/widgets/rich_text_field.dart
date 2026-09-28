@@ -4,6 +4,7 @@ import '../../../core/fonts/font_catalog.dart';
 import '../../../document/model/text_span_style.dart';
 import '../../../document/render/text_layout.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../ui/widgets/pix_dialog.dart';
 
 /// Text controller that shows per-range fonts and colours while typing and
 /// keeps the ranges attached to their words as the text changes.
@@ -136,7 +137,7 @@ class _TextPartSelectorState extends State<TextPartSelector> {
   /// long texts are easy to pick. It edits the same selection.
   Future<void> _fullPage() async {
     final l = AppLocalizations.of(context);
-    await showDialog<void>(
+    await showPixDialog<void>(
       context: context,
       builder: (context) {
         final theme = Theme.of(context);

@@ -314,8 +314,10 @@ class _EditorPageState extends State<EditorPage> {
           p == ToolPanel.snap ||
           p == ToolPanel.rulers ||
           p == ToolPanel.pen ||
-          (p == ToolPanel.background && _editor.selectedId == null);
+          ((p == ToolPanel.background || p == ToolPanel.backgroundEffects) &&
+              _editor.selectedId == null);
       if (!keep) _ui.panel = null;
+      if (_editor.selectedId != null) _ui.backgroundMenu = false;
     }
     if (_services.settings.autosave && _dirty && !_editor.isPreviewing) {
       _saveTimer?.cancel();

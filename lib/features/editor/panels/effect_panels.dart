@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../../document/effects/effect_registry.dart';
 import '../../../document/model/blend.dart';
+import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
+import '../../../document/render/document_renderer.dart';
+import '../../../ui/widgets/fill_picker.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/color_picker.dart';
@@ -572,7 +577,43 @@ class ColorFillPanel extends StatelessWidget {
               editor.setEffectParam(layer.id, 'colorFill', 'mode', v.first),
         ),
       ),
-      controls: [const FxColor('color'), FxSlider('amount', l.strength)],
+      controls: [
+        // Colour, gradient or pattern (Photoshop's Color / Gradient /
+        // Pattern Overlay in one place).
+        FxCustom((valueOf, set) {
+          final fx = editor.effectOf(layer.id, 'colorFill');
+          final current =
+              (fx == null ? null : DocumentRenderer.colorFillOverlay(fx)) ??
+              PixFill.color(
+                fx?.color('color', const Color(0xFFFF4D6D)) ??
+                    const Color(0xFFFF4D6D),
+              );
+          final size = layerLocalSize(layer);
+          return FillPicker(
+            value: current,
+            aspect: size.height <= 0 ? 1 : size.width / size.height,
+            onChanged: (f, {required live}) {
+              final cur = editor.effectOf(layer.id, 'colorFill');
+              if (f == null || cur == null) return;
+              editor.updateEffect(
+                layer.id,
+                cur.id,
+                (e) => e.copyWith(
+                  params: {
+                    ...e.params,
+                    'color': f.primary.toARGB32(),
+                    'fill': f.kind == FillKind.solid
+                        ? ''
+                        : jsonEncode(f.toJson()),
+                  },
+                ),
+                live: live,
+              );
+            },
+          );
+        }),
+        FxSlider('amount', l.strength),
+      ],
     );
   }
 }

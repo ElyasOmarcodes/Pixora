@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../ui/widgets/pix_dialog.dart';
 
 /// Asks for a single line of text. Returns null when cancelled.
 Future<String?> showTextPrompt(
@@ -9,7 +10,7 @@ Future<String?> showTextPrompt(
   required String label,
   String initial = '',
 }) {
-  return showDialog<String>(
+  return showPixDialog<String>(
     context: context,
     builder: (context) =>
         _TextPrompt(title: title, label: label, initial: initial),

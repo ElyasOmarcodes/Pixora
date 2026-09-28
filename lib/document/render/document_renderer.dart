@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
 import '../assets/asset_store.dart';
@@ -11,9 +12,11 @@ import '../effects/effect_registry.dart';
 import '../model/blend.dart';
 import '../model/document.dart';
 import '../model/effect.dart';
+import '../model/fill.dart';
 import '../model/layer.dart';
 import '../model/layer_stroke.dart';
 import 'bevel_engine.dart';
+import 'blend_shader.dart';
 import 'mask_jobs.dart';
 import '../model/patterns.dart';
 import '../model/layer_transform.dart';
@@ -138,6 +141,65 @@ class DocumentRenderer {
 
   EffectRegistry get _fx => effects ?? EffectRegistry.instance;
 
+  /// The document background as a canvas-sized rectangle layer carrying
+  /// the background effects (so they render — and cache — exactly like
+  /// layer effects). Reused while nothing about the background changes.
+  static ShapeLayer backgroundLayerOf(PixDocument doc) {
+    final last = _bgLayer;
+    if (last != null &&
+        last.width == doc.width &&
+        last.height == doc.height &&
+        last.fill == doc.background &&
+        listEquals(last.props.effects, doc.backgroundEffects)) {
+      return last;
+    }
+    return _bgLayer = ShapeLayer(
+      LayerProps(
+        id: backgroundLayerId,
+        name: 'Background',
+        transform: LayerTransform(x: doc.width / 2, y: doc.height / 2),
+        effects: doc.backgroundEffects,
+      ),
+      shape: ShapeKind.rectangle,
+      width: doc.width,
+      height: doc.height,
+      fill: doc.background ?? PixFill.white,
+    );
+  }
+
+  static const backgroundLayerId = '__background__';
+
+  /// The gradient / pattern of a Color Fill effect (its `fill` param, a
+  /// JSON fill), or null when it fills with its plain colour.
+  static PixFill? colorFillOverlay(LayerEffect e) {
+    final raw = e.string('fill');
+    if (raw == null || raw.isEmpty) return null;
+    final hit = _overlayFills[raw];
+    if (hit != null) return hit.kind == FillKind.solid ? null : hit;
+    PixFill f;
+    try {
+      f = PixFill.fromJson(jsonDecode(raw));
+    } catch (_) {
+      f = PixFill.white;
+    }
+    if (_overlayFills.length > 64) _overlayFills.clear();
+    _overlayFills[raw] = f;
+    return f.kind == FillKind.solid ? null : f;
+  }
+
+  static final Map<String, PixFill> _overlayFills = {};
+  static ShapeLayer? _bgLayer;
+
+  void paintBackground(Canvas canvas, PixDocument doc) {
+    final bg = doc.background;
+    if (bg == null) return;
+    if (!doc.backgroundEffects.any((e) => e.enabled)) {
+      canvas.drawRect(doc.bounds, bg.applyTo(Paint(), doc.bounds));
+      return;
+    }
+    paintLayer(canvas, backgroundLayerOf(doc));
+  }
+
   /// Paints [doc] in document coordinates (0,0)-(width,height).
   void paint(Canvas canvas, PixDocument doc, {Set<String> hidden = const {}}) {
     final bounds = doc.bounds;
@@ -146,11 +208,13 @@ class DocumentRenderer {
       ..clipRect(bounds)
       // Isolate the document so blend modes never mix with the UI behind.
       ..saveLayer(bounds, Paint());
-    final bg = doc.background;
-    if (bg != null) {
-      canvas.drawRect(bounds, bg.applyTo(Paint(), bounds));
-    }
-    paintLayers(canvas, doc.layers, hidden: hidden);
+    paintLayers(
+      canvas,
+      doc.layers,
+      hidden: hidden,
+      under: (c) => paintBackground(c, doc),
+      area: bounds,
+    );
     canvas
       ..restore()
       ..restore();
@@ -164,10 +228,21 @@ class DocumentRenderer {
       ..save()
       ..clipRect(bounds)
       ..saveLayer(bounds, Paint());
-    final bg = doc.background;
-    if (bg != null) {
-      canvas.drawRect(bounds, bg.applyTo(Paint(), bounds));
+    if (BlendShader.program != null &&
+        doc.layers.any((l) => l.props.blendMode.shaderCode != null)) {
+      // Shader blend modes need the whole backdrop at once.
+      paintLayers(
+        canvas,
+        doc.layers,
+        under: (c) => paintBackground(c, doc),
+        area: bounds,
+      );
+      canvas
+        ..restore()
+        ..restore();
+      return;
     }
+    paintBackground(canvas, doc);
     // One clip group (a base and the layers clipped to it) at a time.
     final list = doc.layers;
     var i = 0;
@@ -191,8 +266,22 @@ class DocumentRenderer {
     Canvas canvas,
     List<Layer> list, {
     Set<String> hidden = const {},
+    void Function(Canvas canvas)? under,
+    Rect? area,
   }) {
     bool shown(Layer l) => l.props.visible && !hidden.contains(l.id);
+    if (BlendShader.program != null &&
+        list.any(
+          (l) =>
+              !l.props.clip &&
+              l.props.blendMode.shaderCode != null &&
+              shown(l) &&
+              l.props.opacity > 0,
+        )) {
+      _paintLayersBlended(canvas, list, hidden, under, area);
+      return;
+    }
+    under?.call(canvas);
     var i = 0;
     while (i < list.length) {
       final base = list[i];
@@ -223,6 +312,109 @@ class DocumentRenderer {
       }
       i = j;
     }
+  }
+
+  /// [paintLayers] for lists with shader blend modes (Dissolve, Linear
+  /// Burn, Vivid Light, … and Photoshop's exact Soft Light): what lies
+  /// beneath is rasterized, and each such layer (with anything clipped to
+  /// it) is composited onto it by the blend shader.
+  void _paintLayersBlended(
+    Canvas canvas,
+    List<Layer> list,
+    Set<String> hidden,
+    void Function(Canvas canvas)? under,
+    Rect? area,
+  ) {
+    bool shown(Layer l) => l.props.visible && !hidden.contains(l.id);
+    // The area the backdrop covers: the given one (the document), or the
+    // layers' own bounds (inside groups), within the canvas clip.
+    var r = area;
+    if (r == null) {
+      for (final l in list) {
+        if (!shown(l)) continue;
+        final b = layerDocumentBounds(l).inflate(64);
+        r = r == null ? b : r.expandToInclude(b);
+      }
+    }
+    if (r == null) return;
+    final clip = canvas.getLocalClipBounds();
+    if (clip.isFinite) r = r.intersect(clip);
+    if (r.isEmpty) return;
+    final m = canvas.getTransform();
+    final ts = math.sqrt(m[0] * m[0] + m[1] * m[1]);
+    var res = math.max(pixelScale, ts).clamp(0.05, 8.0);
+    res = math.min(res, 4096 / math.max(r.width, r.height));
+    final w = math.max(1, (r.width * res).ceil());
+    final h = math.max(1, (r.height * res).ceil());
+    final area0 = r;
+
+    ui.Image raster(void Function(Canvas c) draw) {
+      final rec = ui.PictureRecorder();
+      final c = Canvas(rec)
+        ..scale(w / area0.width, h / area0.height)
+        ..translate(-area0.left, -area0.top);
+      draw(c);
+      final pic = rec.endRecording();
+      final img = pic.toImageSync(w, h);
+      pic.dispose();
+      return img;
+    }
+
+    // Everything painted so far, as one picture.
+    var acc = ui.PictureRecorder();
+    var accCanvas = Canvas(acc);
+    under?.call(accCanvas);
+    var i = 0;
+    while (i < list.length) {
+      final base = list[i];
+      var j = i + 1;
+      while (j < list.length && list[j].props.clip) {
+        j++;
+      }
+      final unit = list.sublist(i, j);
+      final code = base.props.blendMode.shaderCode;
+      if (code == null || !shown(base) || base.props.opacity <= 0) {
+        paintLayers(accCanvas, unit, hidden: hidden);
+      } else {
+        final below = acc.endRecording();
+        final dst = raster((c) => c.drawPicture(below));
+        // The unit on its own, in Normal mode.
+        final src = raster((c) {
+          final clipped = [
+            for (final x in unit.skip(1))
+              if (shown(x)) x,
+          ];
+          if (clipped.isEmpty) {
+            paintLayer(c, base, hidden: hidden, asClipBase: true);
+          } else {
+            c.saveLayer(null, Paint());
+            paintLayer(c, base, hidden: hidden, asClipBase: true);
+            c.saveLayer(null, Paint()..blendMode = BlendMode.srcATop);
+            for (final x in clipped) {
+              paintLayer(c, x, hidden: hidden);
+            }
+            c
+              ..restore()
+              ..restore();
+          }
+        });
+        final out = BlendShader.composite(src, dst, code, base.id.hashCode);
+        src.dispose();
+        dst.dispose();
+        below.dispose();
+        acc = ui.PictureRecorder();
+        accCanvas = Canvas(acc)
+          ..drawImageRect(
+            out,
+            Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+            area0,
+            Paint()..filterQuality = FilterQuality.medium,
+          );
+      }
+      i = j;
+    }
+    final picture = acc.endRecording();
+    canvas.drawPicture(picture);
   }
 
   /// Paints one layer (and, for groups, its subtree). With [asClipBase] the
@@ -283,6 +475,7 @@ class DocumentRenderer {
   _LayerPlan _plan(Layer layer, Set<String> hidden) {
     final props = layer.props;
     List<double>? matrix;
+    final overlays = <(LayerEffect, PixFill)>[];
     var blur = 0.0;
     final shadows = <ShadowSpec>[];
     final inners = <ShadowSpec>[];
@@ -315,6 +508,13 @@ class DocumentRenderer {
         final spec = (def.shadow ?? def.inner)?.call(e);
         if (spec != null) spreadShadows.add((e, spec));
         continue;
+      }
+      if (e.type == 'colorFill') {
+        final f = colorFillOverlay(e);
+        if (f != null) {
+          overlays.add((e, f));
+          continue;
+        }
       }
       final m = def.colorMatrix?.call(e);
       if (m != null) {
@@ -544,7 +744,7 @@ class DocumentRenderer {
     final faded = fill < 1;
     final interiorFades = faded && props.blendInterior;
 
-    void content(Canvas canvas) {
+    void plainContent(Canvas canvas) {
       if (matrix != null || blur > 0) {
         canvas.saveLayer(
           layerBounds,
@@ -563,6 +763,34 @@ class DocumentRenderer {
       } else {
         shape(canvas);
       }
+    }
+
+    void content(Canvas canvas) {
+      if (overlays.isNotEmpty) {
+        // Gradient / pattern Color Fill (Photoshop's Gradient and Pattern
+        // Overlay): the fill laid over the pixels in its mode, then cut
+        // back to the layer's own alpha.
+        canvas.saveLayer(layerBounds, Paint());
+        plainContent(canvas);
+        for (final (e, f) in overlays) {
+          final mode = switch (e.number('mode', 0).round()) {
+            1 => BlendMode.color,
+            2 => BlendMode.multiply,
+            _ => BlendMode.srcATop,
+          };
+          final paint = f.applyTo(Paint(), local)..blendMode = mode;
+          final amount = e.number('amount', 1).clamp(0.0, 1.0);
+          paint.color = paint.color.withValues(alpha: paint.color.a * amount);
+          canvas.drawRect(local, paint);
+        }
+        canvas.saveLayer(layerBounds, Paint()..blendMode = BlendMode.dstIn);
+        plainContent(canvas);
+        canvas
+          ..restore()
+          ..restore();
+        return;
+      }
+      plainContent(canvas);
     }
 
     void innerEffects(Canvas canvas, {required bool clipToShape}) {

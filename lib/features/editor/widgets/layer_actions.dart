@@ -11,6 +11,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/layer_style.dart';
 import '../../../ui/widgets/pressable.dart';
 import '../editor_scope.dart';
+import '../../../ui/widgets/pix_dialog.dart';
 
 /// Things the layers UI asks the editor page to do (open a tool panel,
 /// show the text sheet, pick a replacement image…).
@@ -582,7 +583,7 @@ Future<void> runWithProgress(
   final l = AppLocalizations.of(context);
   final nav = Navigator.of(context);
   unawaited(
-    showDialog<void>(
+    showPixDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => PopScope(

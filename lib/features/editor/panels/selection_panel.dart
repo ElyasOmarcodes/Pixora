@@ -17,6 +17,7 @@ import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../editor_scope.dart';
 import 'panel_common.dart';
+import '../../../ui/widgets/pix_dialog.dart';
 
 /// Photoshop's Select menu as one bottom panel: where to select (whole
 /// canvas or one layer), the selection tools, how a new selection combines
@@ -63,7 +64,7 @@ class SelectionPanel extends StatelessWidget {
   }) async {
     final l = AppLocalizations.of(context);
     var v = initial;
-    final ok = await showDialog<bool>(
+    final ok = await showPixDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(

@@ -6,6 +6,7 @@ import '../../core/utils/ids.dart';
 import '../../core/utils/json.dart';
 import 'fill.dart';
 import 'guides.dart';
+import 'effect.dart';
 import 'layer.dart';
 
 /// The whole editable design: canvas size, background and the layer stack.
@@ -23,8 +24,10 @@ class PixDocument {
     List<Layer> layers = const [],
     CanvasGuides? guides,
     this.dpi = 72,
+    List<LayerEffect> backgroundEffects = const [],
   }) : id = id ?? newId('doc'),
        layers = List.unmodifiable(layers),
+       backgroundEffects = List.unmodifiable(backgroundEffects),
        guides = guides ?? CanvasGuides.none;
 
   /// Bumped whenever the on-disk format changes incompatibly; readers
@@ -38,6 +41,10 @@ class PixDocument {
 
   /// `null` means a transparent canvas.
   final PixFill? background;
+
+  /// Effects on the background (blur, noise, vignette, colour …), applied
+  /// like layer effects to a canvas-sized rectangle of [background].
+  final List<LayerEffect> backgroundEffects;
   final List<Layer> layers;
 
   /// Grid and ruler guides (layout aids; never rendered into exports).
@@ -59,6 +66,7 @@ class PixDocument {
     List<Layer>? layers,
     CanvasGuides? guides,
     double? dpi,
+    List<LayerEffect>? backgroundEffects,
   }) => PixDocument(
     id: id,
     name: name ?? this.name,
@@ -68,6 +76,7 @@ class PixDocument {
     layers: layers ?? this.layers,
     guides: guides ?? this.guides,
     dpi: dpi ?? this.dpi,
+    backgroundEffects: backgroundEffects ?? this.backgroundEffects,
   );
 
   // ---------------------------------------------------------------- queries
@@ -242,6 +251,8 @@ class PixDocument {
     'layers': [for (final l in layers) l.toJson()],
     if (!guides.isEmpty) 'guides': guides.toJson(),
     if (dpi != 72) 'dpi': dpi,
+    if (backgroundEffects.isNotEmpty)
+      'backgroundEffects': [for (final e in backgroundEffects) e.toJson()],
   };
 
   static PixDocument fromJson(Json m) => PixDocument(
@@ -258,6 +269,10 @@ class PixDocument {
     ],
     guides: m['guides'] == null ? null : CanvasGuides.fromJson(m['guides']),
     dpi: readDouble(m['dpi'], 72).clamp(1, 9600).toDouble(),
+    backgroundEffects: [
+      for (final e in readList(m['backgroundEffects']))
+        if (e is Map) LayerEffect.fromJson(readMap(e)),
+    ],
   );
 
   @override
@@ -270,6 +285,7 @@ class PixDocument {
       other.background == background &&
       other.guides == guides &&
       other.dpi == dpi &&
+      listEquals(other.backgroundEffects, backgroundEffects) &&
       listEquals(other.layers, layers);
 
   @override
@@ -281,6 +297,7 @@ class PixDocument {
     background,
     guides,
     dpi,
+    Object.hashAll(backgroundEffects),
     Object.hashAll(layers),
   );
 }

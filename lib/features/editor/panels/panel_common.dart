@@ -202,9 +202,9 @@ class BlendModeRow extends StatelessWidget {
             initialValue: value,
             onSelected: onChanged,
             itemBuilder: (_) => [
-              for (final m in PixBlendMode.values) ...[
-                if (m.index > 0 &&
-                    m.category != PixBlendMode.values[m.index - 1].category)
+              for (final (i, m) in PixBlendMode.engineOrder.indexed) ...[
+                if (i > 0 &&
+                    m.category != PixBlendMode.engineOrder[i - 1].category)
                   const PopupMenuDivider(),
                 PopupMenuItem(
                   value: m,

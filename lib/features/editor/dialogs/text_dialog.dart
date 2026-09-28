@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/utils/calendars.dart';
+
 import 'package:flutter/services.dart';
 
 import '../../../app/app_scope.dart';
@@ -132,6 +135,16 @@ class _TextEditorPageState extends State<_TextEditorPage> {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final t = data?.text;
     if (t == null || t.isEmpty) return;
+    _insert(t);
+  }
+
+  Future<void> _insertMenu() async {
+    final t = await showInsertSheet(context);
+    if (t != null) _insert(t);
+    _focus.requestFocus();
+  }
+
+  void _insert(String t) {
     final sel = _c.selection;
     final text = _c.text;
     final start = sel.isValid ? sel.start : text.length;
@@ -365,18 +378,33 @@ class _TextEditorPageState extends State<_TextEditorPage> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                 child: Row(
                   children: [
-                    _Tool(
-                      icon: Icons.content_paste_rounded,
-                      label: l.paste,
-                      onTap: _paste,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _Tool(
+                              icon: Icons.content_paste_rounded,
+                              label: l.paste,
+                              onTap: _paste,
+                            ),
+                            const SizedBox(width: 8),
+                            _Tool(
+                              icon: Icons.more_time_rounded,
+                              label: l.insertMenu,
+                              onTap: _insertMenu,
+                            ),
+                            const SizedBox(width: 8),
+                            _Tool(
+                              icon: Icons.backspace_rounded,
+                              label: l.clearText,
+                              onTap: _c.text.isEmpty ? null : _c.clear,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    _Tool(
-                      icon: Icons.backspace_rounded,
-                      label: l.clearText,
-                      onTap: _c.text.isEmpty ? null : _c.clear,
-                    ),
-                    const Spacer(),
                     Text(
                       '${_c.text.characters.length}',
                       style: theme.textTheme.labelMedium?.copyWith(
@@ -492,6 +520,118 @@ class _Tool extends StatelessWidget {
       onPressed: onTap,
       icon: Icon(icon, size: 18, color: onTap == null ? null : scheme.primary),
       label: Text(label),
+    );
+  }
+}
+
+/// The Insert sheet: today's date in the Gregorian, Hijri and Solar Hijri
+/// calendars, the time, the weekday and common symbols, with a choice of
+/// digit shapes. Returns the text to insert.
+Future<String?> showInsertSheet(BuildContext context) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => const _InsertSheet(),
+    );
+
+class _InsertSheet extends StatefulWidget {
+  const _InsertSheet();
+
+  @override
+  State<_InsertSheet> createState() => _InsertSheetState();
+}
+
+class _InsertSheetState extends State<_InsertSheet> {
+  DigitStyle? _digits;
+  final DateTime _now = DateTime.now();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final lang = Localizations.localeOf(context).languageCode;
+    final digits =
+        _digits ??
+        (lang == 'ar'
+            ? DigitStyle.arabic
+            : lang == 'fa' || lang == 'ps' || lang == 'ur'
+            ? DigitStyle.persian
+            : DigitStyle.latin);
+    final items = insertItems(_now, lang, digits);
+    String title(InsertGroup g) => switch (g) {
+      InsertGroup.gregorian => l.dateGregorian,
+      InsertGroup.hijri => l.dateHijri,
+      InsertGroup.solar => l.dateSolar,
+      InsertGroup.time => l.timeLabel,
+      InsertGroup.weekday => l.weekdayLabel,
+      InsertGroup.symbols => l.symbolsLabel,
+    };
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.62,
+      minChildSize: 0.35,
+      maxChildSize: 0.92,
+      builder: (context, scroll) => ListView(
+        controller: scroll,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+        children: [
+          Row(
+            children: [
+              Icon(Icons.more_time_rounded, color: scheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l.insertMenu,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              SegmentedButton<DigitStyle>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: const [
+                  ButtonSegment(value: DigitStyle.latin, label: Text('123')),
+                  ButtonSegment(value: DigitStyle.arabic, label: Text('١٢٣')),
+                  ButtonSegment(value: DigitStyle.persian, label: Text('۱۲۳')),
+                ],
+                selected: {digits},
+                onSelectionChanged: (s) => setState(() => _digits = s.first),
+              ),
+            ],
+          ),
+          for (final g in InsertGroup.values) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 18, bottom: 8),
+              child: Text(
+                title(g),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final i in items.where((i) => i.group == g))
+                  ActionChip(
+                    label: Text(
+                      i.text,
+                      style: g == InsertGroup.symbols
+                          ? const TextStyle(fontSize: 18)
+                          : null,
+                    ),
+                    onPressed: () => Navigator.pop(context, i.text),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

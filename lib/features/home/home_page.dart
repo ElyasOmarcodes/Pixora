@@ -29,6 +29,9 @@ String presetLabel(AppLocalizations l, String id) => switch (id) {
   'youtube' => l.presetYoutube,
   'a4' => l.presetA4,
   'a3' => l.presetA3,
+  'a4land' => l.presetA4Land,
+  'a5' => l.presetA5,
+  'letter' => l.presetLetter,
   'cover' => l.presetCover,
   'logo' => l.presetLogo,
   _ => id,
@@ -252,7 +255,8 @@ class _HomePageState extends State<HomePage> {
                       PresetCard(
                         preset: p,
                         label: presetLabel(l, p.id),
-                        onTap: () => _createBlank(p.width, p.height),
+                        onTap: () =>
+                            _createBlank(p.width, p.height, dpi: p.dpi),
                       ),
                     CustomSizeCard(label: l.customSize, onTap: _custom),
                   ],

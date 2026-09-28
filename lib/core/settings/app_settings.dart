@@ -42,6 +42,7 @@ class AppSettings extends ChangeNotifier {
   static const _kTheme = 'themeMode';
   static const _kAccent = 'accent';
   static const _kAutosave = 'autosave';
+  static const _kIntroSeen = 'introSeen';
   static const _kHaptics = 'haptics';
   static const _kSnap = 'snap';
   static const _kExportFormat = 'exportFormat';
@@ -86,6 +87,10 @@ class AppSettings extends ChangeNotifier {
     _prefs.setInt(_kAccent, value);
     notifyListeners();
   }
+
+  /// The first-launch introduction was shown.
+  bool get introSeen => _prefs.getBool(_kIntroSeen) ?? false;
+  set introSeen(bool v) => _setBool(_kIntroSeen, v);
 
   bool get autosave => _prefs.getBool(_kAutosave) ?? true;
   set autosave(bool v) => _setBool(_kAutosave, v);
