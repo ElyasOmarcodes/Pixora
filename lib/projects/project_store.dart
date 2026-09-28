@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../document/model/document.dart';
+import 'project_fonts.dart';
 
 /// Lightweight listing entry for the projects screen.
 class ProjectSummary {
@@ -86,7 +87,8 @@ class MemoryProjectStore implements ProjectStore {
       document,
       {
         for (final e in assets.entries)
-          if (keep.contains(e.key)) e.key: e.value,
+          if (keep.contains(e.key) || ProjectFonts.keepsFont(document, e.key))
+            e.key: e.value,
       },
       thumbnail ?? _data[document.id]?.$3,
       DateTime.now(),

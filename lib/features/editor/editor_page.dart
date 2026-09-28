@@ -30,6 +30,8 @@ import 'dialogs/close_dialog.dart';
 import '../../ui/widgets/confirm_dialog.dart';
 import '../../editor/tools/transform_tool.dart';
 import '../../l10n/app_localizations.dart';
+import '../../projects/project_fonts.dart';
+import 'dialogs/font_embedding_dialog.dart';
 import 'panels/selection_panel.dart' show LayerPickSheet;
 import '../../ui/widgets/color_picker.dart';
 import '../../projects/pixora_format.dart';
@@ -275,6 +277,8 @@ class _EditorPageState extends State<EditorPage> {
     for (final id in widget.project.document.referencedAssets) {
       unawaited(_editor.assets.decode(id));
     }
+    // Fonts the project carries (plain ones join the user's fonts).
+    unawaited(_services.fonts.useProjectFonts(widget.project.assets));
     unawaited(
       _services.projects
           .exists(widget.project.document.id)
@@ -633,11 +637,46 @@ class _EditorPageState extends State<EditorPage> {
 
   Future<void> _exportProject() async {
     final platform = _services.platform;
+    final fonts = _services.fonts;
     final doc = _editor.document;
+    // Fonts the text uses that other Pixora installs don't ship with.
+    final custom = [
+      for (final f in ProjectFonts.usedFamilies(doc))
+        if (!fonts.isBundled(f)) f,
+    ];
+    var embed = FontEmbedding.none;
+    if (custom.isNotEmpty) {
+      final choice = await showFontEmbeddingDialog(context, custom);
+      if (choice == null || !mounted) return;
+      embed = choice;
+    }
     Uint8List? bytes;
     await runWithProgress(context, () async {
       final thumb = await _editor.renderer.renderPng(doc, maxSide: 420);
-      final assets = _editor.assets.allBytes;
+      final all = _editor.assets.allBytes;
+      final assets = <String, Uint8List>{
+        for (final e in all.entries)
+          if (!ProjectFonts.isKey(e.key)) e.key: e.value,
+      };
+      if (embed != FontEmbedding.none) {
+        for (final family in custom) {
+          final locked = all[ProjectFonts.key(family, locked: true)];
+          if (locked != null) {
+            // A locked font can only ever travel locked.
+            assets[ProjectFonts.key(family, locked: true)] = locked;
+            continue;
+          }
+          final data =
+              all[ProjectFonts.key(family, locked: false)] ??
+              await fonts.userFontBytes(family);
+          if (data == null) continue;
+          assets[ProjectFonts.key(
+                family,
+                locked: embed == FontEmbedding.locked,
+              )] =
+              data;
+        }
+      }
       bytes = await compute(_encodeProject, (doc, assets, thumb));
     });
     if (!mounted || bytes == null) return;

@@ -660,5 +660,12 @@
   "ellipticalGradient": "Eliptik",
   "distortHint": "Herhangi bir köşeyi istediğiniz yere sürükleyin.",
   "perspectiveHint": "Bir köşeyi sürükleyin: eşi ayna gibi hareket eder, Photoshop’taki gibi.",
-  "warpHint": "Katmanı bükmek için ızgara noktalarını sürükleyin."
+  "warpHint": "Katmanı bükmek için ızgara noktalarını sürükleyin.",
+  "embedFontsTitle": "Projedeki yazı tipleri",
+  "embedFontsNone": "Ekleme",
+  "embedFontsNoneHint": "Daha küçük dosya; eksik olduğu yerde metin başka yazı tipiyle görünür.",
+  "embedFontsFiles": "Yazı tipi olarak ekle",
+  "embedFontsFilesHint": "Projeyi açan bu yazı tiplerini de alır.",
+  "embedFontsLocked": "Kodlu ekle (kilitli)",
+  "embedFontsLockedHint": "Proje bunları gösterir ama çıkarılıp yazı tipi olarak kurulamazlar."
 }

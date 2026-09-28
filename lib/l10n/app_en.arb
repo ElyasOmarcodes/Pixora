@@ -752,5 +752,12 @@
   "ellipticalGradient": "Elliptical",
   "distortHint": "Drag any corner anywhere.",
   "perspectiveHint": "Drag a corner: its partner moves the mirrored way, as in Photoshop.",
-  "warpHint": "Drag the grid points to bend the layer."
+  "warpHint": "Drag the grid points to bend the layer.",
+  "embedFontsTitle": "Fonts in this project",
+  "embedFontsNone": "Don’t include",
+  "embedFontsNoneHint": "Smaller file; the text shows in another font where these are missing.",
+  "embedFontsFiles": "Include as fonts",
+  "embedFontsFilesHint": "Whoever opens the project also gets these fonts to use.",
+  "embedFontsLocked": "Include encoded (locked)",
+  "embedFontsLockedHint": "The project shows them, but they can’t be taken out and installed as fonts."
 }

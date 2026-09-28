@@ -660,5 +660,12 @@
   "ellipticalGradient": "Elíptico",
   "distortHint": "Arrastra cualquier esquina a donde quieras.",
   "perspectiveHint": "Arrastra una esquina: su pareja se mueve en espejo, como en Photoshop.",
-  "warpHint": "Arrastra los puntos de la malla para deformar la capa."
+  "warpHint": "Arrastra los puntos de la malla para deformar la capa.",
+  "embedFontsTitle": "Fuentes del proyecto",
+  "embedFontsNone": "No incluir",
+  "embedFontsNoneHint": "Archivo más pequeño; el texto se verá con otra fuente donde falten.",
+  "embedFontsFiles": "Incluir como fuentes",
+  "embedFontsFilesHint": "Quien abra el proyecto también recibe estas fuentes.",
+  "embedFontsLocked": "Incluir codificadas (bloqueadas)",
+  "embedFontsLockedHint": "El proyecto las muestra, pero no se pueden extraer ni instalar como fuentes."
 }

@@ -7,6 +7,7 @@ import '../core/utils/json.dart';
 import '../document/model/document.dart';
 import 'pixora_format.dart';
 import 'project_store.dart';
+import 'project_fonts.dart';
 
 /// Keeps every project as one `.pixora` file in a folder the user can see
 /// (e.g. `Documents/Pixora/Projects`). The files open in Pixora from any
@@ -86,7 +87,8 @@ class PixoraFileStore implements ProjectStore {
       document,
       {
         for (final e in assets.entries)
-          if (keep.contains(e.key)) e.key: e.value,
+          if (keep.contains(e.key) || ProjectFonts.keepsFont(document, e.key))
+            e.key: e.value,
       },
       thumbnail,
     ));

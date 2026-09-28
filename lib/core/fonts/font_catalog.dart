@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../document/render/text_layout.dart';
+import '../../projects/project_fonts.dart';
 import '../platform/platform_services.dart';
 import '../settings/app_settings.dart';
 
@@ -79,10 +80,59 @@ class FontCatalog extends ChangeNotifier {
 
   bool isFavorite(String family) => favorites.contains(family);
 
-  /// Whether [family] can be drawn (bundled or imported).
+  /// Whether [family] can be drawn (bundled, imported or from a project).
   bool isAvailable(String family) =>
-      bundled.any((f) => f.family == family) ||
-      _user.any((f) => f.family == family);
+      isBundled(family) ||
+      _user.any((f) => f.family == family) ||
+      _locked.contains(family);
+
+  bool isBundled(String family) => bundled.any((f) => f.family == family);
+
+  /// Fonts a project brought in locked: usable here, never saved as files.
+  final Set<String> _locked = {};
+  bool isLocked(String family) => _locked.contains(family);
+
+  /// Makes the fonts embedded in a project's [assets] usable: plain ones
+  /// are added to the user's fonts, locked ones only for this session.
+  Future<void> useProjectFonts(Map<String, Uint8List> assets) async {
+    var changed = false;
+    for (final e in assets.entries) {
+      final p = ProjectFonts.parse(e.key);
+      if (p == null) continue;
+      final (family, locked) = p;
+      if (isAvailable(family)) continue;
+      try {
+        final loader = FontLoader(family)
+          ..addFont(Future.value(ByteData.sublistView(e.value)));
+        await loader.load();
+      } catch (err) {
+        debugPrint('Pixora: embedded font $family failed: $err');
+        continue;
+      }
+      if (locked) {
+        _locked.add(family);
+      } else {
+        final fileName = '$family.ttf';
+        _user.add(UserFont(family, fileName));
+        await _platform.saveUserFont(fileName, e.value);
+      }
+      changed = true;
+    }
+    if (changed) {
+      TextLayoutCache.instance.clear();
+      notifyListeners();
+    }
+  }
+
+  /// The file bytes of an imported font, for embedding in a project.
+  Future<Uint8List?> userFontBytes(String family) async {
+    final font = _user.where((f) => f.family == family).firstOrNull;
+    if (font == null) return null;
+    for (final f in await _platform.loadUserFonts()) {
+      if (f.name == font.fileName) return f.bytes;
+    }
+    return null;
+  }
 
   /// Loads previously imported fonts. Call once at startup.
   Future<void> init() async {

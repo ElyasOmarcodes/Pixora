@@ -660,5 +660,12 @@
   "ellipticalGradient": "Elliptique",
   "distortHint": "Faites glisser un coin n’importe où.",
   "perspectiveHint": "Faites glisser un coin : son vis-à-vis bouge en miroir, comme dans Photoshop.",
-  "warpHint": "Faites glisser les points de la grille pour déformer le calque."
+  "warpHint": "Faites glisser les points de la grille pour déformer le calque.",
+  "embedFontsTitle": "Polices du projet",
+  "embedFontsNone": "Ne pas inclure",
+  "embedFontsNoneHint": "Fichier plus léger ; le texte s’affiche dans une autre police là où elles manquent.",
+  "embedFontsFiles": "Inclure comme polices",
+  "embedFontsFilesHint": "Celui qui ouvre le projet reçoit aussi ces polices.",
+  "embedFontsLocked": "Inclure codées (verrouillées)",
+  "embedFontsLockedHint": "Le projet les affiche, mais on ne peut pas les extraire ni les installer."
 }

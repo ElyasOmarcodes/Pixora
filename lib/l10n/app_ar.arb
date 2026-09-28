@@ -660,5 +660,12 @@
   "ellipticalGradient": "بيضاوي",
   "distortHint": "اسحب أي زاوية إلى أي مكان.",
   "perspectiveHint": "اسحب زاوية: تتحرك الزاوية المقابلة بشكل معكوس كما في فوتوشوب.",
-  "warpHint": "اسحب نقاط الشبكة لثني الطبقة."
+  "warpHint": "اسحب نقاط الشبكة لثني الطبقة.",
+  "embedFontsTitle": "الخطوط في هذا المشروع",
+  "embedFontsNone": "لا تُضمَّن",
+  "embedFontsNoneHint": "ملف أصغر؛ يظهر النص بخط آخر حيث لا تتوفر هذه الخطوط.",
+  "embedFontsFiles": "تضمين كخطوط",
+  "embedFontsFilesHint": "من يفتح المشروع يحصل على هذه الخطوط أيضاً.",
+  "embedFontsLocked": "تضمين مشفّر (مقفل)",
+  "embedFontsLockedHint": "يعرضها المشروع، لكن لا يمكن استخراجها وتثبيتها كخطوط."
 }

@@ -6,6 +6,7 @@ import 'package:xml/xml.dart';
 
 import '../core/utils/json.dart';
 import '../document/model/document.dart';
+import 'project_fonts.dart';
 import 'project_store.dart';
 
 /// The `.pixora` project file.
@@ -62,7 +63,24 @@ abstract final class PixoraFormat {
       archive.add(ArchiveFile.noCompress(path, bytes.length, bytes));
     }
 
-    final xml = documentToXml(doc, generator: generator, assetPaths: paths);
+    // Embedded fonts the text still uses (see ProjectFonts).
+    final fonts = <(String, String, bool)>[]; // family, path, locked
+    var n = 0;
+    for (final e in assets.entries) {
+      if (!ProjectFonts.keepsFont(doc, e.key)) continue;
+      final (family, locked) = ProjectFonts.parse(e.key)!;
+      final path = 'fonts/${n++}.${locked ? 'pxfont' : 'ttf'}';
+      final data = locked ? ProjectFonts.scramble(e.value, family) : e.value;
+      archive.add(ArchiveFile.bytes(path, data));
+      fonts.add((family, path, locked));
+    }
+
+    final xml = documentToXml(
+      doc,
+      generator: generator,
+      assetPaths: paths,
+      fonts: fonts,
+    );
     archive.add(ArchiveFile.bytes('document.xml', utf8.encode(xml)));
     if (thumbnail != null) {
       archive.add(
@@ -88,14 +106,27 @@ abstract final class PixoraFormat {
     if (docFile == null) {
       throw const FormatException('Not a Pixora project (no document.xml)');
     }
-    final (doc, assetPaths) = documentFromXml(
-      utf8.decode(docFile.readBytes()!),
-    );
+    final xmlText = utf8.decode(docFile.readBytes()!);
+    final (doc, assetPaths) = documentFromXml(xmlText);
     final assets = <String, Uint8List>{};
     for (final id in doc.referencedAssets) {
       final path = assetPaths[id] ?? _findAsset(archive, id);
       final bytes = path == null ? null : archive.find(path)?.readBytes();
       if (bytes != null) assets[id] = bytes;
+    }
+    final root = XmlDocument.parse(xmlText).rootElement;
+    for (final f
+        in root.getElement('fonts')?.findElements('font') ??
+            const <XmlElement>[]) {
+      final family = f.getAttribute('family');
+      final path = f.getAttribute('path');
+      if (family == null || path == null) continue;
+      final data = archive.find(path)?.readBytes();
+      if (data == null) continue;
+      final locked = f.getAttribute('locked') == '1';
+      assets[ProjectFonts.key(family, locked: locked)] = locked
+          ? ProjectFonts.scramble(data, family)
+          : data;
     }
     return (
       StoredProject(doc, assets),
@@ -165,6 +196,7 @@ abstract final class PixoraFormat {
     PixDocument doc, {
     String generator = 'Pixora',
     Map<String, String> assetPaths = const {},
+    List<(String, String, bool)> fonts = const [],
   }) {
     final json = doc.toJson()..remove('format');
     final b = XmlBuilder()..processing('xml', 'version="1.0" encoding="UTF-8"');
@@ -179,6 +211,23 @@ abstract final class PixoraFormat {
             nest: () {
               for (final e in assetPaths.entries) {
                 b.element('asset', attributes: {'id': e.key, 'path': e.value});
+              }
+            },
+          );
+        }
+        if (fonts.isNotEmpty) {
+          b.element(
+            'fonts',
+            nest: () {
+              for (final (family, path, locked) in fonts) {
+                b.element(
+                  'font',
+                  attributes: {
+                    'family': family,
+                    'path': path,
+                    if (locked) 'locked': '1',
+                  },
+                );
               }
             },
           );
