@@ -156,6 +156,35 @@ class DocumentRenderer {
       ..restore();
   }
 
+  /// [paint], but letting the app draw frames between top-level layers:
+  /// a big export no longer freezes the progress indicator.
+  Future<void> paintAsync(Canvas canvas, PixDocument doc) async {
+    final bounds = doc.bounds;
+    canvas
+      ..save()
+      ..clipRect(bounds)
+      ..saveLayer(bounds, Paint());
+    final bg = doc.background;
+    if (bg != null) {
+      canvas.drawRect(bounds, bg.applyTo(Paint(), bounds));
+    }
+    // One clip group (a base and the layers clipped to it) at a time.
+    final list = doc.layers;
+    var i = 0;
+    while (i < list.length) {
+      var j = i + 1;
+      while (j < list.length && list[j].props.clip) {
+        j++;
+      }
+      paintLayers(canvas, list.sublist(i, j));
+      i = j;
+      await Future<void>.delayed(Duration.zero);
+    }
+    canvas
+      ..restore()
+      ..restore();
+  }
+
   /// Paints a bottom→top list of sibling layers, resolving clipping masks:
   /// consecutive layers with `clip` are clipped to the layer below them.
   void paintLayers(
@@ -2187,11 +2216,11 @@ class DocumentRenderer {
       );
     }
     canvas.scale(w / doc.width, h / doc.height);
-    DocumentRenderer(
+    await DocumentRenderer(
       assets,
       effects: effects,
       pixelScale: math.max(w / doc.width, h / doc.height),
-    ).paint(canvas, doc);
+    ).paintAsync(canvas, doc);
     final picture = recorder.endRecording();
     final image = await picture.toImage(w, h);
     picture.dispose();

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 
 import '../../../ui/widgets/pix_slider.dart';
@@ -41,10 +42,16 @@ Future<Uint8List> encodeDocument(
   final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
   final w = image.width, h = image.height;
   image.dispose();
+  // JPEG encoding takes seconds for big images: off the UI thread.
+  return compute(_encodeJpg, (data!.buffer.asUint8List(), w, h, quality));
+}
+
+Uint8List _encodeJpg((Uint8List, int, int, int) job) {
+  final (rgba, w, h, quality) = job;
   final raster = img.Image.fromBytes(
     width: w,
     height: h,
-    bytes: data!.buffer,
+    bytes: rgba.buffer,
     numChannels: 4,
     order: img.ChannelOrder.rgba,
   );
@@ -152,6 +159,8 @@ class _ExportSheetState extends State<_ExportSheet> {
       ..exportFormat = _format
       ..exportQuality = _quality;
     try {
+      // Let the progress indicator appear before the work starts.
+      await WidgetsBinding.instance.endOfFrame;
       final (w, h) = _size;
       final bytes = await encodeDocument(
         widget.editor,
