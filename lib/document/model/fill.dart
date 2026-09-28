@@ -7,9 +7,22 @@ import '../../core/utils/json.dart';
 import 'patterns.dart';
 
 /// Gradient styles, like Photoshop's: linear, radial, angle (sweep around
-/// a centre) and reflected (linear, mirrored around its centre); and
-/// [pattern], a repeating tile (see [Patterns]).
-enum FillKind { solid, linear, radial, sweep, reflected, pattern }
+/// a centre), reflected (linear, mirrored around its centre) and diamond;
+/// plus square (rings of squares), elliptical (radial fitted to the box)
+/// and conic (an angle gradient mirrored halfway round), as in advanced
+/// editors; and [pattern], a repeating tile (see [Patterns]).
+enum FillKind {
+  solid,
+  linear,
+  radial,
+  sweep,
+  reflected,
+  pattern,
+  diamond,
+  square,
+  elliptical,
+  conic,
+}
 
 /// A paint source: a solid color, a gradient or a pattern.
 ///
@@ -258,10 +271,148 @@ class PixFill {
           rad,
           rad + math.pi * 2,
         );
+      case FillKind.conic:
+        // Half a turn out, half a turn back: symmetric about the angle.
+        paint.shader = Gradient.sweep(
+          c,
+          colors,
+          s,
+          TileMode.mirror,
+          rad,
+          rad + math.pi,
+        );
+      case FillKind.elliptical:
+        // A radial gradient stretched to the box's proportions.
+        final rx = math.max(0.5, bounds.width / 2 * scale);
+        final ry = math.max(0.5, bounds.height / 2 * scale);
+        final cs = math.cos(rad), sn = math.sin(rad);
+        paint.shader = Gradient.radial(
+          Offset.zero,
+          1,
+          colors,
+          s,
+          TileMode.clamp,
+          Float64List.fromList([
+            cs * rx, sn * rx, 0, 0, //
+            -sn * ry, cs * ry, 0, 0, //
+            0, 0, 1, 0, //
+            c.dx, c.dy, 0, 1, //
+          ]),
+        );
+      case FillKind.diamond || FillKind.square:
+        paint.shader = _ringShader(c, rad, math.max(0.5, radialRadius(bounds)));
       case FillKind.solid || FillKind.pattern:
         paint.shader = null;
     }
     return paint;
+  }
+
+  static final Map<Object, Image> _rings = {};
+  static const _ringSize = 512;
+
+  /// Diamond (|u| + |v|) or square (max(|u|, |v|)) rings from the centre
+  /// out to [radius], drawn once into a texture per colour set (four
+  /// linear gradients, one per quarter) and laid onto the box.
+  Shader _ringShader(Offset c, double rad, double radius) {
+    final key = Object.hash(
+      kind,
+      Object.hashAll(colors),
+      stops == null ? null : Object.hashAll(stops!),
+    );
+    final img = _rings[key] ??= () {
+      if (_rings.length > 48) _rings.clear();
+      const n = _ringSize;
+      const h = n / 2;
+      final rec = PictureRecorder();
+      final canvas = Canvas(rec);
+      const o = Offset(h, h);
+      // Corners of the texture and, for diamonds, the axis ends.
+      final quarters = kind == FillKind.square
+          ? [
+              // (triangle, direction of growth)
+              (
+                [o, const Offset(0, 0), const Offset(n * 1.0, 0)],
+                const Offset(0, -1),
+              ),
+              (
+                [o, const Offset(n * 1.0, 0), const Offset(n * 1.0, n * 1.0)],
+                const Offset(1, 0),
+              ),
+              (
+                [o, const Offset(n * 1.0, n * 1.0), const Offset(0, n * 1.0)],
+                const Offset(0, 1),
+              ),
+              (
+                [o, const Offset(0, n * 1.0), const Offset(0, 0)],
+                const Offset(-1, 0),
+              ),
+            ]
+          : [
+              (
+                [
+                  o,
+                  const Offset(h, 0),
+                  const Offset(n * 1.0, 0),
+                  const Offset(n * 1.0, h),
+                ],
+                const Offset(1, -1),
+              ),
+              (
+                [
+                  o,
+                  const Offset(n * 1.0, h),
+                  const Offset(n * 1.0, n * 1.0),
+                  const Offset(h, n * 1.0),
+                ],
+                const Offset(1, 1),
+              ),
+              (
+                [
+                  o,
+                  const Offset(h, n * 1.0),
+                  const Offset(0, n * 1.0),
+                  const Offset(0, h),
+                ],
+                const Offset(-1, 1),
+              ),
+              (
+                [o, const Offset(0, h), const Offset(0, 0), const Offset(h, 0)],
+                const Offset(-1, -1),
+              ),
+            ];
+      for (final (pts, dir) in quarters) {
+        // Value 1 where the ring reaches the texture's half-size.
+        final end = kind == FillKind.square
+            ? o + dir * h
+            : o + dir * (h / 2); // |u| + |v| = h along the diagonal
+        canvas.drawPath(
+          Path()..addPolygon(pts, true),
+          Paint()
+            ..isAntiAlias = false
+            ..shader = Gradient.linear(o, end, colors, stops),
+        );
+      }
+      final pic = rec.endRecording();
+      final out = pic.toImageSync(n, n);
+      pic.dispose();
+      return out;
+    }();
+    // Texture half-size ↔ [radius], turned by the angle, at the centre.
+    final k = radius / (_ringSize / 2);
+    final cs = math.cos(rad) * k, sn = math.sin(rad) * k;
+    const h = _ringSize / 2;
+    return ImageShader(
+      img,
+      TileMode.clamp,
+      TileMode.clamp,
+      Float64List.fromList([
+        cs, sn, 0, 0, //
+        -sn, cs, 0, 0, //
+        0, 0, 1, 0, //
+        c.dx - (cs * h - sn * h), c.dy - (sn * h + cs * h), 0, 1, //
+      ]),
+      filterQuality: FilterQuality.medium,
+    );
   }
 
   /// Pattern tiles start at the painted box's top-left (moved by [center]

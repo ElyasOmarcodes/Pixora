@@ -656,5 +656,6 @@
   "perspective": "پرسپکتیو",
   "distort": "اعوجاج",
   "freeTransform": "آزاد",
-  "resetShape": "بازنشانی شکل"
+  "resetShape": "بازنشانی شکل",
+  "ellipticalGradient": "بیضوی"
 }

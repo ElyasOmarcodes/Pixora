@@ -59,6 +59,50 @@ void main() {
     }
   });
 
+  test('diamond, square, elliptical and conic gradients render', () async {
+    for (final kind in [
+      FillKind.diamond,
+      FillKind.square,
+      FillKind.elliptical,
+      FillKind.conic,
+    ]) {
+      final doc = PixDocument(
+        name: 't',
+        width: 100,
+        height: 100,
+        layers: [
+          ShapeLayer(
+            LayerProps(
+              name: 's',
+              transform: const LayerTransform(x: 50, y: 50),
+            ),
+            shape: ShapeKind.rectangle,
+            width: 100,
+            height: 100,
+            fill: PixFill.gradient(kind, const [
+              Color(0xFFFF0000),
+              Color(0xFF0000FF),
+            ], angle: 0),
+          ),
+        ],
+      );
+      final img = await DocumentRenderer(AssetStore()).renderImage(doc);
+      final data = (await img.toByteData(
+        format: ui.ImageByteFormat.rawStraightRgba,
+      ))!;
+      int red(int x, int y) => data.getUint8((y * 100 + x) * 4);
+      int blue(int x, int y) => data.getUint8((y * 100 + x) * 4 + 2);
+      if (kind == FillKind.conic) {
+        // Red along the start angle, blue half a turn away.
+        expect(red(95, 50), greaterThan(200), reason: '$kind');
+        expect(blue(5, 50), greaterThan(200), reason: '$kind');
+      } else {
+        expect(red(50, 50), greaterThan(200), reason: '$kind centre');
+        expect(blue(1, 1), greaterThan(150), reason: '$kind corner');
+      }
+    }
+  });
+
   test('a blurred photo keeps solid edges (Photoshop)', () async {
     final rec = ui.PictureRecorder();
     Canvas(rec).drawColor(const Color(0xFF808080), BlendMode.src);

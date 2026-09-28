@@ -656,5 +656,6 @@
   "perspective": "Perspective",
   "distort": "Distordre",
   "freeTransform": "Libre",
-  "resetShape": "Réinitialiser la forme"
+  "resetShape": "Réinitialiser la forme",
+  "ellipticalGradient": "Elliptique"
 }

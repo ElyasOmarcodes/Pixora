@@ -748,5 +748,6 @@
   "perspective": "Perspective",
   "distort": "Distort",
   "freeTransform": "Free",
-  "resetShape": "Reset shape"
+  "resetShape": "Reset shape",
+  "ellipticalGradient": "Elliptical"
 }

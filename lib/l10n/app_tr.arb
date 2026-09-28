@@ -656,5 +656,6 @@
   "perspective": "Perspektif",
   "distort": "Bozulma",
   "freeTransform": "Serbest",
-  "resetShape": "Şekli sıfırla"
+  "resetShape": "Şekli sıfırla",
+  "ellipticalGradient": "Eliptik"
 }

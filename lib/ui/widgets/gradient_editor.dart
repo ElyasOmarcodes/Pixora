@@ -198,7 +198,10 @@ class _GradientEditorState extends State<_GradientEditor> {
     return switch (_kind) {
       FillKind.linear => (c - d * f.linearHalf(r), c + d * f.linearHalf(r)),
       FillKind.reflected => (c, c + d * f.linearHalf(r)),
-      FillKind.radial => (c, c + d * f.radialRadius(r)),
+      FillKind.radial ||
+      FillKind.diamond ||
+      FillKind.square => (c, c + d * f.radialRadius(r)),
+      FillKind.elliptical => (c, c + d * r.width / 2 * f.scale),
       _ => (c, c + d * r.shortestSide * 0.32),
     };
   }
@@ -246,9 +249,11 @@ class _GradientEditorState extends State<_GradientEditor> {
           _scale = (v.distance / 2 / base).clamp(0.05, 20.0);
         case FillKind.reflected:
           _scale = (v.distance / base).clamp(0.05, 20.0);
-        case FillKind.radial:
+        case FillKind.radial || FillKind.diamond || FillKind.square:
           _scale = (v.distance / (r.shortestSide / 2 + r.longestSide / 4))
               .clamp(0.05, 20.0);
+        case FillKind.elliptical:
+          _scale = (v.distance / (r.width / 2)).clamp(0.05, 20.0);
         default:
           break;
       }
@@ -316,6 +321,26 @@ class _GradientEditorState extends State<_GradientEditor> {
                     FillKind.reflected,
                     Icons.compare_arrows_rounded,
                     l.reflected,
+                  ),
+                  seg(
+                    FillKind.diamond,
+                    Icons.diamond_outlined,
+                    l.diamondGradient,
+                  ),
+                  seg(
+                    FillKind.square,
+                    Icons.crop_square_rounded,
+                    l.squareGradient,
+                  ),
+                  seg(
+                    FillKind.elliptical,
+                    Icons.panorama_fish_eye_rounded,
+                    l.ellipticalGradient,
+                  ),
+                  seg(
+                    FillKind.conic,
+                    Icons.donut_large_rounded,
+                    l.conicGradient,
                   ),
                 ],
                 selected: {_kind},
@@ -513,7 +538,7 @@ class _GradientEditorState extends State<_GradientEditor> {
                         format: (v) => '${v.round()}°',
                         onChanged: (v) => setState(() => _angle = v),
                       ),
-                    if (_kind != FillKind.sweep)
+                    if (_kind != FillKind.sweep && _kind != FillKind.conic)
                       PixSlider(
                         label: l.scale,
                         value: _scale,

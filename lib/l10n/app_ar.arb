@@ -656,5 +656,6 @@
   "perspective": "منظور",
   "distort": "تشويه حر",
   "freeTransform": "حر",
-  "resetShape": "إعادة الشكل"
+  "resetShape": "إعادة الشكل",
+  "ellipticalGradient": "بيضاوي"
 }

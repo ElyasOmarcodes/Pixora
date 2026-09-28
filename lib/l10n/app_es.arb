@@ -656,5 +656,6 @@
   "perspective": "Perspectiva",
   "distort": "Distorsionar",
   "freeTransform": "Libre",
-  "resetShape": "Restablecer forma"
+  "resetShape": "Restablecer forma",
+  "ellipticalGradient": "Elíptico"
 }

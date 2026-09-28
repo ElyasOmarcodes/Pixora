@@ -656,5 +656,6 @@
   "perspective": "تناظر",
   "distort": "بگاڑ",
   "freeTransform": "آزاد",
-  "resetShape": "شکل ری سیٹ"
+  "resetShape": "شکل ری سیٹ",
+  "ellipticalGradient": "بیضوی"
 }
