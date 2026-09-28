@@ -7,8 +7,6 @@ import '../../../app/theme/app_theme.dart';
 import '../../../document/model/blend.dart';
 import '../../../document/model/document.dart';
 import '../../../document/model/layer.dart';
-import '../../../document/model/layer_transform.dart';
-import '../../../document/render/document_renderer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/layer_style.dart';
@@ -17,6 +15,7 @@ import '../../../document/model/effect.dart';
 import '../editor_scope.dart';
 import '../effects_catalog.dart';
 import 'layer_actions.dart';
+import 'layer_thumbs.dart';
 import 'mask_thumb.dart';
 
 /// One visible row of the layer tree.
@@ -46,17 +45,22 @@ class LayersPanel extends StatefulWidget {
     required this.editor,
     required this.commands,
     this.onClose,
+    this.active = true,
   });
 
   final EditorController editor;
   final LayerCommands commands;
   final VoidCallback? onClose;
 
+  /// False while the panel is hidden: it stops following the editor.
+  final bool active;
+
   @override
   State<LayersPanel> createState() => _LayersPanelState();
 }
 
 class _LayersPanelState extends State<LayersPanel> {
+  static final _idle = ValueNotifier(0);
   final _search = TextEditingController();
   bool _searching = false;
   bool _selectMode = false;
@@ -156,7 +160,7 @@ class _LayersPanelState extends State<LayersPanel> {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     return ListenableBuilder(
-      listenable: e,
+      listenable: widget.active ? e : _idle,
       builder: (context, _) {
         final doc = e.document;
         final rows = _filtering ? _filteredRows(doc) : _treeRows(doc);
@@ -1183,7 +1187,7 @@ class _Thumb extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   CheckerboardBox(a: pix.checkerA, b: pix.checkerB, cell: 5),
-                  CustomPaint(painter: _LayerThumbPainter(layer, editor)),
+                  LayerThumbImage(layer: layer, editor: editor),
                 ],
               ),
             ),
@@ -1213,55 +1217,6 @@ class _Thumb extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Draws one layer fitted into the thumbnail box (leaves un-transformed,
-/// groups as they appear on the canvas).
-class _LayerThumbPainter extends CustomPainter {
-  _LayerThumbPainter(this.layer, this.editor) : super(repaint: editor.assets);
-  final Layer layer;
-  final EditorController editor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Layer plain;
-    final Rect box;
-    if (layer is GroupLayer) {
-      plain = layer.update(
-        (p) => p.copyWith(opacity: 1, visible: true, clip: false),
-      );
-      box = layerLocalRect(plain);
-    } else {
-      final t = layer.props.transform;
-      plain = layer.withProps(
-        layer.props.copyWith(
-          opacity: 1,
-          visible: true,
-          clip: false,
-          transform: LayerTransform(
-            scaleX: t.scaleX.sign,
-            scaleY: t.scaleY.sign,
-          ),
-        ),
-      );
-      box = layerLocalRect(plain);
-    }
-    if (box.isEmpty) return;
-    final fit = math.min(
-      (size.width - 4) / box.width,
-      (size.height - 4) / box.height,
-    );
-    canvas
-      ..save()
-      ..translate(size.width / 2, size.height / 2)
-      ..scale(fit)
-      ..translate(-box.center.dx, -box.center.dy);
-    editor.viewRenderer(fit * 2).paintLayer(canvas, plain);
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_LayerThumbPainter old) => old.layer != layer;
 }
 
 // ======================================================================

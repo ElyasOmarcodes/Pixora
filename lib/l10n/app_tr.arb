@@ -686,5 +686,14 @@
   "fxRipple": "Dalgalandır",
   "fxCellSize": "Hücre boyutu",
   "fxHorizontal": "Yatay",
-  "fxVertical": "Dikey"
+  "fxVertical": "Dikey",
+  "justifyLastLeft": "Yasla, son satır sola",
+  "justifyLastCenter": "Yasla, son satır ortada",
+  "justifyLastRight": "Yasla, son satır sağa",
+  "justifyAll": "Tümünü yasla",
+  "kashida": "Keşide",
+  "kashidaNone": "Yok",
+  "kashidaShort": "Kısa",
+  "kashidaMedium": "Orta",
+  "kashidaLong": "Uzun"
 }

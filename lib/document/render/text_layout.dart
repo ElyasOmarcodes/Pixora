@@ -7,6 +7,7 @@ import 'package:flutter/painting.dart';
 
 import '../model/layer.dart';
 import '../model/text_span_style.dart';
+import 'justify.dart';
 
 /// Detects the base direction from the first strong character, so Pashto,
 /// Dari/Persian, Arabic and Urdu text is laid out right-to-left automatically.
@@ -90,6 +91,7 @@ class TextLayoutCache {
       l.bgPadX,
       l.bgPadY,
       l.bgRadius,
+      l.kashida,
       Object.hashAll(l.spans),
     );
     final hit = _cache.remove(key);
@@ -201,41 +203,105 @@ class _CurveMesh {
 
 /// Builds the paragraph: the base style for the whole text plus child
 /// spans for ranges with their own font or colour. The stroke pass only
-/// takes fonts (the outline keeps its own colour).
+/// takes fonts (the outline keeps its own colour). [gaps]: line ranges
+/// whose word spaces are widened by justification (start, end, extra px).
 InlineSpan _spanTree(
   String text,
   TextStyle base,
   List<TextSpanStyle> spans, {
   required bool stroke,
   required bool foreground,
+  List<(int, int, double)> gaps = const [],
 }) {
-  if (spans.isEmpty) return TextSpan(text: text, style: base);
-  final children = <InlineSpan>[];
+  if (spans.isEmpty && gaps.isEmpty) return TextSpan(text: text, style: base);
+  // Styled ranges in order, overlaps dropped.
+  final styled = <TextSpanStyle>[];
   var cursor = 0;
   for (final s in spans) {
     final a = s.start.clamp(0, text.length), b = s.end.clamp(0, text.length);
     if (b <= a || a < cursor) continue;
-    if (a > cursor) children.add(TextSpan(text: text.substring(cursor, a)));
-    final c = stroke ? null : s.color;
+    styled.add(s.copyWith(start: a, end: b));
+    cursor = b;
+  }
+  // Cut the text wherever a style range or a gap starts or ends.
+  final cuts = <int>{0, text.length};
+  for (final s in styled) {
+    cuts
+      ..add(s.start)
+      ..add(s.end);
+  }
+  for (final g in gaps) {
+    cuts
+      ..add(g.$1.clamp(0, text.length))
+      ..add(g.$2.clamp(0, text.length));
+  }
+  final points = cuts.toList()..sort();
+  final children = <InlineSpan>[];
+  var si = 0, gi = 0;
+  for (var k = 0; k + 1 < points.length; k++) {
+    final a = points[k], b = points[k + 1];
+    if (b <= a) continue;
+    while (si < styled.length && styled[si].end <= a) {
+      si++;
+    }
+    while (gi < gaps.length && gaps[gi].$2 <= a) {
+      gi++;
+    }
+    final s = si < styled.length && styled[si].start <= a ? styled[si] : null;
+    final g = gi < gaps.length && gaps[gi].$1 <= a ? gaps[gi] : null;
+    if (s == null && g == null) {
+      children.add(TextSpan(text: text.substring(a, b)));
+      continue;
+    }
+    final c = stroke ? null : s?.color;
+    final family = s?.fontFamily;
     children.add(
       TextSpan(
         text: text.substring(a, b),
         style: TextStyle(
-          fontFamily: s.fontFamily == 'System' ? null : s.fontFamily,
+          fontFamily: family == null || family == 'System' ? null : family,
           // A gradient base paints with `foreground`; a span colour then
           // has to be a foreground paint too (both can't be set).
           color: c != null && !foreground ? c : null,
           foreground: c != null && foreground ? (Paint()..color = c) : null,
           decorationColor: c,
+          wordSpacing: g == null ? null : (base.wordSpacing ?? 0) + g.$3,
         ),
       ),
     );
-    cursor = b;
-  }
-  if (cursor < text.length) {
-    children.add(TextSpan(text: text.substring(cursor)));
   }
   return TextSpan(style: base, children: children);
+}
+
+/// Advance of one kashida (tatweel) in [style], cached per font.
+final Map<int, double> _tatweelCache = {};
+double _tatweelWidth(TextStyle style) {
+  final key = Object.hash(
+    style.fontFamily,
+    style.fontSize,
+    style.fontWeight,
+    style.fontStyle,
+    style.letterSpacing,
+    TextLayoutCache.generation,
+  );
+  return _tatweelCache[key] ??= () {
+    if (_tatweelCache.length > 64) _tatweelCache.clear();
+    // Measured between two joined letters: some fonts give a kashida
+    // inside a word another advance than a lone tatweel.
+    double width(String t) {
+      final p = TextPainter(
+        text: TextSpan(text: t, style: style),
+        textDirection: TextDirection.rtl,
+      )..layout();
+      final w = p.width;
+      p.dispose();
+      return w;
+    }
+
+    final w =
+        (width('\u0628${'\u0640' * 8}\u0628') - width('\u0628\u0628')) / 8;
+    return w;
+  }();
 }
 
 class TextLayoutEntry {
@@ -286,11 +352,13 @@ class TextLayoutEntry {
   static TextLayoutEntry _build(TextLayer l) {
     final text = l.displayText;
     final dir = detectTextDirection(text);
+    // Justified lines fill the box, so the paragraph alignment only
+    // places the last line of each paragraph.
     final align = switch (l.align) {
-      PixTextAlign.start => TextAlign.start,
-      PixTextAlign.center => TextAlign.center,
-      PixTextAlign.end => TextAlign.end,
-      PixTextAlign.justify => TextAlign.justify,
+      PixTextAlign.start || PixTextAlign.justify => TextAlign.start,
+      PixTextAlign.center || PixTextAlign.justifyCenter => TextAlign.center,
+      PixTextAlign.end || PixTextAlign.justifyEnd => TextAlign.end,
+      PixTextAlign.justifyAll => TextAlign.start,
     };
     final decorations = [
       if (l.underline) TextDecoration.underline,
@@ -316,21 +384,63 @@ class TextLayoutEntry {
       color: foreground == null ? l.fill.primary : null,
     );
 
-    TextPainter make(Paint? fg, {bool stroke = false}) =>
-        TextPainter(
-          text: _spanTree(
-            text.isEmpty ? ' ' : text,
-            style(fg),
-            l.spans,
-            stroke: stroke,
-            foreground: fg != null,
-          ),
-          textDirection: dir,
-          textAlign: align,
-        )..layout(
-          minWidth: l.boxWidth ?? 0,
-          maxWidth: l.boxWidth ?? double.infinity,
-        );
+    var shown = text.isEmpty ? ' ' : text;
+    var spans = l.spans;
+    var gaps = const <(int, int, double)>[];
+    double? justified; // line width once justified
+    TextPainter make(Paint? fg, {bool stroke = false}) {
+      final w = justified;
+      return TextPainter(
+        text: _spanTree(
+          shown,
+          style(fg),
+          spans,
+          stroke: stroke,
+          foreground: fg != null,
+          gaps: gaps,
+        ),
+        textDirection: dir,
+        textAlign: align,
+      )..layout(
+        minWidth: w ?? l.boxWidth ?? 0,
+        // Every break is explicit then; the slack only absorbs rounding.
+        maxWidth: w != null
+            ? w * 2 + l.fontSize
+            : l.boxWidth ?? double.infinity,
+      );
+    }
+
+    if (l.align.isJustify && text.trim().isNotEmpty) {
+      final base = style(null);
+      final j = justifyText(
+        text: shown,
+        spans: spans,
+        tree: (t, sp, g) =>
+            _spanTree(t, base, sp, stroke: false, foreground: false, gaps: g),
+        dir: dir,
+        boxWidth: l.boxWidth,
+        all: l.align == PixTextAlign.justifyAll,
+        tatweel: dir == TextDirection.rtl && l.kashida != PixKashida.none
+            ? _tatweelWidth(base)
+            : 0,
+        maxKashida:
+            l.fontSize *
+            switch (l.kashida) {
+              PixKashida.none => 0,
+              PixKashida.short => 0.45,
+              PixKashida.medium => 1.0,
+              PixKashida.long => 2.0,
+            },
+        baseWordSpacing: l.wordSpacing,
+        shrink: l.fontSize * 0.08,
+      );
+      if (j != null) {
+        shown = j.text;
+        spans = j.spans;
+        gaps = j.gaps;
+        justified = j.width;
+      }
+    }
 
     // Gradient fills need the laid-out size first, so lay out once plainly.
     var fill = make(null);

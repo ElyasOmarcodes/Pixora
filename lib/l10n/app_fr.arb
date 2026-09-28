@@ -686,5 +686,14 @@
   "fxRipple": "Ondulation",
   "fxCellSize": "Taille de cellule",
   "fxHorizontal": "Horizontal",
-  "fxVertical": "Vertical"
+  "fxVertical": "Vertical",
+  "justifyLastLeft": "Justifier, dernière ligne à gauche",
+  "justifyLastCenter": "Justifier, dernière ligne centrée",
+  "justifyLastRight": "Justifier, dernière ligne à droite",
+  "justifyAll": "Justifier tout",
+  "kashida": "Kashida",
+  "kashidaNone": "Aucune",
+  "kashidaShort": "Courte",
+  "kashidaMedium": "Moyenne",
+  "kashidaLong": "Longue"
 }

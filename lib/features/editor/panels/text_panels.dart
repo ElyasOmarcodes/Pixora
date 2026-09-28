@@ -41,35 +41,10 @@ class TextStylePanel extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-          child: SegmentedButton<PixTextAlign>(
-            showSelectedIcon: false,
-            segments: [
-              ButtonSegment(
-                value: PixTextAlign.start,
-                icon: const Icon(Icons.format_align_left_rounded),
-                tooltip: l.alignStart,
-              ),
-              ButtonSegment(
-                value: PixTextAlign.center,
-                icon: const Icon(Icons.format_align_center_rounded),
-                tooltip: l.alignCenter,
-              ),
-              ButtonSegment(
-                value: PixTextAlign.end,
-                icon: const Icon(Icons.format_align_right_rounded),
-                tooltip: l.alignEnd,
-              ),
-              ButtonSegment(
-                value: PixTextAlign.justify,
-                icon: const Icon(Icons.format_align_justify_rounded),
-                tooltip: l.justify,
-              ),
-            ],
-            selected: {layer.align},
-            onSelectionChanged: (s) => edit((t) => t.copyWith(align: s.first)),
-          ),
+        _AlignRows(
+          layer: layer,
+          onChanged: (a) => edit((t) => t.copyWith(align: a)),
+          onKashida: (k) => edit((t) => t.copyWith(kashida: k)),
         ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -342,4 +317,192 @@ class SpacingPanel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Alignment buttons laid out visually (left → right, whatever the text
+/// direction), the four Photoshop justify modes when justifying, and the
+/// kashida length for right-to-left text.
+class _AlignRows extends StatelessWidget {
+  const _AlignRows({
+    required this.layer,
+    required this.onChanged,
+    required this.onKashida,
+  });
+  final TextLayer layer;
+  final ValueChanged<PixTextAlign> onChanged;
+  final ValueChanged<PixKashida> onKashida;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final rtl = detectTextDirection(layer.displayText) == TextDirection.rtl;
+    final a = layer.align;
+    // Visual left / right in the layer's own direction.
+    final left = rtl ? PixTextAlign.end : PixTextAlign.start;
+    final right = rtl ? PixTextAlign.start : PixTextAlign.end;
+    final jLeft = rtl ? PixTextAlign.justifyEnd : PixTextAlign.justify;
+    final jRight = rtl ? PixTextAlign.justify : PixTextAlign.justifyEnd;
+    const justifyKey = PixTextAlign.justifyAll; // stands for any justify
+    final scheme = Theme.of(context).colorScheme;
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+            child: SegmentedButton<PixTextAlign>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: left,
+                  icon: const Icon(Icons.format_align_left_rounded),
+                  tooltip: rtl ? l.alignEnd : l.alignStart,
+                ),
+                ButtonSegment(
+                  value: PixTextAlign.center,
+                  icon: const Icon(Icons.format_align_center_rounded),
+                  tooltip: l.alignCenter,
+                ),
+                ButtonSegment(
+                  value: right,
+                  icon: const Icon(Icons.format_align_right_rounded),
+                  tooltip: rtl ? l.alignStart : l.alignEnd,
+                ),
+                ButtonSegment(
+                  value: justifyKey,
+                  icon: const Icon(Icons.format_align_justify_rounded),
+                  tooltip: l.justify,
+                ),
+              ],
+              selected: {a.isJustify ? justifyKey : a},
+              onSelectionChanged: (s) {
+                final v = s.first;
+                if (v == justifyKey) {
+                  if (!a.isJustify) onChanged(PixTextAlign.justify);
+                } else {
+                  onChanged(v);
+                }
+              },
+            ),
+          ),
+          if (a.isJustify) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: SegmentedButton<PixTextAlign>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final (v, last, tip) in [
+                    (jLeft, TextAlign.left, l.justifyLastLeft),
+                    (
+                      PixTextAlign.justifyCenter,
+                      TextAlign.center,
+                      l.justifyLastCenter,
+                    ),
+                    (jRight, TextAlign.right, l.justifyLastRight),
+                    (PixTextAlign.justifyAll, TextAlign.justify, l.justifyAll),
+                  ])
+                    ButtonSegment(
+                      value: v,
+                      tooltip: tip,
+                      icon: CustomPaint(
+                        size: const Size(22, 20),
+                        painter: _JustifyIcon(
+                          last,
+                          a == v
+                              ? scheme.onSecondaryContainer
+                              : scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                ],
+                selected: {a},
+                onSelectionChanged: (s) => onChanged(s.first),
+              ),
+            ),
+            if (rtl)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                child: Directionality(
+                  textDirection: Directionality.of(context),
+                  child: Row(
+                    children: [
+                      Text(
+                        l.kashida,
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final (k, label) in [
+                                (PixKashida.none, l.kashidaNone),
+                                (PixKashida.short, l.kashidaShort),
+                                (PixKashida.medium, l.kashidaMedium),
+                                (PixKashida.long, l.kashidaLong),
+                              ])
+                                Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    end: 6,
+                                  ),
+                                  child: ChoiceChip(
+                                    label: Text(label),
+                                    selected: layer.kashida == k,
+                                    onSelected: (_) => onKashida(k),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Photoshop-style justify icon: full lines with the last one placed left,
+/// centred, right or full width.
+class _JustifyIcon extends CustomPainter {
+  _JustifyIcon(this.last, this.color);
+  final TextAlign last;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    const rows = 4;
+    final gap = (size.height - 4) / (rows - 1);
+    for (var i = 0; i < rows; i++) {
+      final y = 2 + i * gap;
+      var x0 = 2.0, x1 = size.width - 2;
+      if (i == rows - 1 && last != TextAlign.justify) {
+        final w = (x1 - x0) * 0.5;
+        switch (last) {
+          case TextAlign.left:
+            x1 = x0 + w;
+          case TextAlign.right:
+            x0 = x1 - w;
+          default:
+            x0 = (size.width - w) / 2;
+            x1 = x0 + w;
+        }
+      }
+      canvas.drawLine(Offset(x0, y), Offset(x1, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_JustifyIcon old) =>
+      old.last != last || old.color != color;
 }

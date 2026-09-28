@@ -686,5 +686,14 @@
   "fxRipple": "څپې",
   "fxCellSize": "د خونې اندازه",
   "fxHorizontal": "افقي",
-  "fxVertical": "عمودي"
+  "fxVertical": "عمودي",
+  "justifyLastLeft": "برابر، وروستۍ کرښه کیڼ لور ته",
+  "justifyLastCenter": "برابر، وروستۍ کرښه منځ ته",
+  "justifyLastRight": "برابر، وروستۍ کرښه ښي لور ته",
+  "justifyAll": "ټولې کرښې برابر",
+  "kashida": "کشیده",
+  "kashidaNone": "هېڅ",
+  "kashidaShort": "لنډه",
+  "kashidaMedium": "منځنۍ",
+  "kashidaLong": "اوږده"
 }

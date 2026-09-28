@@ -301,7 +301,7 @@ class EditorController extends ChangeNotifier {
     Color? color,
     String? fontFamily,
   }) {
-    final layer = TextLayer(
+    var layer = TextLayer(
       LayerProps(
         name: _nextName(name),
         transform: LayerTransform(
@@ -314,6 +314,23 @@ class EditorController extends ChangeNotifier {
       fontSize: (_unit * 0.09).roundToDouble(),
       fill: color == null ? null : PixFill.color(color),
     );
+    // A long paragraph becomes paragraph text (Photoshop): it wraps in a
+    // box a bit narrower than the canvas instead of running off it.
+    if (TextLayoutCache.instance.fill(layer).width > _document.width * 0.9) {
+      layer = layer.copyWith(
+        boxWidth: (_document.width * 0.86).roundToDouble(),
+      );
+      // Shrink the type until the paragraph fits the canvas height.
+      for (var i = 0; i < 3; i++) {
+        final h = TextLayoutCache.instance.sizeOf(layer).height;
+        if (h <= _document.height * 0.8) break;
+        final f = math.max(
+          _unit * 0.025,
+          layer.fontSize * math.sqrt(_document.height * 0.8 / h) * 0.97,
+        );
+        layer = layer.copyWith(fontSize: f.roundToDouble());
+      }
+    }
     apply('add_text', (d) => _insertAtCursor(d, layer), select: layer.id);
     return layer;
   }

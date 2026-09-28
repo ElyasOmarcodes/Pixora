@@ -686,5 +686,14 @@
   "fxRipple": "تموّج",
   "fxCellSize": "حجم الخلية",
   "fxHorizontal": "أفقي",
-  "fxVertical": "عمودي"
+  "fxVertical": "عمودي",
+  "justifyLastLeft": "ضبط، آخر سطر لليسار",
+  "justifyLastCenter": "ضبط، آخر سطر في الوسط",
+  "justifyLastRight": "ضبط، آخر سطر لليمين",
+  "justifyAll": "ضبط الكل",
+  "kashida": "الكشيدة",
+  "kashidaNone": "بدون",
+  "kashidaShort": "قصيرة",
+  "kashidaMedium": "متوسطة",
+  "kashidaLong": "طويلة"
 }

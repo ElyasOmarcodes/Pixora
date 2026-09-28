@@ -686,5 +686,14 @@
   "fxRipple": "موج‌دار",
   "fxCellSize": "اندازهٔ خانه",
   "fxHorizontal": "افقی",
-  "fxVertical": "عمودی"
+  "fxVertical": "عمودی",
+  "justifyLastLeft": "تراز، سطر آخر چپ",
+  "justifyLastCenter": "تراز، سطر آخر وسط",
+  "justifyLastRight": "تراز، سطر آخر راست",
+  "justifyAll": "تراز همه",
+  "kashida": "کشیده",
+  "kashidaNone": "هیچ",
+  "kashidaShort": "کوتاه",
+  "kashidaMedium": "متوسط",
+  "kashidaLong": "بلند"
 }

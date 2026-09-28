@@ -496,7 +496,25 @@ final class RasterLayer extends Layer {
       Object.hash(props, assetId, width, height, sourceAssetId, crop);
 }
 
-enum PixTextAlign { start, center, end, justify }
+/// Paragraph alignment. The justify modes spread every line to the box
+/// edges (Photoshop's *Justify last left/centred/right/all*); they differ
+/// in where the last line of each paragraph goes. `justify` keeps the last
+/// line at the start side (left for LTR, right for RTL).
+enum PixTextAlign {
+  start,
+  center,
+  end,
+  justify,
+  justifyCenter,
+  justifyEnd,
+  justifyAll;
+
+  bool get isJustify => index >= PixTextAlign.justify.index;
+}
+
+/// How far Arabic-script words may be stretched with kashida (tatweel)
+/// when a line is justified; the rest goes into the word spaces.
+enum PixKashida { none, short, medium, long }
 
 /// Letter case transform applied when the text is drawn.
 enum PixTextCase { none, upper, lower, title }
@@ -526,6 +544,7 @@ final class TextLayer extends Layer {
     this.bgPadX = 0.3,
     this.bgPadY = 0.15,
     this.bgRadius = 0.2,
+    this.kashida = PixKashida.medium,
     List<TextSpanStyle> spans = const [],
   }) : fill = fill ?? PixFill.white,
        spans = List.unmodifiable(spans);
@@ -560,6 +579,9 @@ final class TextLayer extends Layer {
   /// Bends the lines along an arc: the angle (degrees) the text spans.
   /// Positive bends upward (∩), negative downward (∪), 0 = straight.
   final double curve;
+
+  /// Kashida elongation used by the justify modes (RTL scripts).
+  final PixKashida kashida;
 
   /// Box behind the text (null = none).
   final PixFill? background;
@@ -614,6 +636,7 @@ final class TextLayer extends Layer {
     double? bgPadX,
     double? bgPadY,
     double? bgRadius,
+    PixKashida? kashida,
     List<TextSpanStyle>? spans,
   }) => TextLayer(
     props ?? this.props,
@@ -638,6 +661,7 @@ final class TextLayer extends Layer {
     bgPadX: bgPadX ?? this.bgPadX,
     bgPadY: bgPadY ?? this.bgPadY,
     bgRadius: bgRadius ?? this.bgRadius,
+    kashida: kashida ?? this.kashida,
     spans: spans ?? this.spans,
   );
 
@@ -660,6 +684,7 @@ final class TextLayer extends Layer {
     if (textCase != PixTextCase.none) 'case': textCase.name,
     if (wordSpacing != 0) 'wordSpacing': wordSpacing,
     if (curve != 0) 'curve': curve,
+    if (kashida != PixKashida.medium) 'kashida': kashida.name,
     if (background != null) ...{
       'bg': background!.toJson(),
       'bgPadX': bgPadX,
@@ -690,6 +715,7 @@ final class TextLayer extends Layer {
     textCase: readEnum(PixTextCase.values, m['case'], PixTextCase.none),
     wordSpacing: readDouble(m['wordSpacing']),
     curve: readDouble(m['curve']).clamp(-360.0, 360.0),
+    kashida: readEnum(PixKashida.values, m['kashida'], PixKashida.medium),
     background: m['bg'] == null ? null : PixFill.fromJson(m['bg']),
     bgPadX: readDouble(m['bgPadX'], 0.3),
     bgPadY: readDouble(m['bgPadY'], 0.15),
@@ -725,6 +751,7 @@ final class TextLayer extends Layer {
       other.bgPadX == bgPadX &&
       other.bgPadY == bgPadY &&
       other.bgRadius == bgRadius &&
+      other.kashida == kashida &&
       listEquals(other.spans, spans);
 
   @override
@@ -752,6 +779,7 @@ final class TextLayer extends Layer {
       bgPadX,
       bgPadY,
       bgRadius,
+      kashida,
       Object.hashAll(spans),
     ),
   );

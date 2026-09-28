@@ -686,5 +686,14 @@
   "fxRipple": "Rizo",
   "fxCellSize": "Tamaño de celda",
   "fxHorizontal": "Horizontal",
-  "fxVertical": "Vertical"
+  "fxVertical": "Vertical",
+  "justifyLastLeft": "Justificar, última a la izquierda",
+  "justifyLastCenter": "Justificar, última centrada",
+  "justifyLastRight": "Justificar, última a la derecha",
+  "justifyAll": "Justificar todo",
+  "kashida": "Kashida",
+  "kashidaNone": "Ninguna",
+  "kashidaShort": "Corta",
+  "kashidaMedium": "Media",
+  "kashidaLong": "Larga"
 }

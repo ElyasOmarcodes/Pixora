@@ -1089,6 +1089,11 @@ class _EditorPageState extends State<EditorPage> {
     final width = screen.panelWidth(MediaQuery.sizeOf(context).width);
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final open = _ui.showLayers;
+    // Built while open or sliding; once closed it stops listening to the
+    // editor and painting, so edits on the canvas don't rebuild a hidden
+    // list of hundreds of layers.
+    if (open) _layersShown = true;
+    final shown = _layersShown;
     return AnimatedPositionedDirectional(
       duration: PixTokens.medium,
       curve: PixTokens.emphasized,
@@ -1096,54 +1101,66 @@ class _EditorPageState extends State<EditorPage> {
       bottom: 0,
       end: open ? 0 : -width - 24,
       width: width,
-      child: IgnorePointer(
-        ignoring: !open,
-        child: GestureDetector(
-          onHorizontalDragEnd: (d) {
-            final v = d.primaryVelocity ?? 0;
-            // Towards the screen edge: right in LTR, left in RTL.
-            if ((rtl ? -v : v) > 250) _ui.showLayers = false;
-          },
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.bottomSheetTheme.backgroundColor,
-              borderRadius: const BorderRadiusDirectional.horizontal(
-                start: Radius.circular(PixTokens.radiusXL),
-              ).resolve(Directionality.of(context)),
-              boxShadow: [BoxShadow(color: pix.softShadow, blurRadius: 32)],
-            ),
-            child: SafeArea(
-              left: rtl,
-              right: !rtl,
-              child: Row(
-                children: [
-                  // Grab edge.
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _ui.showLayers = false,
-                    child: SizedBox(
-                      width: 14,
-                      child: Center(
-                        child: Container(
-                          width: 4,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(2),
+      onEnd: () {
+        if (!_ui.showLayers && _layersShown && mounted) {
+          setState(() => _layersShown = false);
+        }
+      },
+      child: Offstage(
+        offstage: !shown,
+        child: TickerMode(
+          enabled: shown,
+          child: IgnorePointer(
+            ignoring: !open,
+            child: GestureDetector(
+              onHorizontalDragEnd: (d) {
+                final v = d.primaryVelocity ?? 0;
+                // Towards the screen edge: right in LTR, left in RTL.
+                if ((rtl ? -v : v) > 250) _ui.showLayers = false;
+              },
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.bottomSheetTheme.backgroundColor,
+                  borderRadius: const BorderRadiusDirectional.horizontal(
+                    start: Radius.circular(PixTokens.radiusXL),
+                  ).resolve(Directionality.of(context)),
+                  boxShadow: [BoxShadow(color: pix.softShadow, blurRadius: 32)],
+                ),
+                child: SafeArea(
+                  left: rtl,
+                  right: !rtl,
+                  child: Row(
+                    children: [
+                      // Grab edge.
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _ui.showLayers = false,
+                        child: SizedBox(
+                          width: 14,
+                          child: Center(
+                            child: Container(
+                              width: 4,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.onSurfaceVariant
+                                    .withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                      Expanded(
+                        child: LayersPanel(
+                          editor: _editor,
+                          commands: _commands,
+                          active: shown,
+                          onClose: () => _ui.showLayers = false,
+                        ),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: LayersPanel(
-                      editor: _editor,
-                      commands: _commands,
-                      onClose: () => _ui.showLayers = false,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1151,6 +1168,9 @@ class _EditorPageState extends State<EditorPage> {
       ),
     );
   }
+
+  /// The layers drawer is open or still sliding shut.
+  bool _layersShown = false;
 
   Widget _buildWide(BuildContext context, ScreenClass screen) {
     final theme = Theme.of(context);

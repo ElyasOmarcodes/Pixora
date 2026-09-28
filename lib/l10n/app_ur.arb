@@ -686,5 +686,14 @@
   "fxRipple": "لہریں",
   "fxCellSize": "خانے کا سائز",
   "fxHorizontal": "افقی",
-  "fxVertical": "عمودی"
+  "fxVertical": "عمودی",
+  "justifyLastLeft": "برابر، آخری سطر بائیں",
+  "justifyLastCenter": "برابر، آخری سطر درمیان",
+  "justifyLastRight": "برابر، آخری سطر دائیں",
+  "justifyAll": "سب برابر",
+  "kashida": "کشیدہ",
+  "kashidaNone": "کوئی نہیں",
+  "kashidaShort": "چھوٹی",
+  "kashidaMedium": "درمیانی",
+  "kashidaLong": "لمبی"
 }
