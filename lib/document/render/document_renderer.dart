@@ -1148,9 +1148,7 @@ class DocumentRenderer {
     final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
     if (rect.isEmpty || !rect.isFinite) return null;
     final longest = math.max(rect.width, rect.height);
-    // Capped: several 4096² bitmaps (64 MB each) made zoomed-in panning
-    // on big projects heavy.
-    final s = math.min(bucket, 2560 / longest);
+    final s = math.min(bucket, 4096 / longest);
     // A style still computing: paint directly until it is ready.
     if (layer.props.effects.any((e) => e.enabled && _isSlowStyle(e))) {
       final jobs = _styleJobs(base, s, (_) {}, null, start: false);
@@ -2500,7 +2498,14 @@ class _ShapeSource {
       rs.toDouble(),
       (c) => r._paintContent(c, layer, hidden),
     );
-    final out = FilterEngine.apply(plain.image, box, filters, space: space);
+    final out = FilterEngine.apply(
+      plain.image,
+      box,
+      filters,
+      space: space,
+      // Photos blur with solid edges, as in Photoshop.
+      solid: layer is RasterLayer ? local : null,
+    );
     plain.dispose();
     final stamp = _Stamp._(out, box);
     if (key != null) {

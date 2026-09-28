@@ -642,5 +642,19 @@
   "thickness": "Kalınlık",
   "mirrorTile": "Kesintisiz (ayna)",
   "rulerShowLayer": "Seçili katmanı cetvellerde göster",
-  "moveIntoGroup": "Gruba taşı"
+  "moveIntoGroup": "Gruba taşı",
+  "cornersLinked": "Tüm köşeler",
+  "cornersIndividual": "Her köşe",
+  "cornerN": "Köşe {n}",
+  "roundness": "Yuvarlaklık",
+  "diamondGradient": "Elmas",
+  "squareGradient": "Kare",
+  "spiralGradient": "Spiral",
+  "conicGradient": "Konik",
+  "transformMode": "Dönüştür",
+  "warp": "Çarpıt",
+  "perspective": "Perspektif",
+  "distort": "Bozulma",
+  "freeTransform": "Serbest",
+  "resetShape": "Şekli sıfırla"
 }

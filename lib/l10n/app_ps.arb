@@ -642,5 +642,19 @@
   "thickness": "پنډوالی",
   "mirrorTile": "بې درزه (هنداره)",
   "rulerShowLayer": "ټاکل شوی لایر په رولر کې وښیه",
-  "moveIntoGroup": "ګروپ ته یې یوسه"
+  "moveIntoGroup": "ګروپ ته یې یوسه",
+  "cornersLinked": "ټول کونجونه",
+  "cornersIndividual": "هر کونج جلا",
+  "cornerN": "کونج {n}",
+  "roundness": "ګول والی",
+  "diamondGradient": "الماس",
+  "squareGradient": "مربع",
+  "spiralGradient": "پېچلی",
+  "conicGradient": "مخروطي",
+  "transformMode": "بدلون",
+  "warp": "کږول",
+  "perspective": "پرسپکټیو",
+  "distort": "اوښتون",
+  "freeTransform": "آزاد",
+  "resetShape": "شکل بېرته"
 }

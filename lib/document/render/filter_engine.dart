@@ -213,29 +213,53 @@ abstract final class FilterEngine {
   /// left alone.
   ///
   /// Filter distances are in document pixels; [space] maps them into the
-  /// layer (see [FilterSpace]).
+  /// layer (see [FilterSpace]). [solid] (layer units) is a photo's own
+  /// area: blurs repeat its edge pixels outwards and stay inside it.
   static ui.Image apply(
     ui.Image src,
     Rect rect,
     List<FilterStep> steps, {
     FilterSpace space = FilterSpace.identity,
+    Rect? solid,
   }) {
     var img = src;
     final res = src.width / rect.width;
     // Image pixels per document pixel.
     final grain = res * space.meanPer;
+    // A photo's own pixels (image pixels), when given.
+    final box = solid == null
+        ? null
+        : Rect.fromLTRB(
+            ((solid.left - rect.left) * res).ceilToDouble(),
+            ((solid.top - rect.top) * res).ceilToDouble(),
+            ((solid.right - rect.left) * res).floorToDouble(),
+            ((solid.bottom - rect.top) * res).floorToDouble(),
+          );
     for (final step in steps) {
       final f = step.filter;
+      final spreads =
+          box != null &&
+          box.width >= 1 &&
+          box.height >= 1 &&
+          (f is GaussianBlurFilter ||
+              f is BoxBlurFilter ||
+              f is MotionBlurFilter ||
+              f is RadialBlurFilter ||
+              f is TiltShiftFilter);
+      // Photoshop blurs a photo with its edge pixels repeated outwards, so
+      // its edges stay solid instead of fading into a thin transparent
+      // fringe; the result keeps the photo's bounds.
+      final input = spreads ? _extend(img, box) : img;
       var next = switch (f) {
         GaussianBlurFilter g => _gaussian(
-          img,
+          input,
           g.radius * space.perX * res,
           g.radius * space.perY * res,
         ),
-        BoxBlurFilter b => _box(img, b.radius, space, res),
-        MotionBlurFilter m => _motion(img, m, space, res),
-        RadialBlurFilter r => _radial(img, r, rect, res),
-        TiltShiftFilter t => _tiltShift(img, t, rect, res, space.meanPer),
+        BoxBlurFilter b => _box(input, b.radius, space, res),
+        MotionBlurFilter m => _motion(input, m, space, res),
+        RadialBlurFilter r => _radial(input, r, rect, res),
+        TiltShiftFilter t => _tiltShift(input, t, rect, res, space.meanPer),
         AddNoiseFilter n => _addNoise(img, [
           _NoisePass(
             NoiseTiles.signed(n.gaussian, n.mono, n.seed),
@@ -263,7 +287,13 @@ abstract final class FilterEngine {
         ]),
         SaltPepperFilter s => _saltPepper(img, s, grain),
       };
+      if (!identical(input, img)) input.dispose();
       if (next == null) continue;
+      if (spreads) {
+        final blurred = next;
+        next = _clip(blurred, box);
+        blurred.dispose();
+      }
       // Photoshop's filter Blending Options: the result laid over the
       // unfiltered pixels with a mode and opacity.
       if (step.mode != BlendMode.srcOver || step.opacity < 1) {
@@ -305,6 +335,48 @@ abstract final class FilterEngine {
 
   static Rect _full(ui.Image i) =>
       Rect.fromLTWH(0, 0, i.width.toDouble(), i.height.toDouble());
+
+  /// [src] with everything outside [box] filled by its nearest edge pixel.
+  static ui.Image _extend(ui.Image src, Rect box) {
+    final inner = _draw(
+      box.width.toInt(),
+      box.height.toInt(),
+      (c) => c.drawImageRect(
+        src,
+        box,
+        Offset.zero & box.size,
+        Paint()..filterQuality = FilterQuality.none,
+      ),
+    );
+    final out = _draw(src.width, src.height, (c) {
+      c.drawRect(
+        _full(src),
+        Paint()
+          ..shader = ImageShader(
+            inner,
+            TileMode.clamp,
+            TileMode.clamp,
+            Float64List.fromList([
+              1, 0, 0, 0, //
+              0, 1, 0, 0, //
+              0, 0, 1, 0, //
+              box.left, box.top, 0, 1, //
+            ]),
+            filterQuality: FilterQuality.none,
+          ),
+      );
+    });
+    inner.dispose();
+    return out;
+  }
+
+  /// [src] cleared outside [box].
+  static ui.Image _clip(ui.Image src, Rect box) =>
+      _draw(src.width, src.height, (c) {
+        c
+          ..clipRect(box)
+          ..drawImage(src, Offset.zero, Paint());
+      });
 
   /// Photoshop's Add Noise: at Amount 100 % Uniform noise moves each
   /// channel by up to ±256 levels (12.5 % → ±32), and Gaussian noise has

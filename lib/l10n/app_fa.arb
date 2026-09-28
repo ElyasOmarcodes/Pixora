@@ -642,5 +642,19 @@
   "thickness": "ضخامت",
   "mirrorTile": "بی‌درز (آینه)",
   "rulerShowLayer": "نمایش لایه انتخاب‌شده روی خط‌کش",
-  "moveIntoGroup": "انتقال به گروه"
+  "moveIntoGroup": "انتقال به گروه",
+  "cornersLinked": "همه گوشه‌ها",
+  "cornersIndividual": "هر گوشه جدا",
+  "cornerN": "گوشه {n}",
+  "roundness": "گردی",
+  "diamondGradient": "الماسی",
+  "squareGradient": "مربعی",
+  "spiralGradient": "مارپیچ",
+  "conicGradient": "مخروطی",
+  "transformMode": "تبدیل",
+  "warp": "تاب‌دادن",
+  "perspective": "پرسپکتیو",
+  "distort": "اعوجاج",
+  "freeTransform": "آزاد",
+  "resetShape": "بازنشانی شکل"
 }

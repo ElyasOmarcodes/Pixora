@@ -8,14 +8,20 @@ void paintCheckerboard(
   Color b, {
   double cell = 12,
 }) {
+  // Only the cells that can be seen: a zoomed-in canvas is far bigger
+  // than the screen, and drawing every cell made panning crawl.
+  final visible = rect.intersect(canvas.getLocalClipBounds());
+  if (visible.isEmpty) return;
   canvas.save();
-  canvas.clipRect(rect);
-  canvas.drawRect(rect, Paint()..color = a);
+  canvas.clipRect(visible);
+  canvas.drawRect(visible, Paint()..color = a);
   final p = Paint()..color = b;
-  final cols = (rect.width / cell).ceil();
-  final rows = (rect.height / cell).ceil();
-  for (var y = 0; y < rows; y++) {
-    for (var x = (y.isOdd ? 1 : 0); x < cols; x += 2) {
+  final x0 = ((visible.left - rect.left) / cell).floor();
+  final y0 = ((visible.top - rect.top) / cell).floor();
+  final x1 = ((visible.right - rect.left) / cell).ceil();
+  final y1 = ((visible.bottom - rect.top) / cell).ceil();
+  for (var y = y0; y < y1; y++) {
+    for (var x = x0 + ((x0 + y).isEven ? 1 : 0); x < x1; x += 2) {
       canvas.drawRect(
         Rect.fromLTWH(rect.left + x * cell, rect.top + y * cell, cell, cell),
         p,

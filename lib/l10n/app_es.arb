@@ -642,5 +642,19 @@
   "thickness": "Grosor",
   "mirrorTile": "Sin costuras (espejo)",
   "rulerShowLayer": "Mostrar capa seleccionada en reglas",
-  "moveIntoGroup": "Mover al grupo"
+  "moveIntoGroup": "Mover al grupo",
+  "cornersLinked": "Todas las esquinas",
+  "cornersIndividual": "Cada esquina",
+  "cornerN": "Esquina {n}",
+  "roundness": "Redondez",
+  "diamondGradient": "Diamante",
+  "squareGradient": "Cuadrado",
+  "spiralGradient": "Espiral",
+  "conicGradient": "Cónico",
+  "transformMode": "Transformar",
+  "warp": "Deformar",
+  "perspective": "Perspectiva",
+  "distort": "Distorsionar",
+  "freeTransform": "Libre",
+  "resetShape": "Restablecer forma"
 }

@@ -355,15 +355,18 @@ class _GradientEditorState extends State<_GradientEditor> {
                         Offset((p.dx - r.left) / sx, (p.dy - r.top) / sy);
                     final (a, b) = _handles(v);
                     final sa = toShown(a), sb = toShown(b);
+                    // Where the handles are drawn (kept on the preview).
+                    final ha = _HandlesPainter.keepIn(sa, r),
+                        hb = _HandlesPainter.keepIn(sb, r);
                     return GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onPanStart: (d) {
                         final p = d.localPosition;
                         _dragStart = toTrue(p);
                         _centerStart = _center;
-                        _drag = (p - sb).distance < 36
+                        _drag = (p - hb).distance < 36
                             ? _Handle.b
-                            : (p - sa).distance < 36
+                            : (p - ha).distance < 36
                             ? _Handle.a
                             : _Handle.move;
                       },
@@ -402,6 +405,7 @@ class _GradientEditorState extends State<_GradientEditor> {
                                 b: sb,
                                 line: _kind != FillKind.radial,
                                 accent: scheme.primary,
+                                clip: r.inflate(14),
                               ),
                             ),
                           ),
@@ -442,37 +446,43 @@ class _GradientEditorState extends State<_GradientEditor> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        round(Icons.add_rounded, l.addStop, () => _addStop()),
-                        round(
-                          Icons.remove_rounded,
-                          l.deleteStop,
-                          _stops.length > 2 ? _deleteStop : null,
-                        ),
-                        round(
-                          Icons.chevron_left_rounded,
-                          l.previous,
-                          () => _step(-1),
-                        ),
-                        round(Icons.swap_horiz_rounded, l.reverse, _reverse),
-                        round(
-                          Icons.chevron_right_rounded,
-                          l.next,
-                          () => _step(1),
-                        ),
-                        round(
-                          Icons.format_color_fill_rounded,
-                          l.color,
-                          _pickColor,
-                        ),
-                        round(
-                          Icons.align_horizontal_center_rounded,
-                          l.distribute,
-                          _distribute,
-                        ),
-                      ],
+                    // Physical order, like the stops bar above: ‹ picks
+                    // the stop to the left, › the one to the right, in
+                    // every language.
+                    Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          round(Icons.add_rounded, l.addStop, () => _addStop()),
+                          round(
+                            Icons.remove_rounded,
+                            l.deleteStop,
+                            _stops.length > 2 ? _deleteStop : null,
+                          ),
+                          round(
+                            Icons.chevron_left_rounded,
+                            l.previous,
+                            () => _step(-1),
+                          ),
+                          round(Icons.swap_horiz_rounded, l.reverse, _reverse),
+                          round(
+                            Icons.chevron_right_rounded,
+                            l.next,
+                            () => _step(1),
+                          ),
+                          round(
+                            Icons.format_color_fill_rounded,
+                            l.color,
+                            _pickColor,
+                          ),
+                          round(
+                            Icons.align_horizontal_center_rounded,
+                            l.distribute,
+                            _distribute,
+                          ),
+                        ],
+                      ),
                     ),
                     PixSlider(
                       label: l.location,
@@ -600,13 +610,23 @@ class _HandlesPainter extends CustomPainter {
     required this.b,
     required this.line,
     required this.accent,
+    required this.clip,
   });
   final Offset a, b;
   final bool line;
   final Color accent;
 
+  /// The preview box (plus room for the handles): a large scale sends
+  /// the gradient line far outside it, so it is clipped there and the
+  /// handles are kept on its edge, where they can still be dragged.
+  final Rect clip;
+
+  static Offset keepIn(Offset p, Rect r) =>
+      Offset(p.dx.clamp(r.left, r.right), p.dy.clamp(r.top, r.bottom));
+
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.clipRect(clip);
     final shadow = Paint()
       ..color = Colors.black.withValues(alpha: 0.35)
       ..strokeWidth = 4
@@ -646,7 +666,9 @@ class _HandlesPainter extends CustomPainter {
           );
       }
     }
-    for (final (p, big) in [(a, true), (b, false)]) {
+    final inner = clip.deflate(14);
+    for (final (p0, big) in [(a, true), (b, false)]) {
+      final p = keepIn(p0, inner);
       canvas
         ..drawCircle(
           p,
@@ -660,7 +682,7 @@ class _HandlesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HandlesPainter old) =>
-      old.a != a || old.b != b || old.line != line;
+      old.a != a || old.b != b || old.line != line || old.clip != clip;
 }
 
 /// The colour-stop ramp: tap a marker to select it, drag it to move it,

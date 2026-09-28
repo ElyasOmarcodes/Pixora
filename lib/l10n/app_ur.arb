@@ -642,5 +642,19 @@
   "thickness": "موٹائی",
   "mirrorTile": "بغیر درز (آئینہ)",
   "rulerShowLayer": "منتخب لیئر رولر پر دکھائیں",
-  "moveIntoGroup": "گروپ میں منتقل کریں"
+  "moveIntoGroup": "گروپ میں منتقل کریں",
+  "cornersLinked": "تمام کونے",
+  "cornersIndividual": "ہر کونا الگ",
+  "cornerN": "کونا {n}",
+  "roundness": "گولائی",
+  "diamondGradient": "ہیرا",
+  "squareGradient": "مربع",
+  "spiralGradient": "چکردار",
+  "conicGradient": "مخروطی",
+  "transformMode": "تبدیلی",
+  "warp": "موڑنا",
+  "perspective": "تناظر",
+  "distort": "بگاڑ",
+  "freeTransform": "آزاد",
+  "resetShape": "شکل ری سیٹ"
 }

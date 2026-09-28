@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import '../features/splash/splash_page.dart';
 import '../l10n/app_localizations.dart';
+import '../ui/widgets/rtl_text_keys.dart';
 import 'app_scope.dart';
 import 'theme/app_theme.dart';
 
@@ -41,6 +42,8 @@ class PixoraApp extends StatelessWidget {
           }
           return const Locale('en');
         },
+        // Arrow keys follow the arrow in right-to-left text fields too.
+        builder: (context, child) => RtlTextKeys(child: child!),
         home: const SplashPage(),
       ),
     );

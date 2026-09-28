@@ -62,22 +62,183 @@ List<ShapeParam> shapeParams(ShapeKind k) => switch (k) {
   ShapeKind.rectangle || ShapeKind.heart || ShapeKind.line => const [],
 };
 
+double _p(ShapeLayer s, String k) {
+  for (final spec in shapeParams(s.shape)) {
+    if (spec.key == k) return s.param(k, spec.defaultValue);
+  }
+  return 0;
+}
+
+/// The sharp corners of a shape (centred on the origin), in order —
+/// rectangles and frames from the top-left, clockwise — or null for
+/// shapes without corners (ellipse, heart, crescent, line, bubble).
+List<Offset>? shapeCorners(ShapeLayer s) {
+  final w = s.width, h = s.height;
+  double p(String k) => _p(s, k);
+  return switch (s.shape) {
+    ShapeKind.rectangle || ShapeKind.frame => [
+      Offset(-w / 2, -h / 2),
+      Offset(w / 2, -h / 2),
+      Offset(w / 2, h / 2),
+      Offset(-w / 2, h / 2),
+    ],
+    ShapeKind.triangle => [
+      Offset(-w / 2 + w * p('apex'), -h / 2),
+      Offset(w / 2, h / 2),
+      Offset(-w / 2, h / 2),
+    ],
+    ShapeKind.star => _starPoints(w, h, s.sides.clamp(3, 64), p('inner')),
+    ShapeKind.polygon => _polygonPoints(w, h, s.sides.clamp(3, 64)),
+    ShapeKind.diamond => [
+      Offset(0, -h / 2),
+      Offset(w / 2, 0),
+      Offset(0, h / 2),
+      Offset(-w / 2, 0),
+    ],
+    ShapeKind.parallelogram => () {
+      final k = p('skew') * w / 2;
+      return [
+        Offset(-w / 2 + k.clamp(0, w), -h / 2),
+        Offset(w / 2 + math.min(0, k), -h / 2),
+        Offset(w / 2 - k.clamp(0, w), h / 2),
+        Offset(-w / 2 - math.min(0, k), h / 2),
+      ];
+    }(),
+    ShapeKind.trapezoid => () {
+      final t = p('top') * w / 2;
+      return [
+        Offset(-t, -h / 2),
+        Offset(t, -h / 2),
+        Offset(w / 2, h / 2),
+        Offset(-w / 2, h / 2),
+      ];
+    }(),
+    ShapeKind.cross => () {
+      final tx = w * p('thickness') / 2, ty = h * p('thickness') / 2;
+      return [
+        Offset(-tx, -h / 2),
+        Offset(tx, -h / 2),
+        Offset(tx, -ty),
+        Offset(w / 2, -ty),
+        Offset(w / 2, ty),
+        Offset(tx, ty),
+        Offset(tx, h / 2),
+        Offset(-tx, h / 2),
+        Offset(-tx, ty),
+        Offset(-w / 2, ty),
+        Offset(-w / 2, -ty),
+        Offset(-tx, -ty),
+      ];
+    }(),
+    ShapeKind.blockArrow => () {
+      final sh = h * p('shaft') / 2;
+      final two = p('heads') >= 1.5;
+      final head = w * p('head') * (two ? 0.5 : 1);
+      return <Offset>[
+        Offset(two ? -w / 2 + head : -w / 2, -sh),
+        Offset(w / 2 - head, -sh),
+        Offset(w / 2 - head, -h / 2),
+        Offset(w / 2, 0),
+        Offset(w / 2 - head, h / 2),
+        Offset(w / 2 - head, sh),
+        Offset(two ? -w / 2 + head : -w / 2, sh),
+        if (two) ...[
+          Offset(-w / 2 + head, h / 2),
+          Offset(-w / 2, 0),
+          Offset(-w / 2 + head, -h / 2),
+        ],
+      ];
+    }(),
+    ShapeKind.chevron => () {
+      final t = w * p('thickness');
+      return [
+        Offset(-w / 2, -h / 2),
+        Offset(-w / 2 + t, -h / 2),
+        Offset(w / 2, 0),
+        Offset(-w / 2 + t, h / 2),
+        Offset(-w / 2, h / 2),
+        Offset(w / 2 - t, 0),
+      ];
+    }(),
+    ShapeKind.gear => _gearPoints(w, h, s.sides.clamp(4, 64), p('depth')),
+    ShapeKind.ellipse ||
+    ShapeKind.heart ||
+    ShapeKind.line ||
+    ShapeKind.crescent ||
+    ShapeKind.speechBubble => null,
+  };
+}
+
+/// Corners edited one by one only up to this many (a 64-point star
+/// keeps one radius for all).
+const maxIndividualCorners = 16;
+
+/// Whether the corners share one radius (the default) or each has its
+/// own (params `c0`, `c1`…).
+bool cornersLinked(ShapeLayer s) => s.param('cornerLink', 1) >= 0.5;
+
+/// Radius of corner [i] (layer pixels).
+double cornerRadiusAt(ShapeLayer s, int i) =>
+    cornersLinked(s) ? s.cornerRadius : s.param('c$i', s.cornerRadius);
+
+/// [s] with every corner radius (the shared one and each corner's)
+/// multiplied by [f] — for resizing.
+ShapeLayer scaleCorners(ShapeLayer s, double f) => s.copyWith(
+  cornerRadius: s.cornerRadius * f,
+  params: {
+    for (final e in s.params.entries)
+      e.key: RegExp(r'^c\d+$').hasMatch(e.key) ? e.value * f : e.value,
+  },
+);
+
 /// Builds the outline of a shape layer, centred on the origin.
 Path buildShapePath(ShapeLayer s) {
   final w = s.width, h = s.height;
   final r = Rect.fromCenter(center: Offset.zero, width: w, height: h);
-  double p(String k) {
-    for (final spec in shapeParams(s.shape)) {
-      if (spec.key == k) return s.param(k, spec.defaultValue);
+  double p(String k) => _p(s, k);
+
+  // True circular corners, each with its own radius (Illustrator's live
+  // corners) — for every shape that has corners.
+  final corners = shapeCorners(s);
+  if (corners != null &&
+      s.shape != ShapeKind.rectangle &&
+      s.shape != ShapeKind.frame) {
+    final radii = [
+      for (var i = 0; i < corners.length; i++) cornerRadiusAt(s, i),
+    ];
+    if (radii.any((x) => x > 0)) {
+      final path = _arcCorners(corners, radii);
+      if (s.shape == ShapeKind.gear && p('hole') > 0) {
+        path
+          ..fillType = PathFillType.evenOdd
+          ..addOval(
+            Rect.fromCenter(
+              center: Offset.zero,
+              width: w * p('hole'),
+              height: h * p('hole'),
+            ),
+          );
+      }
+      return path;
     }
-    return 0;
+  }
+
+  RRect rrect(Rect box, double inset) {
+    Radius at(int i) => Radius.circular(
+      (cornerRadiusAt(s, i) - inset).clamp(0.0, math.min(w, h) / 2),
+    );
+    return RRect.fromRectAndCorners(
+      box,
+      topLeft: at(0),
+      topRight: at(1),
+      bottomRight: at(2),
+      bottomLeft: at(3),
+    );
   }
 
   switch (s.shape) {
     case ShapeKind.rectangle:
-      final radius = s.cornerRadius.clamp(0.0, math.min(w, h) / 2);
-      return Path()
-        ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(radius)));
+      return Path()..addRRect(rrect(r, 0));
     case ShapeKind.ellipse:
       return _ellipse(r, p('sweep'), p('start'), p('inner'));
     case ShapeKind.triangle:
@@ -191,17 +352,71 @@ Path buildShapePath(ShapeLayer s) {
       return _gear(w, h, s.sides.clamp(4, 64), p('depth'), p('hole'));
     case ShapeKind.frame:
       final t = math.min(w, h) * p('thickness');
-      final radius = s.cornerRadius.clamp(0.0, math.min(w, h) / 2);
       return Path()
         ..fillType = PathFillType.evenOdd
-        ..addRRect(RRect.fromRectAndRadius(r, Radius.circular(radius)))
-        ..addRRect(
-          RRect.fromRectAndRadius(
-            r.deflate(t),
-            Radius.circular(math.max(0, radius - t)),
-          ),
-        );
+        ..addRRect(rrect(r, 0))
+        ..addRRect(rrect(r.deflate(t), t));
   }
+}
+
+/// A closed polygon whose corner `i` is a circular arc of `radii[i]`,
+/// shrunk where the neighbouring edges are too short to hold it.
+Path _arcCorners(List<Offset> pts, List<double> radii) {
+  final n = pts.length;
+  final path = Path();
+  for (var i = 0; i < n; i++) {
+    final prev = pts[(i - 1 + n) % n], v = pts[i], next = pts[(i + 1) % n];
+    final a = prev - v, b = next - v;
+    final la = a.distance, lb = b.distance;
+    var r = radii[i];
+    Offset start = v, end = v;
+    var arc = false;
+    if (r > 0 && la > 1e-9 && lb > 1e-9) {
+      final ua = a / la, ub = b / lb;
+      final cos = (ua.dx * ub.dx + ua.dy * ub.dy).clamp(-1.0, 1.0);
+      final theta = math.acos(cos); // the corner's inner angle
+      if (theta > 1e-3 && theta < math.pi - 1e-3) {
+        // Distance from the corner to where the arc meets each edge.
+        var d = r / math.tan(theta / 2);
+        final limit = math.min(la, lb) / 2;
+        if (d > limit) {
+          d = limit;
+          r = d * math.tan(theta / 2);
+        }
+        start = v + ua * d;
+        end = v + ub * d;
+        arc = true;
+      }
+    }
+    if (i == 0) {
+      path.moveTo(start.dx, start.dy);
+    } else {
+      path.lineTo(start.dx, start.dy);
+    }
+    if (arc) {
+      final cross = a.dx * b.dy - a.dy * b.dx;
+      path.arcToPoint(end, radius: Radius.circular(r), clockwise: cross < 0);
+    }
+  }
+  return path..close();
+}
+
+List<Offset> _gearPoints(double w, double h, int teeth, double depth) {
+  final pts = <Offset>[];
+  for (var i = 0; i < teeth; i++) {
+    final a = i * 2 * math.pi / teeth;
+    final step = 2 * math.pi / teeth;
+    for (final (f, k) in [
+      (0.0, 1 - depth),
+      (0.15, 1.0),
+      (0.45, 1.0),
+      (0.6, 1 - depth),
+    ]) {
+      final ang = a + f * step - math.pi / 2;
+      pts.add(Offset(math.cos(ang) * w / 2 * k, math.sin(ang) * h / 2 * k));
+    }
+  }
+  return pts;
 }
 
 /// Full ellipse, pie slice, arc band or ring.

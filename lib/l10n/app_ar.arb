@@ -642,5 +642,19 @@
   "thickness": "السماكة",
   "mirrorTile": "بلا فواصل (مرآة)",
   "rulerShowLayer": "إظهار الطبقة المحددة على المساطر",
-  "moveIntoGroup": "نقل إلى مجموعة"
+  "moveIntoGroup": "نقل إلى مجموعة",
+  "cornersLinked": "كل الزوايا",
+  "cornersIndividual": "كل زاوية",
+  "cornerN": "الزاوية {n}",
+  "roundness": "الاستدارة",
+  "diamondGradient": "ماسي",
+  "squareGradient": "مربع",
+  "spiralGradient": "حلزوني",
+  "conicGradient": "مخروطي",
+  "transformMode": "تحويل",
+  "warp": "تشويه",
+  "perspective": "منظور",
+  "distort": "تشويه حر",
+  "freeTransform": "حر",
+  "resetShape": "إعادة الشكل"
 }

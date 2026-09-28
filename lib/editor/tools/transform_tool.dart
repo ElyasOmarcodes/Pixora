@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../document/model/layer.dart';
 import '../../document/model/layer_geometry.dart';
 import '../../document/render/document_renderer.dart';
+import '../../document/render/shape_paths.dart' show scaleCorners;
 import '../../document/render/text_layout.dart';
 import 'editor_tool.dart';
 import 'snapping.dart';
@@ -398,10 +399,9 @@ class TransformTool extends EditorTool {
       case HandleKind.corner:
         final f = _ratio(anchorDoc, pointer, vp);
         next = switch (leaf) {
-          ShapeLayer s => s.copyWith(
+          ShapeLayer s => scaleCorners(s, f).copyWith(
             width: math.max(minSize, s.width * f),
             height: math.max(minSize, s.height * f),
-            cornerRadius: s.cornerRadius * f,
           ),
           _ => applySimilarity(leaf, Similarity(scale: f)),
         };

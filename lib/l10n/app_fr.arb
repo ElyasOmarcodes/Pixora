@@ -642,5 +642,19 @@
   "thickness": "Épaisseur",
   "mirrorTile": "Sans raccord (miroir)",
   "rulerShowLayer": "Afficher le calque sélectionné sur les règles",
-  "moveIntoGroup": "Déplacer dans le groupe"
+  "moveIntoGroup": "Déplacer dans le groupe",
+  "cornersLinked": "Tous les coins",
+  "cornersIndividual": "Chaque coin",
+  "cornerN": "Coin {n}",
+  "roundness": "Arrondi",
+  "diamondGradient": "Losange",
+  "squareGradient": "Carré",
+  "spiralGradient": "Spirale",
+  "conicGradient": "Conique",
+  "transformMode": "Transformer",
+  "warp": "Déformer",
+  "perspective": "Perspective",
+  "distort": "Distordre",
+  "freeTransform": "Libre",
+  "resetShape": "Réinitialiser la forme"
 }

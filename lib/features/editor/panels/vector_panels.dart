@@ -1116,13 +1116,15 @@ class ShapeStylePanel extends StatelessWidget {
     void commit([_]) => editor.commit('shape');
     final k = layer.shape;
     final minSide = math.min(layer.width, layer.height);
+    final corners = shapeCorners(layer);
+    final linked = cornersLinked(layer);
 
     String label(String key) => switch (key) {
       'sweep' => l.pSweep,
       'start' => l.pStart,
       'inner' => k == ShapeKind.star ? l.pSharpness : l.pInner,
       'apex' => l.pApex,
-      'round' => l.corners,
+      'round' => l.roundness,
       'skew' => l.pSkew,
       'top' => l.pTop,
       'thickness' => l.pThickness,
@@ -1180,17 +1182,69 @@ class ShapeStylePanel extends StatelessWidget {
                 edit((x) => x.copyWith(sides: v.round()), live: true),
             onChangeEnd: commit,
           ),
-        if (k == ShapeKind.rectangle || k == ShapeKind.frame)
-          PixSlider(
-            label: l.corners,
-            value: layer.cornerRadius,
-            min: 0,
-            max: minSide / 2,
-            defaultValue: 0,
-            onChanged: (v) =>
-                edit((x) => x.copyWith(cornerRadius: v), live: true),
-            onChangeEnd: commit,
-          ),
+        // Corner radius: one for all corners, or each on its own.
+        if (corners != null) ...[
+          if (corners.length <= maxIndividualCorners)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+              child: SegmentedButton<bool>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                segments: [
+                  ButtonSegment(
+                    value: true,
+                    icon: const Icon(Icons.link_rounded, size: 18),
+                    label: Text(l.cornersLinked, maxLines: 1),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    icon: const Icon(Icons.rounded_corner_rounded, size: 18),
+                    label: Text(l.cornersIndividual, maxLines: 1),
+                  ),
+                ],
+                selected: {linked},
+                onSelectionChanged: (v) => edit(
+                  (x) => v.first
+                      ? x.withParam('cornerLink', 1)
+                      : x.copyWith(
+                          params: {
+                            ...x.params,
+                            'cornerLink': 0,
+                            // Start every corner from the shared radius.
+                            for (var i = 0; i < corners.length; i++)
+                              'c$i': x.params['c$i'] ?? x.cornerRadius,
+                          },
+                        ),
+                ),
+              ),
+            ),
+          if (linked || corners.length > maxIndividualCorners)
+            PixSlider(
+              label: l.corners,
+              value: layer.cornerRadius.clamp(0, minSide / 2).toDouble(),
+              min: 0,
+              max: minSide / 2,
+              defaultValue: 0,
+              onChanged: (v) =>
+                  edit((x) => x.copyWith(cornerRadius: v), live: true),
+              onChangeEnd: commit,
+            )
+          else
+            for (var i = 0; i < corners.length; i++)
+              PixSlider(
+                label: l.cornerN(i + 1),
+                value: cornerRadiusAt(
+                  layer,
+                  i,
+                ).clamp(0, minSide / 2).toDouble(),
+                min: 0,
+                max: minSide / 2,
+                defaultValue: 0,
+                onChanged: (v) =>
+                    edit((x) => x.withParam('c$i', v), live: true),
+                onChangeEnd: commit,
+              ),
+        ],
         for (final p in shapeParams(k))
           PixSlider(
             label: label(p.key),

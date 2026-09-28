@@ -727,5 +727,26 @@
   "thickness": "Thickness",
   "mirrorTile": "Seamless (mirror)",
   "rulerShowLayer": "Show selected layer on rulers",
-  "moveIntoGroup": "Move into group"
+  "moveIntoGroup": "Move into group",
+  "cornersLinked": "All corners",
+  "cornersIndividual": "Each corner",
+  "cornerN": "Corner {n}",
+  "@cornerN": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "roundness": "Roundness",
+  "diamondGradient": "Diamond",
+  "squareGradient": "Square",
+  "spiralGradient": "Spiral",
+  "conicGradient": "Conic",
+  "transformMode": "Transform",
+  "warp": "Warp",
+  "perspective": "Perspective",
+  "distort": "Distort",
+  "freeTransform": "Free",
+  "resetShape": "Reset shape"
 }

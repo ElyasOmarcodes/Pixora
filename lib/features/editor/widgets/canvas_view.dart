@@ -1,10 +1,12 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_theme.dart';
 import '../../../document/render/document_renderer.dart';
+import '../../../document/render/text_layout.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../core/units/units.dart';
 import '../../../editor/tools/editor_tool.dart';
@@ -88,6 +90,8 @@ class _CanvasViewState extends State<CanvasView>
 
   final ValueNotifier<int> _overlayTick = ValueNotifier(0);
 
+  late _DocumentPicture _picture = _DocumentPicture(widget.editor);
+
   /// Guide being dragged out of a ruler: (vertical?, doc position).
   final ValueNotifier<(bool, double)?> _pendingGuide = ValueNotifier(null);
 
@@ -100,6 +104,10 @@ class _CanvasViewState extends State<CanvasView>
   @override
   void didUpdateWidget(CanvasView old) {
     super.didUpdateWidget(old);
+    if (old.editor != widget.editor) {
+      _picture.dispose();
+      _picture = _DocumentPicture(widget.editor);
+    }
     if (old.controller != widget.controller) {
       old.controller?._state = null;
       widget.controller?._state = this;
@@ -116,6 +124,7 @@ class _CanvasViewState extends State<CanvasView>
   void dispose() {
     if (widget.controller?._state == this) widget.controller?._state = null;
     _pendingGuide.dispose();
+    _picture.dispose();
     _anim.dispose();
     _overlayTick.dispose();
     super.dispose();
@@ -310,6 +319,7 @@ class _CanvasViewState extends State<CanvasView>
                       size: size,
                       painter: _DocumentPainter(
                         editor: widget.editor,
+                        picture: _picture,
                         scale: _vp.scale,
                         offset: _vp.offset,
                         checkerA: pix.checkerA,
@@ -699,9 +709,57 @@ class _RulerSizeLabels extends CustomPainter {
       old.color != color;
 }
 
+/// The document recorded once as a picture (document space), replayed
+/// while panning and zooming: moving the view no longer re-runs the
+/// renderer for every layer each frame (what made big projects crawl).
+/// It is recorded again when the document or a render result changes
+/// (the editor notifies) or the zoom crosses a detail level.
+class _DocumentPicture {
+  _DocumentPicture(this.editor) {
+    editor.addListener(invalidate);
+  }
+  final EditorController editor;
+  ui.Picture? _picture;
+  double _detail = 0;
+  int _gen = -1;
+
+  void invalidate() {
+    _picture?.dispose();
+    _picture = null;
+  }
+
+  /// Detail levels in steps of √2, so a zoom gesture re-records rarely
+  /// and the picture never has less detail than the screen.
+  static double detailFor(double pixelScale) {
+    final steps = (math.log(math.max(pixelScale, 1e-3)) / math.ln2 * 2).ceil();
+    return math.pow(2, steps / 2).toDouble();
+  }
+
+  ui.Picture pictureAt(double pixelScale) {
+    final detail = detailFor(pixelScale);
+    final hit = _picture;
+    // Fonts that finish loading change text without an edit.
+    final gen = TextLayoutCache.generation;
+    if (hit != null && detail == _detail && gen == _gen) return hit;
+    hit?.dispose();
+    _gen = gen;
+    final recorder = ui.PictureRecorder();
+    final doc = editor.document;
+    editor.viewRenderer(detail).paint(Canvas(recorder), doc);
+    _detail = detail;
+    return _picture = recorder.endRecording();
+  }
+
+  void dispose() {
+    editor.removeListener(invalidate);
+    invalidate();
+  }
+}
+
 class _DocumentPainter extends CustomPainter {
   _DocumentPainter({
     required this.editor,
+    required this.picture,
     required this.scale,
     required this.offset,
     required this.checkerA,
@@ -713,6 +771,7 @@ class _DocumentPainter extends CustomPainter {
   final double devicePixelRatio;
 
   final EditorController editor;
+  final _DocumentPicture picture;
   final double scale;
   final Offset offset;
   final Color checkerA, checkerB, shadow;
@@ -720,6 +779,8 @@ class _DocumentPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final doc = editor.document;
+    final view = Offset.zero & size;
+    canvas.clipRect(view);
     final screenRect = Rect.fromLTWH(
       offset.dx,
       offset.dy,
@@ -727,12 +788,19 @@ class _DocumentPainter extends CustomPainter {
       doc.height * scale,
     );
 
-    canvas.drawRect(
-      screenRect.shift(const Offset(0, 6)),
-      Paint()
-        ..color = shadow
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
-    );
+    // Only the part near the screen: a blurred shadow the size of a
+    // zoomed-in canvas is costly, and its far edges are off screen.
+    final shadowRect = screenRect
+        .shift(const Offset(0, 6))
+        .intersect(view.inflate(80));
+    if (!shadowRect.isEmpty) {
+      canvas.drawRect(
+        shadowRect,
+        Paint()
+          ..color = shadow
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+      );
+    }
     if (doc.background == null || doc.background!.primary.a < 1) {
       paintCheckerboard(canvas, screenRect, checkerA, checkerB, cell: 10);
     }
@@ -740,9 +808,9 @@ class _DocumentPainter extends CustomPainter {
     canvas
       ..save()
       ..translate(offset.dx, offset.dy)
-      ..scale(scale);
-    editor.viewRenderer(scale * devicePixelRatio).paint(canvas, doc);
-    canvas.restore();
+      ..scale(scale)
+      ..drawPicture(picture.pictureAt(scale * devicePixelRatio))
+      ..restore();
   }
 
   @override
