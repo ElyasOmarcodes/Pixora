@@ -657,5 +657,8 @@
   "distort": "اعوجاج",
   "freeTransform": "آزاد",
   "resetShape": "بازنشانی شکل",
-  "ellipticalGradient": "بیضوی"
+  "ellipticalGradient": "بیضوی",
+  "distortHint": "هر گوشه را به هر جا بکشید.",
+  "perspectiveHint": "یک گوشه را بکشید: گوشهٔ مقابل قرینه حرکت می‌کند، مثل فتوشاپ.",
+  "warpHint": "نقاط شبکه را بکشید تا لایه خم شود."
 }

@@ -5,6 +5,7 @@ import '../../editor/selection/selection_controller.dart';
 import '../../editor/tools/draw_tool.dart';
 import '../../editor/tools/mask_tool.dart';
 import '../../editor/tools/pen_tool.dart';
+import '../../editor/tools/warp_tool.dart';
 
 /// Which contextual tool panel is open.
 enum ToolPanel {
@@ -46,6 +47,9 @@ enum ToolPanel {
   /// A pixel filter (blur, noise…) on the layer: [EditorUiState.effectId].
   effect,
   satin,
+
+  /// Distort / Perspective / Warp handles on the canvas.
+  warp,
 }
 
 /// What pointer input on the canvas does.
@@ -70,6 +74,9 @@ enum ToolMode {
 
   /// Pixel selections (Select menu).
   select,
+
+  /// Distort / Perspective / Warp handles.
+  warp,
 }
 
 /// Editor UI state that is not part of the document (and therefore not
@@ -90,6 +97,9 @@ class EditorUiState extends ChangeNotifier {
 
   /// Pixel selection and Select-menu settings.
   final SelectionController selection = SelectionController();
+
+  /// Which warp handles show (Distort / Perspective / Warp).
+  final WarpState warpState = WarpState();
 
   /// The effect the [ToolPanel.effect] panel edits.
   String? effectId;
@@ -121,10 +131,13 @@ class EditorUiState extends ChangeNotifier {
       _mode = ToolMode.draw;
     } else if (p == ToolPanel.selection) {
       _mode = ToolMode.select;
+    } else if (p == ToolPanel.warp) {
+      _mode = ToolMode.warp;
     } else if (_mode == ToolMode.mask ||
         _mode == ToolMode.pen ||
         _mode == ToolMode.draw ||
-        _mode == ToolMode.select) {
+        _mode == ToolMode.select ||
+        _mode == ToolMode.warp) {
       _mode = ToolMode.move;
       maskBrush.clearPen();
     }
@@ -138,6 +151,7 @@ class EditorUiState extends ChangeNotifier {
     penState.dispose();
     brushSettings.dispose();
     selection.dispose();
+    warpState.dispose();
     super.dispose();
   }
 

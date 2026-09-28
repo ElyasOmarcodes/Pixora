@@ -367,6 +367,15 @@ List<QuickAction> quickActionsFor(
   final del = list.lastIndexOf(delete);
   list.insertAll(del < 0 ? list.length : del, groupMoves);
 
+  // Distort / Perspective / Warp, next to Rotate.
+  if (layer is! GroupLayer) {
+    final ri = list.indexOf(rotate);
+    list.insert(
+      ri < 0 ? list.length - 1 : ri + 1,
+      panel(Icons.gesture_rounded, l.warp, ToolPanel.warp),
+    );
+  }
+
   // Effects: add next to the styles, copy / paste next to Duplicate.
   final at = list.indexOf(shadow);
   list.insert(at < 0 ? 0 : at, addFx);

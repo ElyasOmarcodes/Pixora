@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/painting.dart';
 
+import '../model/warp.dart';
+
 /// A pixel filter (Photoshop's Filter menu, applied as a smart filter):
 /// it works on the layer's own pixels, before the layer mask and before
 /// layer styles, so styles follow the filtered result.
@@ -190,6 +192,22 @@ class FilterSpace {
   int get hashCode => Object.hash(a, b, c, d);
 }
 
+/// Edit ▸ Transform ▸ Distort / Perspective / Warp: the layer's own
+/// pixels bent by [geometry] over [box] (the layer's box, layer units).
+/// Runs before the other filters, so styles follow the new shape.
+class WarpFilter extends PixFilter {
+  const WarpFilter(this.geometry, this.box);
+  final WarpGeometry geometry;
+  final Rect box;
+
+  @override
+  double get reach => geometry.reach * box.longestSide + 2;
+
+  /// In layer units: the warp follows the layer box.
+  @override
+  double reachIn(FilterSpace space) => reach;
+}
+
 /// A filter with its Blending Options.
 class FilterStep {
   const FilterStep(
@@ -286,6 +304,7 @@ abstract final class FilterEngine {
             ),
         ]),
         SaltPepperFilter s => _saltPepper(img, s, grain),
+        WarpFilter w => _warp(img, w, rect, res),
       };
       if (!identical(input, img)) input.dispose();
       if (next == null) continue;
@@ -367,6 +386,74 @@ abstract final class FilterEngine {
       );
     });
     inner.dispose();
+    return out;
+  }
+
+  /// Bends [src] (covering [rect], layer units) through a fine triangle
+  /// mesh: each vertex sits where the warp sends it and samples where it
+  /// came from.
+  static ui.Image? _warp(ui.Image src, WarpFilter f, Rect rect, double res) {
+    final g = f.geometry;
+    if (g.isIdentity) return null;
+    final b = f.box;
+    // A finer mesh for Bézier warps; perspective is smooth enough at 24.
+    final n = g.hasMesh ? 40 : 24;
+    final pos = Float32List((n + 1) * (n + 1) * 2);
+    final tex = Float32List((n + 1) * (n + 1) * 2);
+    var k = 0;
+    for (var i = 0; i <= n; i++) {
+      final v = i / n;
+      for (var j = 0; j <= n; j++) {
+        final u = j / n;
+        final to = g.map(u, v);
+        pos[k] = (b.left + to.dx * b.width - rect.left) * res;
+        pos[k + 1] = (b.top + to.dy * b.height - rect.top) * res;
+        tex[k] = (b.left + u * b.width - rect.left) * res;
+        tex[k + 1] = (b.top + v * b.height - rect.top) * res;
+        k += 2;
+      }
+    }
+    final idx = Uint16List(n * n * 6);
+    var t = 0;
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        final a = i * (n + 1) + j, c = a + n + 1;
+        idx
+          ..[t++] = a
+          ..[t++] = a + 1
+          ..[t++] = c
+          ..[t++] = a + 1
+          ..[t++] = c + 1
+          ..[t++] = c;
+      }
+    }
+    final vertices = ui.Vertices.raw(
+      ui.VertexMode.triangles,
+      pos,
+      textureCoordinates: tex,
+      indices: idx,
+    );
+    final out = _draw(src.width, src.height, (c) {
+      c.drawVertices(
+        vertices,
+        BlendMode.srcOver,
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..shader = ImageShader(
+            src,
+            TileMode.decal,
+            TileMode.decal,
+            Float64List.fromList([
+              1, 0, 0, 0, //
+              0, 1, 0, 0, //
+              0, 0, 1, 0, //
+              0, 0, 0, 1, //
+            ]),
+            filterQuality: FilterQuality.medium,
+          ),
+      );
+    });
+    vertices.dispose();
     return out;
   }
 

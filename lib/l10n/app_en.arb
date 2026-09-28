@@ -749,5 +749,8 @@
   "distort": "Distort",
   "freeTransform": "Free",
   "resetShape": "Reset shape",
-  "ellipticalGradient": "Elliptical"
+  "ellipticalGradient": "Elliptical",
+  "distortHint": "Drag any corner anywhere.",
+  "perspectiveHint": "Drag a corner: its partner moves the mirrored way, as in Photoshop.",
+  "warpHint": "Drag the grid points to bend the layer."
 }

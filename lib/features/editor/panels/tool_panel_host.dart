@@ -19,6 +19,7 @@ import '../pen_targets.dart';
 import '../../../editor/tools/select_tool.dart';
 import 'selection_panel.dart';
 import 'bevel_panel.dart';
+import 'warp_panel.dart';
 import 'filter_panels.dart';
 
 /// Page-level actions panels need.
@@ -145,6 +146,11 @@ class ToolPanelHost extends StatelessWidget {
         editor: editor,
         layer: layer,
         effectId: ui.effectId!,
+      ),
+      ToolPanel.warp => WarpPanel(
+        editor: editor,
+        layer: layer,
+        state: ui.warpState,
       ),
       ToolPanel.bevel => BevelPanel(editor: editor, layer: layer),
       ToolPanel.extrude => Extrude3DPanel(editor: editor, layer: layer),

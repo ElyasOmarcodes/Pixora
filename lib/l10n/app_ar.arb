@@ -657,5 +657,8 @@
   "distort": "تشويه حر",
   "freeTransform": "حر",
   "resetShape": "إعادة الشكل",
-  "ellipticalGradient": "بيضاوي"
+  "ellipticalGradient": "بيضاوي",
+  "distortHint": "اسحب أي زاوية إلى أي مكان.",
+  "perspectiveHint": "اسحب زاوية: تتحرك الزاوية المقابلة بشكل معكوس كما في فوتوشوب.",
+  "warpHint": "اسحب نقاط الشبكة لثني الطبقة."
 }

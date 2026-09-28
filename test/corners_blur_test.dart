@@ -24,11 +24,7 @@ ShapeLayer shape(ShapeKind k, {double r = 0, Map<String, double>? p}) =>
 
 void main() {
   test('rectangle corners can each have their own radius', () {
-    final s = shape(
-      ShapeKind.rectangle,
-      r: 30,
-      p: {'cornerLink': 0, 'c0': 0},
-    );
+    final s = shape(ShapeKind.rectangle, r: 30, p: {'cornerLink': 0, 'c0': 0});
     final path = buildShapePath(s);
     // Top-left stays sharp, bottom-right is rounded.
     expect(path.contains(const Offset(-49, -49)), isTrue);

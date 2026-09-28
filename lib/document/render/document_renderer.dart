@@ -2525,7 +2525,11 @@ class _ShapeSource {
 
   static List<FilterStep> _filters(DocumentRenderer r, Layer layer, Rect box) =>
       [
-        for (final e in layer.props.effects)
+        // Warps first (Photoshop bends the layer, then filters it).
+        for (final e in [
+          ...layer.props.effects.where((e) => e.type == 'warp'),
+          ...layer.props.effects.where((e) => e.type != 'warp'),
+        ])
           if (e.enabled)
             if (r._fx[e.type]?.filter?.call(e, box) case final f?)
               FilterStep(

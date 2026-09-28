@@ -657,5 +657,8 @@
   "distort": "Distordre",
   "freeTransform": "Libre",
   "resetShape": "Réinitialiser la forme",
-  "ellipticalGradient": "Elliptique"
+  "ellipticalGradient": "Elliptique",
+  "distortHint": "Faites glisser un coin n’importe où.",
+  "perspectiveHint": "Faites glisser un coin : son vis-à-vis bouge en miroir, comme dans Photoshop.",
+  "warpHint": "Faites glisser les points de la grille pour déformer le calque."
 }

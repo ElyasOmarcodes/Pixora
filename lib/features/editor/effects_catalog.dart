@@ -130,10 +130,12 @@ String fxLabel(AppLocalizations l, String key) => switch (key) {
   'extrude' => l.extrude3d,
   'adjust' => l.adjust,
   'filters' => l.filters,
+  'warp' => l.warp,
   _ => effectLabel(l, key),
 };
 
 IconData fxIcon(String type) {
+  if (type == 'warp') return Icons.gesture_rounded;
   for (final e in fxCatalog) {
     if (e.key == type) return e.icon;
   }
@@ -148,6 +150,7 @@ IconData fxIcon(String type) {
 /// Where an existing effect of [type] is edited (null: by id, in the
 /// pixel-filter panel), and on which tab.
 (ToolPanel?, bool) panelForEffect(String type) {
+  if (type == 'warp') return (ToolPanel.warp, false);
   for (final e in fxCatalog) {
     if (e.key == type) return (e.panel, e.inner ?? false);
   }

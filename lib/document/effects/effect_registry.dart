@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import '../model/blend.dart';
 import '../model/effect.dart';
+import '../model/warp.dart';
 import '../render/color_matrix.dart';
 import '../render/filter_engine.dart';
 
@@ -783,6 +784,25 @@ class EffectRegistry {
           EffectParam.number('radius', min: 0, max: 250, defaultValue: 5),
         ],
         filter: (e, _) => GaussianBlurFilter(e.number('radius', 5)),
+      ),
+    );
+    // Edit ▸ Transform ▸ Distort / Perspective / Warp (see WarpGeometry).
+    register(
+      EffectDefinition(
+        type: 'warp',
+        category: EffectCategory.filter,
+        params: [
+          const EffectParam.number(
+            'mode',
+            min: 0,
+            max: 2,
+            defaultValue: 2,
+            step: 1,
+          ),
+          for (final k in WarpGeometry.keys)
+            EffectParam.number(k, min: -4, max: 4, defaultValue: 0),
+        ],
+        filter: (e, box) => WarpFilter(WarpGeometry.of(e), box),
       ),
     );
     register(

@@ -657,5 +657,8 @@
   "distort": "اوښتون",
   "freeTransform": "آزاد",
   "resetShape": "شکل بېرته",
-  "ellipticalGradient": "بیضوي"
+  "ellipticalGradient": "بیضوي",
+  "distortHint": "هر کونج هر ځای ته کش کړئ.",
+  "perspectiveHint": "یو کونج کش کړئ: مقابل کونج یې په هنداري ډول ځي، لکه فوټوشاپ.",
+  "warpHint": "د جال ټکي کش کړئ ترڅو لایر کږ شي."
 }

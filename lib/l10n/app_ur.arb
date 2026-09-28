@@ -657,5 +657,8 @@
   "distort": "بگاڑ",
   "freeTransform": "آزاد",
   "resetShape": "شکل ری سیٹ",
-  "ellipticalGradient": "بیضوی"
+  "ellipticalGradient": "بیضوی",
+  "distortHint": "کسی بھی کونے کو کہیں بھی کھینچیں۔",
+  "perspectiveHint": "ایک کونا کھینچیں: مقابل کونا الٹا چلتا ہے، فوٹوشاپ کی طرح۔",
+  "warpHint": "لیئر موڑنے کے لیے گرڈ کے نقطے کھینچیں۔"
 }

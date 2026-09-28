@@ -23,6 +23,7 @@ import 'pen_targets.dart';
 import '../../core/icons/icon_catalog.dart';
 import '../../editor/tools/pen_tool.dart';
 import '../../editor/tools/select_tool.dart';
+import '../../editor/tools/warp_tool.dart';
 import '../../editor/selection/selection_controller.dart';
 import 'dialogs/text_dialog.dart';
 import 'dialogs/close_dialog.dart';
@@ -85,6 +86,7 @@ class _EditorPageState extends State<EditorPage> {
   late final SelectTool _selectTool = SelectTool(_ui.selection);
   final SelectionPenTarget _selectionPen = SelectionPenTarget();
   late final DrawTool _drawTool = DrawTool(_ui.brushSettings);
+  late final WarpTool _warpTool = WarpTool(_ui.warpState);
 
   /// The drawing layer the brush panel is painting into.
   String? _drawingId;
@@ -99,6 +101,7 @@ class _EditorPageState extends State<EditorPage> {
     ToolMode.draw => _drawTool,
     ToolMode.select =>
       _ui.selection.tool == SelectToolKind.pen ? _penTool : _selectTool,
+    ToolMode.warp => _warpTool,
   };
 
   /// Points the pen at what it should edit: the selected vector layer in

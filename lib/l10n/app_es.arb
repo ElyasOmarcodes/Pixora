@@ -657,5 +657,8 @@
   "distort": "Distorsionar",
   "freeTransform": "Libre",
   "resetShape": "Restablecer forma",
-  "ellipticalGradient": "Elíptico"
+  "ellipticalGradient": "Elíptico",
+  "distortHint": "Arrastra cualquier esquina a donde quieras.",
+  "perspectiveHint": "Arrastra una esquina: su pareja se mueve en espejo, como en Photoshop.",
+  "warpHint": "Arrastra los puntos de la malla para deformar la capa."
 }

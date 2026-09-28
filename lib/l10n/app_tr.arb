@@ -657,5 +657,8 @@
   "distort": "Bozulma",
   "freeTransform": "Serbest",
   "resetShape": "Şekli sıfırla",
-  "ellipticalGradient": "Eliptik"
+  "ellipticalGradient": "Eliptik",
+  "distortHint": "Herhangi bir köşeyi istediğiniz yere sürükleyin.",
+  "perspectiveHint": "Bir köşeyi sürükleyin: eşi ayna gibi hareket eder, Photoshop’taki gibi.",
+  "warpHint": "Katmanı bükmek için ızgara noktalarını sürükleyin."
 }
