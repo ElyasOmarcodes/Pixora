@@ -939,6 +939,9 @@ abstract final class FilterEngine {
   static ui.Image _grey(ui.Image src, {bool luminance = false}) =>
       _draw(src.width, src.height, (c) {
         if (luminance) {
+          // Opaque: height = luminance × alpha, so a layer's outline makes
+          // relief too (transparent pixels would break the arithmetic).
+          c.drawRect(_full(src), Paint()..color = const Color(0xFF000000));
           c.drawImage(
             src,
             Offset.zero,
