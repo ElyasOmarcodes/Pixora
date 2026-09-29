@@ -10,7 +10,6 @@ import '../../../document/model/layer.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/layer_style.dart';
-import '../../../ui/widgets/checkerboard.dart';
 import '../../../document/model/effect.dart';
 import '../editor_scope.dart';
 import '../effects_catalog.dart';
@@ -1176,6 +1175,8 @@ class _Thumb extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Container(
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(11),
               border: Border.all(color: color, width: 2),
@@ -1186,7 +1187,12 @@ class _Thumb extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CheckerboardBox(a: pix.checkerA, b: pix.checkerB, cell: 5),
+                  ThumbBackdrop(
+                    layer: layer,
+                    editor: editor,
+                    a: pix.checkerA,
+                    b: pix.checkerB,
+                  ),
                   LayerThumbImage(layer: layer, editor: editor),
                 ],
               ),

@@ -744,5 +744,17 @@
   "greetMorning": "Buenos días",
   "greetAfternoon": "Buenas tardes",
   "greetEvening": "Buenas noches",
-  "createToday": "¿Qué crearás hoy?"
+  "createToday": "¿Qué crearás hoy?",
+  "fxDispersion": "Dispersión",
+  "fxBreakArea": "Zona de ruptura",
+  "fxStart": "Inicio",
+  "fxErode": "Erosionar original",
+  "fxParticles": "Partículas",
+  "fxSquare": "Cuadrado",
+  "fxCircle": "Círculo",
+  "fxShard": "Esquirla",
+  "fxSplatter": "Salpicadura",
+  "fxSizeJitter": "Variación de tamaño",
+  "fxStretch": "Estirar",
+  "fxFadeOut": "Desvanecer con la distancia"
 }

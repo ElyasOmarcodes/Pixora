@@ -744,5 +744,17 @@
   "greetMorning": "صبح بخیر",
   "greetAfternoon": "روز بخیر",
   "greetEvening": "عصر بخیر",
-  "createToday": "امروز چه می‌سازی؟"
+  "createToday": "امروز چه می‌سازی؟",
+  "fxDispersion": "پراکندگی",
+  "fxBreakArea": "ناحیه شکست",
+  "fxStart": "شروع",
+  "fxErode": "فرسایش اصل",
+  "fxParticles": "ذرات",
+  "fxSquare": "مربع",
+  "fxCircle": "دایره",
+  "fxShard": "تکه",
+  "fxSplatter": "پاشیده",
+  "fxSizeJitter": "تنوع اندازه",
+  "fxStretch": "کشیدگی",
+  "fxFadeOut": "محو با فاصله"
 }

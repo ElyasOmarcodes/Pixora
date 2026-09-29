@@ -836,5 +836,17 @@
   "greetMorning": "Good morning",
   "greetAfternoon": "Good afternoon",
   "greetEvening": "Good evening",
-  "createToday": "What will you create today?"
+  "createToday": "What will you create today?",
+  "fxDispersion": "Dispersion",
+  "fxBreakArea": "Break area",
+  "fxStart": "Start",
+  "fxErode": "Erode original",
+  "fxParticles": "Particles",
+  "fxSquare": "Square",
+  "fxCircle": "Circle",
+  "fxShard": "Shard",
+  "fxSplatter": "Splatter",
+  "fxSizeJitter": "Size variation",
+  "fxStretch": "Stretch",
+  "fxFadeOut": "Fade with distance"
 }

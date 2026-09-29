@@ -744,5 +744,17 @@
   "greetMorning": "سهار مو پخیر",
   "greetAfternoon": "ورځ مو پخیر",
   "greetEvening": "ماښام مو پخیر",
-  "createToday": "نن به څه جوړوې؟"
+  "createToday": "نن به څه جوړوې؟",
+  "fxDispersion": "خپرېدنه (ټکي ټکي)",
+  "fxBreakArea": "د ماتېدو سیمه",
+  "fxStart": "پیل",
+  "fxErode": "د اصلي ورکېدل",
+  "fxParticles": "ذرې",
+  "fxSquare": "مربع",
+  "fxCircle": "دایره",
+  "fxShard": "ټوټه",
+  "fxSplatter": "پاشل",
+  "fxSizeJitter": "د اندازې توپیر",
+  "fxStretch": "اوږدول",
+  "fxFadeOut": "د واټن سره کمرنګه"
 }

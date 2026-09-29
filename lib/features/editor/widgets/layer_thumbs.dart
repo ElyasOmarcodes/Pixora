@@ -4,12 +4,14 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../document/model/layer.dart';
 import '../../../document/model/layer_transform.dart';
 import '../../../document/render/document_renderer.dart';
 import '../../../editor/editor_controller.dart';
+import '../../../ui/widgets/checkerboard.dart';
 
 /// Layer thumbnails for the layers panel, rendered once into small
 /// bitmaps and reused.
@@ -71,6 +73,36 @@ class LayerThumbs {
     return hit?.image;
   }
 
+  /// How light [layer]'s thumbnail content is (0 black … 1 white), once
+  /// measured; null while unknown or when it has no visible pixels.
+  double? toneOf(String id) => _cache[id]?.tone;
+
+  /// Measures the thumbnail's alpha-weighted lightness off the frame
+  /// (a 24 px copy read back asynchronously), then bumps [tones].
+  Future<void> _measure(_Entry entry) async {
+    const n = 24;
+    final rec = ui.PictureRecorder();
+    Canvas(rec).drawImageRect(
+      entry.image,
+      Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+      const Rect.fromLTWH(0, 0, n + 0.0, n + 0.0),
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+    final pic = rec.endRecording();
+    final small = pic.toImageSync(n, n);
+    pic.dispose();
+    final data = await small.toByteData();
+    small.dispose();
+    if (data == null) return;
+    final tone = thumbLightness(data.buffer.asUint8List());
+    if (tone == entry.tone) return;
+    entry.tone = tone;
+    tones.value++;
+  }
+
+  /// Bumped whenever a thumbnail's measured lightness changes.
+  final ValueNotifier<int> tones = ValueNotifier(0);
+
   /// Stops notifying [onReady] (its widget went away).
   void forget(String id, VoidCallback onReady) =>
       _queue[id]?.listeners.remove(onReady);
@@ -105,12 +137,15 @@ class LayerThumbs {
       }
       _queue.remove(job.layer.id);
       renders++;
-      _cache[job.layer.id] = _Entry(
+      final entry = _Entry(
         job.layer,
         job.generation,
         _render(job.layer, job.editor),
+        _cache[job.layer.id]?.tone,
       );
+      _cache[job.layer.id] = entry;
       ready.add(job);
+      _measure(entry);
     }
     while (_cache.length > _maxEntries) {
       _cache.remove(_cache.keys.first);
@@ -185,10 +220,114 @@ class LayerThumbs {
 }
 
 class _Entry {
-  _Entry(this.layer, this.generation, this.image);
+  _Entry(this.layer, this.generation, this.image, this.tone);
   final Layer layer;
   final int generation;
   final ui.Image image;
+  double? tone;
+}
+
+/// Alpha-weighted perceived lightness (0..1) of premultiplied RGBA
+/// pixels; null when nearly nothing is visible.
+double? thumbLightness(Uint8List rgba) {
+  var sum = 0.0, weight = 0.0;
+  for (var i = 0; i + 3 < rgba.length; i += 4) {
+    final a = rgba[i + 3];
+    if (a == 0) continue;
+    // Un-premultiply, then perceived lightness ≈ √(relative luminance).
+    final r = rgba[i] / a, g = rgba[i + 1] / a, b = rgba[i + 2] / a;
+    final lum = 0.2126 * r * r + 0.7152 * g * g + 0.0722 * b * b;
+    sum += math.sqrt(lum) * a;
+    weight += a;
+  }
+  if (weight < 255 * 2) return null;
+  return sum / weight;
+}
+
+/// The checkerboard colours to show a thumbnail of lightness [tone] on:
+/// the theme's own ([a], [b]) unless the content would melt into them
+/// (a black layer on a dark theme, a white one on a light theme) — then a
+/// clearly lighter or darker board.
+(Color, Color) thumbBackdrop(double? tone, Color a, Color b) {
+  if (tone == null) return (a, b);
+  double light(Color c) => math.sqrt(c.computeLuminance());
+  final board = (light(a) + light(b)) / 2;
+  if ((tone - board).abs() >= 0.28) return (a, b);
+  return tone < 0.5
+      ? (const Color(0xFFF2F2F2), const Color(0xFFD6D6D6))
+      : (const Color(0xFF2E2E2E), const Color(0xFF1E1E1E));
+}
+
+/// A transparency checkerboard that turns light or dark so [layer]'s
+/// thumbnail stays visible on it.
+class ThumbBackdrop extends StatefulWidget {
+  const ThumbBackdrop({
+    super.key,
+    required this.layer,
+    required this.editor,
+    required this.a,
+    required this.b,
+    this.cell = 5,
+    this.builder,
+  });
+  final Layer layer;
+  final EditorController editor;
+  final Color a, b;
+  final double cell;
+
+  /// Builds with the chosen colours instead of painting a board.
+  final Widget Function(BuildContext context, Color a, Color b)? builder;
+
+  @override
+  State<ThumbBackdrop> createState() => _ThumbBackdropState();
+}
+
+class _ThumbBackdropState extends State<ThumbBackdrop> {
+  @override
+  void initState() {
+    super.initState();
+    LayerThumbs.instance.tones.addListener(_ready);
+  }
+
+  @override
+  void didUpdateWidget(ThumbBackdrop old) {
+    super.didUpdateWidget(old);
+    if (old.layer.id != widget.layer.id) {
+      LayerThumbs.instance.forget(old.layer.id, _ready);
+    }
+  }
+
+  @override
+  void dispose() {
+    LayerThumbs.instance.tones.removeListener(_ready);
+    LayerThumbs.instance.forget(widget.layer.id, _ready);
+    super.dispose();
+  }
+
+  void _ready() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Queues the thumbnail (and its measuring) if it isn't there yet.
+    LayerThumbs.instance.lookup(
+      widget.layer,
+      widget.editor,
+      _LayerThumbImageState._generation,
+      _ready,
+    );
+    final (a, b) = thumbBackdrop(
+      LayerThumbs.instance.toneOf(widget.layer.id),
+      widget.a,
+      widget.b,
+    );
+    final builder = widget.builder;
+    if (builder != null) return builder(context, a, b);
+    return SizedBox.expand(
+      child: CheckerboardBox(a: a, b: b, cell: widget.cell),
+    );
+  }
 }
 
 class _Job {

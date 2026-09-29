@@ -980,6 +980,49 @@ class EffectRegistry {
     );
     register(
       EffectDefinition(
+        type: 'dispersion',
+        category: EffectCategory.filter,
+        params: const [
+          EffectParam.number('angle', min: -180, max: 180, defaultValue: 20),
+          EffectParam.number('distance', min: 0, max: 3000, defaultValue: 160),
+          EffectParam.number('start', min: 0, max: 100, defaultValue: 35),
+          EffectParam.number('transition', min: 1, max: 100, defaultValue: 45),
+          EffectParam.number('density', min: 0, max: 100, defaultValue: 60),
+          EffectParam.number('size', min: 1, max: 200, defaultValue: 8),
+          EffectParam.number('sizeJitter', min: 0, max: 100, defaultValue: 60),
+          EffectParam.number('shape', min: 0, max: 3, defaultValue: 0, step: 1),
+          EffectParam.number('spread', min: 0, max: 90, defaultValue: 15),
+          EffectParam.number('erode', min: 0, max: 100, defaultValue: 85),
+          EffectParam.number('stretch', min: 0, max: 100, defaultValue: 0),
+          EffectParam.number('fade', min: 0, max: 100, defaultValue: 35),
+          EffectParam.number('spin', min: 0, max: 100, defaultValue: 50),
+          EffectParam.number('seed', min: 0, max: 99, defaultValue: 0, step: 1),
+        ],
+        filter: (e, box) => DispersionFilter(
+          angle: e.number('angle', 20),
+          distance: e.number('distance', 160),
+          start: e.number('start', 35) / 100,
+          transition: e.number('transition', 45) / 100,
+          density: e.number('density', 60) / 100,
+          size: e.number('size', 8),
+          sizeJitter: e.number('sizeJitter', 60) / 100,
+          shape:
+              DispersionShape.values[e
+                  .number('shape', 0)
+                  .round()
+                  .clamp(0, DispersionShape.values.length - 1)],
+          spread: e.number('spread', 15),
+          erode: e.number('erode', 85) / 100,
+          stretch: e.number('stretch', 0) / 100,
+          fade: e.number('fade', 35) / 100,
+          spin: e.number('spin', 50) / 100,
+          seed: e.number('seed', 0).round(),
+          box: box,
+        ),
+      ),
+    );
+    register(
+      EffectDefinition(
         type: 'twirl',
         category: EffectCategory.filter,
         params: const [

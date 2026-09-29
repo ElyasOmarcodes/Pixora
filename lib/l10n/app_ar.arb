@@ -744,5 +744,17 @@
   "greetMorning": "صباح الخير",
   "greetAfternoon": "طاب يومك",
   "greetEvening": "مساء الخير",
-  "createToday": "ماذا ستصنع اليوم؟"
+  "createToday": "ماذا ستصنع اليوم؟",
+  "fxDispersion": "التفتت",
+  "fxBreakArea": "منطقة التفتت",
+  "fxStart": "البداية",
+  "fxErode": "تآكل الأصل",
+  "fxParticles": "الجسيمات",
+  "fxSquare": "مربع",
+  "fxCircle": "دائرة",
+  "fxShard": "شظية",
+  "fxSplatter": "رذاذ",
+  "fxSizeJitter": "تفاوت الحجم",
+  "fxStretch": "تمطيط",
+  "fxFadeOut": "التلاشي مع المسافة"
 }

@@ -14,6 +14,7 @@ import '../../../document/render/mask_jobs.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/checkerboard.dart';
+import '../widgets/layer_thumbs.dart';
 import '../../../ui/widgets/pressable.dart';
 import '../editor_scope.dart';
 import '../effects_catalog.dart';
@@ -241,6 +242,7 @@ class _EffectsPage extends StatelessWidget {
                               preview: g == FxGroup.color
                                   ? null
                                   : _previewLayer(layer, entry.key),
+                              base: layer,
                               assets: editor,
                               onTap: () => _pick(context, layer, entry),
                             ),
@@ -382,6 +384,7 @@ class _FxCard extends StatelessWidget {
     required this.icon,
     required this.on,
     required this.preview,
+    required this.base,
     required this.assets,
     required this.onTap,
   });
@@ -390,6 +393,9 @@ class _FxCard extends StatelessWidget {
   final IconData icon;
   final bool on;
   final Layer? preview;
+
+  /// The layer the preview shows (its thumbnail picks the backdrop).
+  final Layer? base;
   final EditorController assets;
   final VoidCallback onTap;
 
@@ -420,13 +426,19 @@ class _FxCard extends StatelessWidget {
               aspectRatio: 1.15,
               child: preview == null
                   ? Icon(icon, size: 34, color: scheme.primary)
-                  : CustomPaint(
-                      painter: _PreviewPainter(
-                        preview!,
-                        assets,
-                        MediaQuery.devicePixelRatioOf(context),
-                        scheme.surfaceContainerHighest,
-                        scheme.surfaceContainerLow,
+                  : ThumbBackdrop(
+                      layer: base!,
+                      editor: assets,
+                      a: scheme.surfaceContainerHighest,
+                      b: scheme.surfaceContainerLow,
+                      builder: (context, a, b) => CustomPaint(
+                        painter: _PreviewPainter(
+                          preview!,
+                          assets,
+                          MediaQuery.devicePixelRatioOf(context),
+                          a,
+                          b,
+                        ),
                       ),
                     ),
             ),
@@ -492,5 +504,5 @@ class _PreviewPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PreviewPainter old) =>
-      old.layer != layer || old.dpr != dpr || old.a != a;
+      old.layer != layer || old.dpr != dpr || old.a != a || old.b != b;
 }

@@ -744,5 +744,17 @@
   "greetMorning": "Günaydın",
   "greetAfternoon": "Tünaydın",
   "greetEvening": "İyi akşamlar",
-  "createToday": "Bugün ne yaratacaksın?"
+  "createToday": "Bugün ne yaratacaksın?",
+  "fxDispersion": "Dağılma",
+  "fxBreakArea": "Kırılma alanı",
+  "fxStart": "Başlangıç",
+  "fxErode": "Orijinali aşındır",
+  "fxParticles": "Parçacıklar",
+  "fxSquare": "Kare",
+  "fxCircle": "Daire",
+  "fxShard": "Kıymık",
+  "fxSplatter": "Sıçrama",
+  "fxSizeJitter": "Boyut çeşitliliği",
+  "fxStretch": "Uzatma",
+  "fxFadeOut": "Mesafeyle solma"
 }

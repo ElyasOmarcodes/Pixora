@@ -744,5 +744,17 @@
   "greetMorning": "صبح بخیر",
   "greetAfternoon": "دوپہر بخیر",
   "greetEvening": "شام بخیر",
-  "createToday": "آج آپ کیا بنائیں گے؟"
+  "createToday": "آج آپ کیا بنائیں گے؟",
+  "fxDispersion": "بکھراؤ",
+  "fxBreakArea": "ٹوٹنے کا حصہ",
+  "fxStart": "آغاز",
+  "fxErode": "اصل کا گھلنا",
+  "fxParticles": "ذرات",
+  "fxSquare": "مربع",
+  "fxCircle": "دائرہ",
+  "fxShard": "ٹکڑا",
+  "fxSplatter": "چھینٹے",
+  "fxSizeJitter": "سائز میں فرق",
+  "fxStretch": "کھنچاؤ",
+  "fxFadeOut": "فاصلے کے ساتھ مدھم"
 }
