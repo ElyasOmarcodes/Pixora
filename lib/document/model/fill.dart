@@ -228,6 +228,14 @@ class PixFill {
   double radialRadius(Rect bounds) =>
       (bounds.shortestSide / 2 + bounds.longestSide / 4) * scale;
 
+  /// [stops], or even spacing when more than two colours have none (the
+  /// engine needs stops then).
+  List<double>? get evenStops =>
+      stops ??
+      (colors.length > 2
+          ? [for (var i = 0; i < colors.length; i++) i / (colors.length - 1)]
+          : null);
+
   /// Applies this fill to [paint] for content occupying [bounds].
   Paint applyTo(Paint paint, Rect bounds) {
     if (isPattern) return _applyPattern(paint, bounds);
@@ -241,7 +249,7 @@ class PixFill {
     final c = centerIn(bounds);
     final rad = angle * math.pi / 180;
     final d = Offset(math.cos(rad), math.sin(rad));
-    final s = stops;
+    final s = evenStops;
     switch (kind) {
       case FillKind.linear:
         final half = math.max(0.5, linearHalf(bounds));
@@ -389,7 +397,7 @@ class PixFill {
           Path()..addPolygon(pts, true),
           Paint()
             ..isAntiAlias = false
-            ..shader = Gradient.linear(o, end, colors, stops),
+            ..shader = Gradient.linear(o, end, colors, evenStops),
         );
       }
       final pic = rec.endRecording();

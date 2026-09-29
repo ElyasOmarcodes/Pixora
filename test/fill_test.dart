@@ -6,6 +6,7 @@ import 'package:pixora/core/colors/recent_colors.dart';
 import 'package:pixora/document/model/fill.dart';
 
 void main() {
+  _threeColourGradientWithoutStops();
   test('every gradient style round-trips through JSON', () {
     for (final k in FillKind.values.where(
       (k) => k != FillKind.solid && k != FillKind.pattern,
@@ -80,5 +81,20 @@ void main() {
       ..addGradient(PixFill.color(Colors.red))
       ..addGradient(g);
     expect(r.gradients, [g]);
+  });
+}
+
+void _threeColourGradientWithoutStops() {
+  test('gradients with more than two colours need no stops', () {
+    final f = PixFill.gradient(FillKind.linear, const [
+      Color(0xFF000000),
+      Color(0xFF808080),
+      Color(0xFFFFFFFF),
+    ]);
+    expect(f.evenStops, [0, 0.5, 1]);
+    expect(
+      () => f.applyTo(Paint(), const Rect.fromLTWH(0, 0, 10, 10)),
+      returnsNormally,
+    );
   });
 }
