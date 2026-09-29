@@ -125,7 +125,15 @@ class DocumentRenderer {
     this.effects,
     this.cache,
     this.pixelScale = 1,
+    this.live = false,
   });
+
+  /// Drawing for the on-screen canvas (also when rendering its cached
+  /// bitmaps): slow filters may show their last result while a layer
+  /// changes every frame.
+  final bool live;
+
+  bool get _live => live || cache != null;
 
   /// When set, expensive layers are drawn from cached bitmaps (on-screen
   /// canvas). Export and thumbnails render without it, at full quality.
@@ -1424,7 +1432,12 @@ class DocumentRenderer {
     }
     final w = math.max(1, (rect.width * s).ceil());
     final h = math.max(1, (rect.height * s).ceil());
-    final r = DocumentRenderer(assets, effects: effects, pixelScale: s);
+    final r = DocumentRenderer(
+      assets,
+      effects: effects,
+      pixelScale: s,
+      live: true,
+    );
     final plan = r._plan(base, const {});
     ui.Image render(void Function(Canvas c) draw) {
       final recorder = ui.PictureRecorder();
@@ -2761,6 +2774,33 @@ class _ShapeSource {
       _filteredCache[key!] = hit;
       return _ShapeSource._(r, layer, hidden, hit, reach + 2, owned: false);
     }
+    // On screen, while the layer changes every frame (turning, scaling,
+    // dragging a filter slider), filtering anew on each frame made the
+    // editor crawl. Show the last result instead — it turns and scales
+    // with the layer — and filter again once the change rests; costly
+    // filters under a slider refresh at a pace they can keep.
+    final now = DateTime.now();
+    final recent = key == null ? null : _recent[layer.id];
+    if (key != null && r._live && recent != null) {
+      final sameContent = recent.content == key.$1;
+      final busy = now.difference(recent.requested) < _busyWindow;
+      final pace = Duration(milliseconds: math.max(120, recent.costMs * 3));
+      recent.requested = now;
+      if (busy &&
+          (sameContent ||
+              (recent.costMs > 30 && now.difference(recent.computed) < pace))) {
+        _settle(layer.id);
+        return _ShapeSource._(
+          r,
+          layer,
+          hidden,
+          recent.stamp,
+          recent.reach,
+          owned: false,
+        );
+      }
+    }
+    final watch = Stopwatch()..start();
     final plain = _Stamp._make(
       box,
       rs.toDouble(),
@@ -2777,6 +2817,16 @@ class _ShapeSource {
     plain.dispose();
     final stamp = _Stamp._(out, box);
     if (key != null) {
+      _recent[layer.id] = _RecentFilter(
+        key.$1,
+        stamp,
+        reach + 2,
+        watch.elapsedMilliseconds,
+        now,
+      );
+      while (_recent.length > 8) {
+        _recent.remove(_recent.keys.first);
+      }
       _filteredCache[key] = stamp;
       // Evicted images are left to the garbage collector: a plan being
       // painted may still hold them.
@@ -2790,6 +2840,25 @@ class _ShapeSource {
 
   /// Recently filtered layer pixels (filters are the slow part).
   static final LinkedHashMap<Object, _Stamp> _filteredCache = LinkedHashMap();
+
+  /// Each layer's latest filtered pixels, whatever its placement.
+  static final LinkedHashMap<String, _RecentFilter> _recent = LinkedHashMap();
+
+  /// Requests closer together than this mean the layer is being changed.
+  static const _busyWindow = Duration(milliseconds: 450);
+  static final Map<String, Timer> _settleTimers = {};
+
+  /// Repaints once [id] has stopped changing, so its filters catch up.
+  static void _settle(String id) {
+    _settleTimers[id]?.cancel();
+    _settleTimers[id] = Timer(
+      _busyWindow + const Duration(milliseconds: 40),
+      () {
+        _settleTimers.remove(id);
+        MaskJobCache.instance.refresh();
+      },
+    );
+  }
 
   static List<FilterStep> _filters(DocumentRenderer r, Layer layer, Rect box) =>
       [
@@ -2936,4 +3005,21 @@ class _MaskBase {
   final Rect area;
   final double res;
   final ui.Image image;
+}
+
+/// A layer's most recent filtered pixels and what they cost.
+class _RecentFilter {
+  _RecentFilter(
+    this.content,
+    this.stamp,
+    this.reach,
+    this.costMs,
+    this.computed,
+  ) : requested = computed;
+  final Object content;
+  final _Stamp stamp;
+  final double reach;
+  final int costMs;
+  final DateTime computed;
+  DateTime requested;
 }

@@ -43,6 +43,7 @@ class AppSettings extends ChangeNotifier {
   static const _kAccent = 'accent';
   static const _kAutosave = 'autosave';
   static const _kIntroSeen = 'introSeen';
+  static const _kLanguageChosen = 'languageChosen';
   static const _kFavorites = 'favoriteProjects';
   static const _kProjectView = 'projectView';
   static const _kProjectSort = 'projectSort';
@@ -90,6 +91,11 @@ class AppSettings extends ChangeNotifier {
     _prefs.setInt(_kAccent, value);
     notifyListeners();
   }
+
+  /// The language was picked on first launch (existing installs that saw
+  /// the intro already count as done).
+  bool get languageChosen => _prefs.getBool(_kLanguageChosen) ?? introSeen;
+  set languageChosen(bool v) => _setBool(_kLanguageChosen, v);
 
   /// The first-launch introduction was shown.
   bool get introSeen => _prefs.getBool(_kIntroSeen) ?? false;

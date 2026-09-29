@@ -66,6 +66,15 @@ abstract class PlatformServices {
   /// folder on desktops.
   Future<ProjectStore> openProjectStore({String? customRoot});
 
+  /// Whether a permission for saving to the photo gallery still has to be
+  /// asked (phones only: iOS always asks; Android only up to version 9 —
+  /// newer versions save without any permission). Desktops and the web
+  /// need none.
+  Future<bool> needsGalleryAccess() async => false;
+
+  /// Asks for the gallery permission; true when granted.
+  Future<bool> requestGalleryAccess() async => true;
+
   /// Valid after [openProjectStore].
   StorageInfo get storage;
 

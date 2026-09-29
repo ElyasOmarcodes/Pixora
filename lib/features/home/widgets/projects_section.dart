@@ -578,9 +578,23 @@ class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
     curve: Curves.easeOutCubic,
   );
 
+  /// Results that have already made their entrance: scrolled back into
+  /// view they just appear — replaying the animation on every scroll was
+  /// a large part of what made the page feel rough.
+  static final Set<Key> _seen = {};
+
   @override
   void initState() {
     super.initState();
+    final key = widget.key;
+    // Only the first screenful animates; later rows arrive by scrolling.
+    if (key == null || _seen.contains(key) || widget.index > 11) {
+      _c.value = 1;
+      if (key != null) _seen.add(key);
+      return;
+    }
+    _seen.add(key);
+    if (_seen.length > 4000) _seen.clear();
     final delay = Duration(milliseconds: 40 * widget.index.clamp(0, 8));
     Future.delayed(delay, () {
       if (mounted) _c.forward();
@@ -594,7 +608,9 @@ class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
+  Widget build(BuildContext context) => RepaintBoundary(child: _animated());
+
+  Widget _animated() => AnimatedBuilder(
     animation: _a,
     builder: (context, child) => Opacity(
       opacity: _a.value,

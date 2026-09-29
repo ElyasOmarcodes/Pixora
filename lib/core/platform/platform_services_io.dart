@@ -201,6 +201,26 @@ class IoPlatformServices extends PlatformServices {
       info.isDesktop ? FilePicker.getDirectoryPath() : Future.value(null);
 
   @override
+  Future<bool> needsGalleryAccess() async {
+    if (!info.isMobile) return false;
+    try {
+      return !await Gal.hasAccess(toAlbum: true);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> requestGalleryAccess() async {
+    if (!info.isMobile) return true;
+    try {
+      return await Gal.requestAccess(toAlbum: true);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<ExportResult> exportImage(
     Uint8List bytes,
     String fileName,

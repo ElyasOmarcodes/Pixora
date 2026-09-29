@@ -95,6 +95,10 @@ class _ProjectCardState extends State<ProjectCard> {
                     summary.thumbnail!,
                     fit: BoxFit.contain,
                     gaplessPlayback: true,
+                    // Decoded at card size, not the stored size: large
+                    // decodes on scroll were a source of jank.
+                    cacheWidth: 360,
+                    filterQuality: FilterQuality.medium,
                   ),
               ],
             ),

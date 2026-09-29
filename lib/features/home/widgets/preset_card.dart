@@ -6,16 +6,17 @@ import '../../../app/theme/app_theme.dart';
 import '../../../projects/canvas_presets.dart';
 import '../../../ui/widgets/soft_card.dart';
 
-const double _cardWidth = 118;
-
 class _CardFrame extends StatelessWidget {
-  const _CardFrame({required this.child});
+  const _CardFrame({required this.child, required this.compact});
   final Widget child;
+
+  /// Phone size: smaller cards leave the screen to the projects.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-    child: SizedBox(width: _cardWidth, child: child),
+    padding: EdgeInsets.symmetric(horizontal: compact ? 5 : 6, vertical: 10),
+    child: SizedBox(width: compact ? 94 : 118, child: child),
   );
 }
 
@@ -26,8 +27,10 @@ class PresetCard extends StatelessWidget {
     required this.preset,
     required this.label,
     required this.onTap,
+    this.compact = false,
   });
 
+  final bool compact;
   final CanvasPreset preset;
   final String label;
   final VoidCallback onTap;
@@ -36,15 +39,16 @@ class PresetCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    const box = 62.0;
+    final box = compact ? 40.0 : 62.0;
     final a = preset.aspect;
     final w = a >= 1 ? box : box * a;
     final h = a >= 1 ? box / a : box;
     return _CardFrame(
+      compact: compact,
       child: SoftCard(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(compact ? 9 : 12),
           child: Column(
             children: [
               Expanded(
@@ -60,7 +64,11 @@ class PresetCard extends StatelessWidget {
                       ),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(preset.icon, size: 20, color: scheme.primary),
+                    child: Icon(
+                      preset.icon,
+                      size: compact ? 16 : 20,
+                      color: scheme.primary,
+                    ),
                   ),
                 ),
               ),
@@ -68,13 +76,17 @@ class PresetCard extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style:
+                    (compact
+                            ? theme.textTheme.labelMedium
+                            : theme.textTheme.labelLarge)
+                        ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 2),
               Text(
                 preset.sizeLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 textDirection: TextDirection.ltr,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: scheme.onSurfaceVariant,
@@ -90,15 +102,22 @@ class PresetCard extends StatelessWidget {
 
 /// The highlighted "open a photo" entry.
 class PhotoCard extends StatelessWidget {
-  const PhotoCard({super.key, required this.label, required this.onTap});
+  const PhotoCard({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.compact = false,
+  });
   final String label;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final hsl = HSLColor.fromColor(scheme.primary);
     return _CardFrame(
+      compact: compact,
       child: SoftCard(
         onTap: onTap,
         gradient: LinearGradient(
@@ -116,16 +135,16 @@ class PhotoCard extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: Container(
-                    width: 56,
-                    height: 56,
+                    width: compact ? 42 : 56,
+                    height: compact ? 42 : 56,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.22),
                       borderRadius: BorderRadius.circular(PixTokens.radiusM),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.add_photo_alternate_rounded,
                       color: Colors.white,
-                      size: 28,
+                      size: compact ? 22 : 28,
                     ),
                   ),
                 ),
@@ -134,9 +153,10 @@ class PhotoCard extends StatelessWidget {
                 label,
                 maxLines: 2,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
+                  fontSize: compact ? 12.5 : null,
                 ),
               ),
               const SizedBox(height: 4),
@@ -149,36 +169,47 @@ class PhotoCard extends StatelessWidget {
 }
 
 class CustomSizeCard extends StatelessWidget {
-  const CustomSizeCard({super.key, required this.label, required this.onTap});
+  const CustomSizeCard({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.compact = false,
+  });
   final String label;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return _CardFrame(
+      compact: compact,
       child: SoftCard(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(compact ? 9 : 12),
           child: Column(
             children: [
               Expanded(
                 child: Center(
                   child: Icon(
                     Icons.aspect_ratio_rounded,
-                    size: 34,
+                    size: compact ? 26 : 34,
                     color: theme.colorScheme.primary,
                   ),
                 ),
               ),
               Text(
                 label,
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    (compact
+                            ? theme.textTheme.labelMedium
+                            : theme.textTheme.labelLarge)
+                        ?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 18),
+              SizedBox(height: compact ? 14 : 18),
             ],
           ),
         ),

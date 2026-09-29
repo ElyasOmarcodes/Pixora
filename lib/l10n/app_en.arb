@@ -863,5 +863,16 @@
   "devBlendModes": "Blend modes",
   "devEffects": "Effects",
   "devPlatforms": "Platforms",
-  "devMadeWith": "Made with care for creators everywhere"
+  "devMadeWith": "Made with care for creators everywhere",
+  "welcomeTitle": "Welcome to Pixora",
+  "chooseLanguage": "Choose your language",
+  "chooseLanguageHint": "You can change it any time in Settings.",
+  "continueLabel": "Continue",
+  "permTitle": "Save your designs to your gallery",
+  "permBody": "Pixora needs permission to save finished images to your photo gallery. It only adds images you export — it never looks through your photos.",
+  "permOpenPhotos": "Opening photos needs no permission: you pick each one yourself.",
+  "permAllow": "Allow",
+  "permNotNow": "Not now",
+  "permGranted": "All set!",
+  "permLater": "You can allow it later when you first save an image."
 }

@@ -771,5 +771,16 @@
   "devBlendModes": "Karışım modu",
   "devEffects": "Efekt",
   "devPlatforms": "Platform",
-  "devMadeWith": "Her yerdeki üreticiler için özenle yapıldı"
+  "devMadeWith": "Her yerdeki üreticiler için özenle yapıldı",
+  "welcomeTitle": "Pixora’ya hoş geldiniz",
+  "chooseLanguage": "Dilinizi seçin",
+  "chooseLanguageHint": "İstediğiniz zaman Ayarlar’dan değiştirebilirsiniz.",
+  "continueLabel": "Devam",
+  "permTitle": "Tasarımlarınızı galeriye kaydedin",
+  "permBody": "Pixora’nın bitmiş görselleri galerinize kaydetmek için izne ihtiyacı var. Yalnızca dışa aktardıklarınızı ekler — fotoğraflarınıza asla bakmaz.",
+  "permOpenPhotos": "Fotoğraf açmak izin gerektirmez: her birini siz seçersiniz.",
+  "permAllow": "İzin ver",
+  "permNotNow": "Şimdi değil",
+  "permGranted": "Her şey hazır!",
+  "permLater": "İlk görseli kaydederken de izin verebilirsiniz."
 }

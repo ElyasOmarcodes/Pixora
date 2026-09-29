@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../app/app_scope.dart';
 import '../../core/platform/platform_services.dart';
@@ -190,12 +191,20 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final pad = MediaQuery.sizeOf(context).width > 900 ? 40.0 : 20.0;
+    final width = MediaQuery.sizeOf(context).width;
+    final pad = width > 900 ? 40.0 : 20.0;
+    // Phones get smaller preset cards, leaving the screen to the projects.
+    final compact = width < 600;
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
         child: CustomScrollView(
+          // iOS-style momentum and bounce on every platform: a softer,
+          // more natural glide than the clamping default on Android, and
+          // rows built ahead of time so nothing pops in while flinging.
+          physics: _smoothScroll,
+          scrollCacheExtent: const ScrollCacheExtent.pixels(900),
           slivers: [
             SliverPadding(
               padding: EdgeInsets.fromLTRB(pad, 16, pad - 8, 8),
@@ -236,7 +245,7 @@ class _HomePageState extends State<HomePage> {
               sliver: SliverToBoxAdapter(child: _Greeting(l: l)),
             ),
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(pad, 20, pad, 12),
+              padding: EdgeInsets.fromLTRB(pad, compact ? 16 : 20, pad, 4),
               sliver: SliverToBoxAdapter(
                 child: Text(
                   l.newProject,
@@ -248,21 +257,31 @@ class _HomePageState extends State<HomePage> {
             ),
             SliverToBoxAdapter(
               child: SizedBox(
-                height: 176,
+                height: compact ? 138 : 176,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
+                  physics: _smoothScroll,
                   clipBehavior: Clip.none,
                   padding: EdgeInsets.symmetric(horizontal: pad - 6),
                   children: [
-                    PhotoCard(label: l.openPhoto, onTap: _createFromPhoto),
+                    PhotoCard(
+                      label: l.openPhoto,
+                      onTap: _createFromPhoto,
+                      compact: compact,
+                    ),
                     for (final p in kCanvasPresets)
                       PresetCard(
                         preset: p,
+                        compact: compact,
                         label: presetLabel(l, p.id),
                         onTap: () =>
                             _createBlank(p.width, p.height, dpi: p.dpi),
                       ),
-                    CustomSizeCard(label: l.customSize, onTap: _custom),
+                    CustomSizeCard(
+                      label: l.customSize,
+                      onTap: _custom,
+                      compact: compact,
+                    ),
                   ],
                 ),
               ),
@@ -410,3 +429,9 @@ class _Greeting extends StatelessWidget {
     );
   }
 }
+
+/// Scrolling for the home page (see its [CustomScrollView]).
+const _smoothScroll = BouncingScrollPhysics(
+  parent: AlwaysScrollableScrollPhysics(),
+  decelerationRate: ScrollDecelerationRate.normal,
+);

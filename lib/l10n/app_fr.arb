@@ -771,5 +771,16 @@
   "devBlendModes": "Modes de fusion",
   "devEffects": "Effets",
   "devPlatforms": "Plateformes",
-  "devMadeWith": "Fait avec soin pour les créateurs du monde entier"
+  "devMadeWith": "Fait avec soin pour les créateurs du monde entier",
+  "welcomeTitle": "Bienvenue dans Pixora",
+  "chooseLanguage": "Choisissez votre langue",
+  "chooseLanguageHint": "Vous pouvez la changer à tout moment dans les réglages.",
+  "continueLabel": "Continuer",
+  "permTitle": "Enregistrez vos créations dans la galerie",
+  "permBody": "Pixora a besoin d’une autorisation pour enregistrer les images terminées dans votre galerie. Il n’ajoute que ce que vous exportez et ne parcourt jamais vos photos.",
+  "permOpenPhotos": "Ouvrir des photos ne demande aucune autorisation : vous choisissez chacune.",
+  "permAllow": "Autoriser",
+  "permNotNow": "Pas maintenant",
+  "permGranted": "Tout est prêt !",
+  "permLater": "Vous pourrez l’autoriser plus tard, au premier enregistrement."
 }

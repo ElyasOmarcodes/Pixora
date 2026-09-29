@@ -1204,7 +1204,7 @@ abstract final class FilterEngine {
     // Keep the cell count bounded on huge layers.
     final est =
         b.width * b.height * (1 - start).clamp(0.02, 1.0) / (cell * cell);
-    if (est > 36000) cell *= math.sqrt(est / 36000);
+    if (est > 24000) cell *= math.sqrt(est / 24000);
     final seed = f.seed * 101.37 + 7.1;
     // A stable per-cell random number: the pattern stays put while any
     // slider moves.

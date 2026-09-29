@@ -88,6 +88,10 @@ class MaskJobCache extends ChangeNotifier {
   final Map<Object, (int, MaskResult)> _latest = {};
   int _seq = 0;
 
+  /// Asks listeners (the canvas) to repaint: background work elsewhere
+  /// has something newer to show.
+  void refresh() => notifyListeners();
+
   MaskResult? lookup(Object key) {
     final hit = _done.remove(key);
     if (hit != null) _done[key] = hit;

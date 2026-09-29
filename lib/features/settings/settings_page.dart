@@ -14,7 +14,7 @@ import '../../ui/widgets/pressable.dart';
 import '../about/developer_page.dart';
 import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.27.0';
+const String kAppVersion = '0.28.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
