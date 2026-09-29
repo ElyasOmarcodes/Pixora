@@ -213,6 +213,7 @@ class DispersionFilter extends PixFilter {
     required this.stretch,
     required this.fade,
     required this.spin,
+    this.turbulence = 0,
     required this.seed,
     required this.box,
   });
@@ -248,13 +249,17 @@ class DispersionFilter extends PixFilter {
 
   /// 0..1: random turning of the particles.
   final double spin;
+
+  /// 0..1: particles weave sideways along their path.
+  final double turbulence;
   final int seed;
 
   /// The layer's box (layer units) the gradient runs across.
   final Rect box;
 
   @override
-  double get reach => distance + size * (2 + stretch * 6);
+  double get reach =>
+      distance * (1 + turbulence * 0.4) + size * (3 + stretch * 6);
 }
 
 /// Filter ▸ Distort ▸ Twirl / Pinch / Spherize / Ripple, over the layer
@@ -1147,6 +1152,13 @@ abstract final class FilterEngine {
     });
   }
 
+  /// Photoshop's dispersion look, built the way designers build it by
+  /// hand: past the break line the layer is cut into cells; a cell whose
+  /// random value falls under the break level (the gradient on the mask)
+  /// is knocked out of the body — leaving a ragged, hard-edged gap — and
+  /// flies off carrying its own pixels, joined by fine dust. Most pieces
+  /// stay close to the body and big chunks break into smaller ones as
+  /// they go, so the cloud is dense at the edge and thins out.
   static ui.Image? _dispersion(
     ui.Image src,
     DispersionFilter f,
@@ -1169,11 +1181,11 @@ abstract final class FilterEngine {
     final perDoc = v.distance;
     if (perDoc < 1e-9) return null;
     final dir = v / perDoc;
+    final nx = -dir.dy, ny = dir.dx;
     final grain = space.meanPer * res;
     // Extent of the box along the direction.
-    final corners = [b.topLeft, b.topRight, b.bottomLeft, b.bottomRight];
     var pMin = double.infinity, pMax = -double.infinity;
-    for (final c in corners) {
+    for (final c in [b.topLeft, b.topRight, b.bottomLeft, b.bottomRight]) {
       final p = c.dx * dir.dx + c.dy * dir.dy;
       pMin = math.min(pMin, p);
       pMax = math.max(pMax, p);
@@ -1188,139 +1200,179 @@ abstract final class FilterEngine {
     }
 
     final dist = f.distance * perDoc;
-    final size = math.max(0.5, f.size * grain);
-    final rng = math.Random(f.seed * 7919 + 17);
-    // Enough pieces to cover the broken area [density] times over.
-    final brokenArea =
-        b.width * b.height * (1 - start - trans / 2).clamp(0.05, 1.0);
-    final target = (f.density * 1.6 * brokenArea / (size * size))
-        .clamp(0, 14000)
-        .round();
-    final poly = switch (f.shape) {
-      DispersionShape.square => 4,
-      DispersionShape.circle => 10,
-      DispersionShape.shard => 3,
-      DispersionShape.splatter => 7,
-    };
-    final tris = poly - 2;
-    final pos = Float32List(target * tris * 6);
-    final tex = Float32List(target * tris * 6);
-    final holes = Float32List(target * tris * 6);
-    final colors = Int32List(target * tris * 3);
-    final shapeX = List<double>.filled(poly, 0),
-        shapeY = List.filled(poly, 0.0);
-    var n = 0, h = 0, attempts = 0;
-    final spread = f.spread * math.pi / 180;
+    var cell = math.max(1.5, f.size * grain);
+    // Keep the cell count bounded on huge layers.
+    final est =
+        b.width * b.height * (1 - start).clamp(0.02, 1.0) / (cell * cell);
+    if (est > 36000) cell *= math.sqrt(est / 36000);
+    final seed = f.seed * 101.37 + 7.1;
+    // A stable per-cell random number: the pattern stays put while any
+    // slider moves.
+    double h(int i, int j, int k) {
+      final x =
+          math.sin(i * 12.9898 + j * 78.233 + k * 37.719 + seed) * 43758.5453;
+      return x - x.floorToDouble();
+    }
+
+    final pieces = _TriBuffer(colors: true);
+    final holes = _TriBuffer();
     final stretch = f.stretch.clamp(0.0, 1.0) * 6;
-    while (n < target && attempts < target * 6) {
-      attempts++;
-      // A fixed number of draws per candidate: the pattern stays put
-      // while the sliders move.
-      final x = b.left + rng.nextDouble() * b.width;
-      final y = b.top + rng.nextDouble() * b.height;
-      final pick = rng.nextDouble();
-      final r1 = rng.nextDouble(), r2 = rng.nextDouble();
-      final r3 = rng.nextDouble(), r4 = rng.nextDouble();
-      final r5 = rng.nextDouble(), r6 = rng.nextDouble();
-      final g = breakAt(x, y);
-      if (g <= 0 || pick > g) continue;
-      // Pieces further along break off harder and fly further.
-      final s = size * (1 - f.sizeJitter * r1 * 0.85) * (0.6 + 0.4 * g);
-      final travel =
-          dist * (0.12 + 0.88 * math.pow(r2, 0.8)) * (0.35 + 0.65 * g);
-      final th = math.atan2(dir.dy, dir.dx) + spread * (r3 * 2 - 1);
-      final mx = math.cos(th), my = math.sin(th);
-      final dx = mx * travel, dy = my * travel;
-      final turn = f.spin * (r4 * 2 - 1) * math.pi;
-      final alpha =
-          ((1 - f.fade * (travel / math.max(1, dist))) * (0.75 + 0.25 * r5))
-              .clamp(0.0, 1.0);
-      // The piece's outline around (0,0), radius ≈ s/2.
-      final base = r6 * math.pi * 2;
-      for (var i = 0; i < poly; i++) {
-        double ang, rad;
-        switch (f.shape) {
-          case DispersionShape.square:
-            ang = base + math.pi / 4 + i * math.pi / 2;
-            rad = s * 0.5 * math.sqrt2;
-          case DispersionShape.circle:
-            ang = i * math.pi * 2 / poly;
-            rad = s * 0.5;
-          case DispersionShape.shard:
-            ang = base + i * math.pi * 2 / 3 + rng.nextDouble() * 0.9;
-            rad = s * (0.45 + rng.nextDouble() * 0.45);
-          case DispersionShape.splatter:
-            ang = base + (i + rng.nextDouble() * 0.6) * math.pi * 2 / poly;
-            rad = s * (0.3 + rng.nextDouble() * 0.45);
-        }
-        shapeX[i] = math.cos(ang) * rad;
-        shapeY[i] = math.sin(ang) * rad;
+    final spread = f.spread * math.pi / 180;
+    final base = math.atan2(dir.dy, dir.dx);
+    final outline = <Offset>[];
+
+    /// [outline] ← the shape of piece (i, j, k), radius [r] around (0,0).
+    void shapeOf(int i, int j, int k, double r, {bool upright = false}) {
+      outline.clear();
+      // Squares stay upright unless Spin turns them.
+      final turn = upright || f.shape == DispersionShape.square
+          ? 0.0
+          : h(i, j, k + 11) * math.pi * 2;
+      switch (f.shape) {
+        case DispersionShape.square:
+          for (var q = 0; q < 4; q++) {
+            final an = turn + math.pi / 4 + q * math.pi / 2;
+            outline.add(Offset(math.cos(an), math.sin(an)) * (r * math.sqrt2));
+          }
+        case DispersionShape.circle:
+          for (var q = 0; q < 10; q++) {
+            final an = q * math.pi / 5;
+            outline.add(Offset(math.cos(an), math.sin(an)) * r);
+          }
+        case DispersionShape.shard:
+          final n = 3 + (h(i, j, k + 12) * 2).floor();
+          for (var q = 0; q < n; q++) {
+            final an = turn + (q + h(i, j, k + 20 + q) * 0.7) * math.pi * 2 / n;
+            final rr = r * (0.55 + 0.75 * h(i, j, k + 30 + q));
+            outline.add(Offset(math.cos(an), math.sin(an)) * rr);
+          }
+        case DispersionShape.splatter:
+          for (var q = 0; q < 9; q++) {
+            final an = turn + (q + h(i, j, k + 20 + q) * 0.5) * math.pi * 2 / 9;
+            final rr = r * (0.62 + 0.5 * h(i, j, k + 30 + q));
+            outline.add(Offset(math.cos(an), math.sin(an)) * rr);
+          }
       }
-      final ct = math.cos(turn), st = math.sin(turn);
-      final color = (alpha * 255).round() << 24 | 0xFFFFFF;
-      for (var t = 0; t < tris; t++) {
-        for (final i in [0, t + 1, t + 2]) {
-          final ox = shapeX[i], oy = shapeY[i];
-          // Where it flies: turned, and smeared along its path.
-          var px = ox * ct - oy * st, py = ox * st + oy * ct;
+    }
+
+    /// Adds the piece in [outline] cut at [at] and landed at [to], turned
+    /// by [spin] and scaled by [scale].
+    void fly(
+      Offset at,
+      Offset to,
+      double spin,
+      double scale,
+      double mx,
+      double my,
+      double alpha,
+    ) {
+      final ct = math.cos(spin) * scale, st = math.sin(spin) * scale;
+      final color = (alpha.clamp(0.0, 1.0) * 255).round() << 24 | 0xFFFFFF;
+      for (var t = 1; t + 1 < outline.length; t++) {
+        for (final o in [outline[0], outline[t], outline[t + 1]]) {
+          var px = o.dx * ct - o.dy * st, py = o.dx * st + o.dy * ct;
           final along = px * mx + py * my;
           px += mx * along * stretch;
           py += my * along * stretch;
-          final k = n * tris * 6 + t * 6 + (i == 0 ? 0 : (i == t + 1 ? 2 : 4));
-          pos[k] = x + dx + px;
-          pos[k + 1] = y + dy + py;
-          tex[k] = x + ox;
-          tex[k + 1] = y + oy;
-          colors[k ~/ 2] = color;
+          pieces.add(to.dx + px, to.dy + py, at.dx + o.dx, at.dy + o.dy, color);
         }
       }
-      // The hole it leaves.
-      if (r5 < f.erode) {
-        for (var t = 0; t < tris; t++) {
-          for (final i in [0, t + 1, t + 2]) {
-            holes[h++] = x + shapeX[i];
-            holes[h++] = y + shapeY[i];
+    }
+
+    final cols = (b.width / cell).ceil() + 1;
+    final rows = (b.height / cell).ceil() + 1;
+    var n = 0;
+    for (var j = 0; j < rows && n < 60000; j++) {
+      for (var i = 0; i < cols; i++) {
+        final cx = b.left + (i + (h(i, j, 1) - 0.5) * 0.8) * cell;
+        final cy = b.top + (j + (h(i, j, 2) - 0.5) * 0.8) * cell;
+        final g = breakAt(cx, cy);
+        if (g <= 0 || h(i, j, 3) >= g) continue;
+        final at = Offset(cx, cy);
+        // The gap it leaves: a bit bigger than the cell, so neighbours
+        // overlap into ragged holes and a fully broken area clears.
+        // Gaps lag behind the break: early on pieces peel off an intact
+        // body (the Liquify copy of the hand-made effect), and holes only
+        // take over as the break completes.
+        final bite = g * g * g;
+        if (h(i, j, 4) < f.erode * bite) {
+          shapeOf(i, j, 0, cell * (0.5 + 0.25 * bite), upright: true);
+          for (var t = 1; t + 1 < outline.length; t++) {
+            for (final o in [outline[0], outline[t], outline[t + 1]]) {
+              holes.add(cx + o.dx, cy + o.dy);
+            }
           }
         }
+        // The chunk itself, and a few grains of dust.
+        for (var k = 0; k < 3; k++) {
+          final dust = k > 0;
+          if (h(i, j, 5 + k) >= f.density * (dust ? 0.75 : 1)) continue;
+          final kk = 40 * (k + 1);
+          // Most pieces stay near the body.
+          final fl = h(i, j, kk + 1);
+          final travel =
+              dist * math.pow(fl, dust ? 1.4 : 2.6) * (0.2 + 0.8 * g);
+          final th = base + spread * (h(i, j, kk + 2) * 2 - 1);
+          final mx = math.cos(th), my = math.sin(th);
+          final far = dist > 0 ? travel / dist : 0.0;
+          // Turbulence: a sideways wave along the path.
+          final wave =
+              f.turbulence *
+              travel *
+              0.35 *
+              math.sin(far * math.pi * 2.2 + h(i, j, kk + 3) * 6.3);
+          final to = Offset(
+            cx + mx * travel + nx * wave,
+            cy + my * travel + ny * wave,
+          );
+          // Chunks: from crumbs to big pieces; they crumble as they fly.
+          final r = h(i, j, kk + 4);
+          final big = 0.35 + 1.65 * r * r * r;
+          var scale = dust ? 0.18 + 0.3 * r : 1 + (big - 1) * f.sizeJitter;
+          scale *= 1 - 0.45 * far;
+          final radius = cell * 0.62;
+          shapeOf(i, j, kk, radius);
+          final spin = f.spin * (h(i, j, kk + 5) * 2 - 1) * math.pi;
+          final alpha = (1 - f.fade * far) * (0.8 + 0.2 * h(i, j, kk + 6));
+          fly(at, to, spin, scale, mx, my, alpha);
+          n++;
+        }
       }
-      n++;
     }
-    final count = n * tris * 6;
-    final pieces = ui.Vertices.raw(
-      ui.VertexMode.triangles,
-      Float32List.sublistView(pos, 0, count),
-      textureCoordinates: Float32List.sublistView(tex, 0, count),
-      colors: Int32List.sublistView(colors, 0, count ~/ 2),
-    );
-    final gaps = ui.Vertices.raw(
-      ui.VertexMode.triangles,
-      Float32List.sublistView(holes, 0, h),
-    );
-    // The original dissolves gradually where it breaks.
-    final p0 = dir * (pMin + span * start);
+    // Past the gradient everything is gone (as far as [erode] asks).
     final p1 = dir * (pMin + span * math.min(1, start + trans));
-    final keep = (1 - f.erode).clamp(0.0, 1.0);
+    final p0 = dir * (pMin + span * math.min(1, start + trans * 0.85));
     final out = _draw(src.width, src.height, (c) {
+      // The body with its gaps …
       c
         ..saveLayer(null, Paint())
-        ..drawImage(src, Offset.zero, Paint())
-        ..drawRect(
-          _full(src),
-          Paint()
-            ..blendMode = BlendMode.dstIn
-            ..shader = ui.Gradient.linear(p0, p1, [
-              const Color(0xFFFFFFFF),
-              Color.fromRGBO(255, 255, 255, keep),
-            ]),
-        )
-        ..drawVertices(
+        ..drawImage(src, Offset.zero, Paint());
+      if (holes.count > 0) {
+        final gaps = holes.build();
+        c.drawVertices(
           gaps,
           BlendMode.srcOver,
           Paint()..blendMode = BlendMode.dstOut,
+        );
+        gaps.dispose();
+      }
+      c
+        ..drawRect(
+          _full(src),
+          Paint()
+            ..blendMode = BlendMode.dstOut
+            ..shader = ui.Gradient.linear(p0, p1, [
+              const Color(0x00000000),
+              Color.fromRGBO(0, 0, 0, f.erode.clamp(0.0, 1.0)),
+            ]),
         )
-        ..restore()
-        ..drawVertices(
-          pieces,
+        ..restore();
+      // … and the pieces over it: those that barely moved still crowd
+      // the broken edge, as in the hand-made effect.
+      if (pieces.count > 0) {
+        final verts = pieces.build();
+        c.drawVertices(
+          verts,
           BlendMode.modulate,
           Paint()
             ..filterQuality = FilterQuality.low
@@ -1337,9 +1389,9 @@ abstract final class FilterEngine {
               filterQuality: FilterQuality.low,
             ),
         );
+        verts.dispose();
+      }
     });
-    pieces.dispose();
-    gaps.dispose();
     return out;
   }
 
@@ -1690,4 +1742,45 @@ abstract final class NoiseTiles {
     pic.dispose();
     return img;
   }
+}
+
+/// Growable triangle vertex data for [ui.Vertices].
+class _TriBuffer {
+  _TriBuffer({this.colors = false});
+  final bool colors;
+  var _pos = Float32List(3000);
+  var _tex = Float32List(0);
+  var _col = Int32List(0);
+  int count = 0;
+
+  void add(double x, double y, [double tx = 0, double ty = 0, int c = 0]) {
+    if (count * 2 + 2 > _pos.length) {
+      _pos = Float32List(_pos.length * 2)..setAll(0, _pos);
+      if (colors) {
+        _tex = Float32List(_pos.length)..setAll(0, _tex);
+        _col = Int32List(_pos.length ~/ 2)..setAll(0, _col);
+      }
+    }
+    if (colors && _tex.length < _pos.length) {
+      _tex = Float32List(_pos.length)..setAll(0, _tex);
+      _col = Int32List(_pos.length ~/ 2)..setAll(0, _col);
+    }
+    _pos[count * 2] = x;
+    _pos[count * 2 + 1] = y;
+    if (colors) {
+      _tex[count * 2] = tx;
+      _tex[count * 2 + 1] = ty;
+      _col[count] = c;
+    }
+    count++;
+  }
+
+  ui.Vertices build() => ui.Vertices.raw(
+    ui.VertexMode.triangles,
+    Float32List.sublistView(_pos, 0, count * 2),
+    textureCoordinates: colors
+        ? Float32List.sublistView(_tex, 0, count * 2)
+        : null,
+    colors: colors ? Int32List.sublistView(_col, 0, count) : null,
+  );
 }

@@ -756,5 +756,20 @@
   "fxSplatter": "Salpicadura",
   "fxSizeJitter": "Variación de tamaño",
   "fxStretch": "Estirar",
-  "fxFadeOut": "Desvanecer con la distancia"
+  "fxFadeOut": "Desvanecer con la distancia",
+  "fxTurbulence": "Turbulencia",
+  "devPageTitle": "Desarrollador",
+  "devMeet": "Conoce al desarrollador",
+  "devName": "M. Elyas Omar",
+  "devRole": "Desarrollador de apps para Android, iOS y Windows",
+  "devAbout": "Además de programar, enseña lo que aprende. Pixora nace de ambas cosas: diseño profesional al alcance de todos — rápido en cualquier teléfono, claro para principiantes, potente para expertos y en tu propio idioma.",
+  "devBuildsFor": "Desarrolla para",
+  "devTeaches": "Enseña",
+  "devTeachesText": "Comparte conocimientos de programación y diseño con estudiantes.",
+  "devInNumbers": "Pixora en cifras",
+  "devLanguages": "Idiomas",
+  "devBlendModes": "Modos de fusión",
+  "devEffects": "Efectos",
+  "devPlatforms": "Plataformas",
+  "devMadeWith": "Hecho con cariño para creadores de todo el mundo"
 }

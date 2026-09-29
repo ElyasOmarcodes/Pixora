@@ -11,9 +11,10 @@ import '../../core/settings/app_settings.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
+import '../about/developer_page.dart';
 import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.26.0';
+const String kAppVersion = '0.27.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -187,6 +188,42 @@ class SettingsPage extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                       subtitle: Text(l.versionLabel(kAppVersion)),
+                    ),
+                    ListTile(
+                      leading: const Hero(
+                        tag: kDeveloperHeroTag,
+                        child: ClipOval(
+                          child: Image(
+                            image: kDeveloperPhoto,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        l.devPageTitle,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(l.devName),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.of(context).push(
+                        PageRouteBuilder<void>(
+                          transitionDuration: const Duration(milliseconds: 520),
+                          reverseTransitionDuration: const Duration(
+                            milliseconds: 380,
+                          ),
+                          pageBuilder: (_, _, _) => const DeveloperPage(),
+                          transitionsBuilder: (_, a, _, child) =>
+                              FadeTransition(
+                                opacity: CurvedAnimation(
+                                  parent: a,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                                child: child,
+                              ),
+                        ),
+                      ),
                     ),
                     ListTile(
                       leading: const Icon(Icons.auto_stories_rounded),

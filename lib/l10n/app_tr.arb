@@ -756,5 +756,20 @@
   "fxSplatter": "Sıçrama",
   "fxSizeJitter": "Boyut çeşitliliği",
   "fxStretch": "Uzatma",
-  "fxFadeOut": "Mesafeyle solma"
+  "fxFadeOut": "Mesafeyle solma",
+  "fxTurbulence": "Türbülans",
+  "devPageTitle": "Geliştirici",
+  "devMeet": "Geliştiriciyle tanışın",
+  "devName": "M. Elyas Omar",
+  "devRole": "Android, iOS ve Windows uygulama geliştiricisi",
+  "devAbout": "Yazılım geliştirmenin yanında öğrendiklerini öğretiyor. Pixora ikisinin ürünü: profesyonel tasarımı herkesin eline vermek için — her telefonda hızlı, yeni başlayanlar için anlaşılır, profesyoneller için güçlü ve kendi dilinizde.",
+  "devBuildsFor": "Şunlar için geliştiriyor",
+  "devTeaches": "Öğretiyor",
+  "devTeachesText": "Programlama ve tasarım bilgisini öğrencileriyle paylaşıyor.",
+  "devInNumbers": "Rakamlarla Pixora",
+  "devLanguages": "Dil",
+  "devBlendModes": "Karışım modu",
+  "devEffects": "Efekt",
+  "devPlatforms": "Platform",
+  "devMadeWith": "Her yerdeki üreticiler için özenle yapıldı"
 }

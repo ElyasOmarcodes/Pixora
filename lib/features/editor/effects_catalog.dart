@@ -378,6 +378,7 @@ List<FxControl> _filterControls(AppLocalizations l, String type) {
       FxSlider('sizeJitter', l.fxSizeJitter, format: pct),
       FxSlider('stretch', l.fxStretch, format: pct),
       FxSlider('spin', l.spin, format: pct),
+      FxSlider('turbulence', l.fxTurbulence, format: pct),
       FxSlider('fade', l.fxFadeOut, format: pct),
       FxSeed(l.randomize),
     ],
