@@ -43,6 +43,9 @@ class AppSettings extends ChangeNotifier {
   static const _kAccent = 'accent';
   static const _kAutosave = 'autosave';
   static const _kIntroSeen = 'introSeen';
+  static const _kFavorites = 'favoriteProjects';
+  static const _kProjectView = 'projectView';
+  static const _kProjectSort = 'projectSort';
   static const _kHaptics = 'haptics';
   static const _kSnap = 'snap';
   static const _kExportFormat = 'exportFormat';
@@ -91,6 +94,28 @@ class AppSettings extends ChangeNotifier {
   /// The first-launch introduction was shown.
   bool get introSeen => _prefs.getBool(_kIntroSeen) ?? false;
   set introSeen(bool v) => _setBool(_kIntroSeen, v);
+
+  /// Projects starred on the projects page.
+  Set<String> get favoriteProjects =>
+      (_prefs.getStringList(_kFavorites) ?? const []).toSet();
+
+  void toggleFavorite(String id) {
+    final s = favoriteProjects;
+    if (!s.remove(id)) s.add(id);
+    _prefs.setStringList(_kFavorites, s.toList());
+    notifyListeners();
+  }
+
+  /// Projects page: grid (false) or list (true).
+  bool get projectListView => _prefs.getBool(_kProjectView) ?? false;
+  set projectListView(bool v) => _setBool(_kProjectView, v);
+
+  /// Projects page sort order (index into the page's sort options).
+  int get projectSort => _prefs.getInt(_kProjectSort) ?? 0;
+  set projectSort(int v) {
+    _prefs.setInt(_kProjectSort, v);
+    notifyListeners();
+  }
 
   bool get autosave => _prefs.getBool(_kAutosave) ?? true;
   set autosave(bool v) => _setBool(_kAutosave, v);

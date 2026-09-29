@@ -1,4 +1,4 @@
-package com.pixora.pixora
+package com.olyasomar.pixora
 
 import android.content.Intent
 import android.net.Uri

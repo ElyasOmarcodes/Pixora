@@ -352,7 +352,21 @@ class ContextDock extends StatelessWidget {
       builder: (context, _) {
         final layer = editor.selectedLayer;
         final items = _items(l, layer);
-        final list = ListView(
+        Widget button(DockItem item, {bool expand = false}) => _DockButton(
+          item: item,
+          expand: expand,
+          selected: item.panel != null && ui.panel == item.panel,
+          onTap: !item.enabled
+              ? null
+              : () {
+                  if (item.panel != null) {
+                    ui.togglePanel(item.panel!);
+                  } else {
+                    item.onTap?.call();
+                  }
+                },
+        );
+        final scrolling = ListView(
           scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
           padding: vertical
               ? const EdgeInsets.symmetric(vertical: 8)
@@ -362,21 +376,34 @@ class ContextDock extends StatelessWidget {
               if (item.divider)
                 _DockDivider(vertical: vertical)
               else
-                _DockButton(
-                  item: item,
-                  selected: item.panel != null && ui.panel == item.panel,
-                  onTap: !item.enabled
-                      ? null
-                      : () {
-                          if (item.panel != null) {
-                            ui.togglePanel(item.panel!);
-                          } else {
-                            item.onTap?.call();
-                          }
-                        },
-                ),
+                button(item),
           ],
         );
+        // When everything fits, the buttons share the width evenly instead
+        // of bunching up at one end.
+        final list = vertical
+            ? scrolling
+            : LayoutBuilder(
+                builder: (context, box) {
+                  final need = items.fold<double>(
+                    16,
+                    (w, i) => w + (i.divider ? 12 : 70),
+                  );
+                  if (need > box.maxWidth) return scrolling;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        for (final item in items)
+                          if (item.divider)
+                            const _DockDivider(vertical: false)
+                          else
+                            Expanded(child: button(item, expand: true)),
+                      ],
+                    ),
+                  );
+                },
+              );
         return AnimatedSwitcher(
           duration: PixTokens.medium,
           switchInCurve: PixTokens.emphasized,
@@ -413,7 +440,9 @@ class _DockButton extends StatelessWidget {
     required this.item,
     required this.selected,
     required this.onTap,
+    this.expand = false,
   });
+  final bool expand;
   final DockItem item;
   final bool selected;
   final VoidCallback? onTap;
@@ -439,7 +468,7 @@ class _DockButton extends StatelessWidget {
       scale: 0.9,
       semanticLabel: item.label,
       child: Container(
-        width: 70,
+        width: expand ? double.infinity : 70,
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -19,7 +19,7 @@ import '../editor/editor_page.dart';
 import '../settings/settings_page.dart';
 import 'widgets/new_canvas_dialog.dart';
 import 'widgets/preset_card.dart';
-import 'widgets/project_card.dart';
+import 'widgets/projects_section.dart';
 
 String presetLabel(AppLocalizations l, String id) => switch (id) {
   'square' => l.presetSquare,
@@ -232,6 +232,10 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             SliverPadding(
+              padding: EdgeInsets.fromLTRB(pad, 14, pad, 0),
+              sliver: SliverToBoxAdapter(child: _Greeting(l: l)),
+            ),
+            SliverPadding(
               padding: EdgeInsets.fromLTRB(pad, 20, pad, 12),
               sliver: SliverToBoxAdapter(
                 child: Text(
@@ -263,53 +267,11 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
             ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(pad, 28, pad, 12),
-              sliver: SliverToBoxAdapter(
-                child: Text(
-                  l.myProjects,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            FutureBuilder<List<ProjectSummary>>(
-              future: _projects,
-              builder: (context, snap) {
-                final items = snap.data ?? const [];
-                if (snap.connectionState != ConnectionState.done &&
-                    items.isEmpty) {
-                  return const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.all(48),
-                      child: Center(
-                        child: CircularProgressIndicator.adaptive(),
-                      ),
-                    ),
-                  );
-                }
-                if (items.isEmpty) {
-                  return SliverToBoxAdapter(child: _EmptyProjects(l: l));
-                }
-                return SliverPadding(
-                  padding: EdgeInsets.fromLTRB(pad, 0, pad, 32),
-                  sliver: SliverGrid.builder(
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 230,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.78,
-                        ),
-                    itemCount: items.length,
-                    itemBuilder: (context, i) => ProjectCard(
-                      summary: items[i],
-                      onOpen: () => _openExisting(items[i]),
-                    ),
-                  ),
-                );
-              },
+            ProjectsSection(
+              projects: _projects,
+              pad: pad,
+              empty: _EmptyProjects(l: l),
+              onOpen: _openExisting,
             ),
           ],
         ),
@@ -358,6 +320,92 @@ class _EmptyProjects extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A soft gradient card with a greeting for the time of day.
+class _Greeting extends StatelessWidget {
+  const _Greeting({required this.l});
+  final AppLocalizations l;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = DateTime.now().hour;
+    final (text, icon) = h < 5 || h >= 18
+        ? (l.greetEvening, Icons.nights_stay_rounded)
+        : h < 12
+        ? (l.greetMorning, Icons.wb_sunny_rounded)
+        : (l.greetAfternoon, Icons.wb_twilight_rounded);
+    final scheme = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (context, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(0, 16 * (1 - v)),
+          child: child,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          gradient: LinearGradient(
+            begin: AlignmentDirectional.topStart,
+            end: AlignmentDirectional.bottomEnd,
+            colors: [
+              scheme.primary,
+              Color.lerp(scheme.primary, const Color(0xFF9B5CFF), 0.6)!,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.28),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    l.createToday,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+          ],
+        ),
       ),
     );
   }

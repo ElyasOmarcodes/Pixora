@@ -1,9 +1,7 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 
-/// Shows a dialog with Pixora's soft entrance: the page behind blurs and
-/// dims while the card rises and settles with a gentle spring.
+/// Shows a dialog with Pixora's soft entrance: the page behind dims while
+/// the card rises and settles with a gentle spring.
 Future<T?> showPixDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -34,11 +32,8 @@ Future<T?> showPixDialog<T>({
           children: [
             Positioned.fill(
               child: IgnorePointer(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 6 * t, sigmaY: 6 * t),
-                  child: ColoredBox(
-                    color: Colors.black.withValues(alpha: 0.32 * t),
-                  ),
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.4 * t),
                 ),
               ),
             ),
@@ -166,7 +161,10 @@ class PixDialogCard extends StatelessWidget {
                         const SizedBox(height: 22),
                         for (var i = 0; i < actions.length; i++) ...[
                           if (i > 0) const SizedBox(height: 10),
-                          actions[i],
+                          _Entrance(
+                            delay: Duration(milliseconds: 120 + 70 * i),
+                            child: actions[i],
+                          ),
                         ],
                       ],
                     ],
@@ -268,7 +266,7 @@ class _PixDialogBadgeState extends State<PixDialogBadge>
 }
 
 /// Full-width dialog buttons in three weights.
-enum PixButtonKind { primary, danger, quiet }
+enum PixButtonKind { primary, danger, solidDanger, quiet }
 
 class PixDialogButton extends StatelessWidget {
   const PixDialogButton({
@@ -297,6 +295,18 @@ class PixDialogButton extends StatelessWidget {
       label,
       style: const TextStyle(fontWeight: FontWeight.w700),
     );
+    return _Squish(
+      enabled: onPressed != null,
+      child: _button(scheme, shape, size, text),
+    );
+  }
+
+  Widget _button(
+    ColorScheme scheme,
+    OutlinedBorder shape,
+    Size size,
+    Widget text,
+  ) {
     switch (kind) {
       case PixButtonKind.primary:
         return FilledButton.icon(
@@ -319,6 +329,18 @@ class PixDialogButton extends StatelessWidget {
           icon: icon == null ? const SizedBox.shrink() : Icon(icon),
           label: text,
         );
+      case PixButtonKind.solidDanger:
+        return FilledButton(
+          autofocus: autofocus,
+          style: FilledButton.styleFrom(
+            minimumSize: size,
+            shape: shape,
+            backgroundColor: scheme.error,
+            foregroundColor: scheme.onError,
+          ),
+          onPressed: onPressed,
+          child: text,
+        );
       case PixButtonKind.quiet:
         return TextButton(
           autofocus: autofocus,
@@ -332,4 +354,86 @@ class PixDialogButton extends StatelessWidget {
         );
     }
   }
+}
+
+/// Fades and slides a dialog action in after [delay], so the buttons
+/// arrive one after another.
+class _Entrance extends StatefulWidget {
+  const _Entrance({required this.delay, required this.child});
+  final Duration delay;
+  final Widget child;
+
+  @override
+  State<_Entrance> createState() => _EntranceState();
+}
+
+class _EntranceState extends State<_Entrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+  );
+  late final Animation<double> _a = CurvedAnimation(
+    parent: _c,
+    curve: Curves.easeOutCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(widget.delay, () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _a,
+    builder: (context, child) => Opacity(
+      opacity: _a.value,
+      child: Transform.translate(
+        offset: Offset(0, 14 * (1 - _a.value)),
+        child: child,
+      ),
+    ),
+    child: widget.child,
+  );
+}
+
+/// Shrinks its child a little while a finger is on it and springs back on
+/// release — a soft, tactile press for dialog buttons.
+class _Squish extends StatefulWidget {
+  const _Squish({required this.enabled, required this.child});
+  final bool enabled;
+  final Widget child;
+
+  @override
+  State<_Squish> createState() => _SquishState();
+}
+
+class _SquishState extends State<_Squish> {
+  bool _down = false;
+
+  void _set(bool v) {
+    if (widget.enabled && _down != v) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    onPointerDown: (_) => _set(true),
+    onPointerUp: (_) => _set(false),
+    onPointerCancel: (_) => _set(false),
+    child: AnimatedScale(
+      scale: _down ? 0.95 : 1,
+      duration: Duration(milliseconds: _down ? 110 : 320),
+      curve: _down ? Curves.easeOut : Curves.elasticOut,
+      child: widget.child,
+    ),
+  );
 }

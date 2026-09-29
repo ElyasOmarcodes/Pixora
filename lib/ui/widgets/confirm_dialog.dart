@@ -36,21 +36,11 @@ Future<bool> showConfirmDialog(
               const SizedBox(width: 12),
               Expanded(
                 child: destructive
-                    ? FilledButton(
+                    ? PixDialogButton(
+                        kind: PixButtonKind.solidDanger,
                         autofocus: true,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 54),
-                          backgroundColor: scheme.error,
-                          foregroundColor: scheme.onError,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
+                        label: confirmLabel ?? l.delete,
                         onPressed: () => Navigator.pop(context, true),
-                        child: Text(
-                          confirmLabel ?? l.delete,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
                       )
                     : PixDialogButton(
                         autofocus: true,

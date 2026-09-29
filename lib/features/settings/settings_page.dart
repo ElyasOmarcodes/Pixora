@@ -13,7 +13,7 @@ import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
 import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.24.0';
+const String kAppVersion = '0.25.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
