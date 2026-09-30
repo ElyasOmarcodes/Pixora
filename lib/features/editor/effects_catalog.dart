@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import 'editor_scope.dart';
 import 'panels/effect_panels.dart';
 import 'panels/panel_common.dart';
+import 'panels/tone_panels.dart';
 
 /// Sections of the Layer effects page.
 /// Photoshop's Filter menu sections, then layer styles and colour.
@@ -118,6 +119,8 @@ const fxCatalog = <FxEntry>[
     Icons.layers_rounded,
     panel: ToolPanel.extrude,
   ),
+  FxEntry('curves', FxGroup.color, Icons.show_chart_rounded),
+  FxEntry('levels', FxGroup.color, Icons.equalizer_rounded),
   FxEntry('adjust', FxGroup.color, Icons.tune_rounded, panel: ToolPanel.adjust),
   FxEntry(
     'filters',
@@ -156,6 +159,8 @@ String fxLabel(AppLocalizations l, String key) => switch (key) {
   'mosaic' => l.fxMosaic,
   'vignette' => l.fxVignette,
   'dispersion' => l.fxDispersion,
+  'curves' => l.fxCurves,
+  'levels' => l.fxLevels,
   'maximum' => l.fxMaximum,
   'minimum' => l.fxMinimum,
   'offset' => l.fxOffset,
@@ -353,6 +358,8 @@ List<FxControl> _filterControls(AppLocalizations l, String type) {
       FxSlider('amount', l.amount, format: pct),
       FxSlider('midpoint', l.fxMidpoint, format: pct),
     ],
+    'curves' => [FxEffectCustom((c) => CurvesEditor(ctx: c))],
+    'levels' => [FxEffectCustom((c) => LevelsEditor(ctx: c))],
     'dispersion' => [
       FxLabel(l.direction),
       FxSlider('angle', l.angle, format: fxDegrees),

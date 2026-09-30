@@ -5,6 +5,7 @@ import '../model/effect.dart';
 import '../model/warp.dart';
 import '../render/color_matrix.dart';
 import '../render/filter_engine.dart';
+import 'tone.dart';
 
 /// adjust / filter: colour; blur / noise: pixel filters (applied before
 /// the mask, like smart filters); style: layer styles.
@@ -976,6 +977,59 @@ class EffectRegistry {
           e.number('midpoint', 40) / 100,
           box,
         ),
+      ),
+    );
+    // Image ▸ Adjustments ▸ Curves / Levels (lookup tables on the GPU).
+    register(
+      EffectDefinition(
+        type: 'curves',
+        category: EffectCategory.filter,
+        params: const [
+          // The channel shown in the editor (RGB, R, G, B).
+          EffectParam.number(
+            'channel',
+            min: 0,
+            max: 3,
+            defaultValue: 0,
+            step: 1,
+          ),
+        ],
+        filter: (e, _) {
+          final c = ToneCurves.decode(e.string('curves'));
+          return c.isIdentity ? null : ToneFilter(c.lut());
+        },
+      ),
+    );
+    register(
+      EffectDefinition(
+        type: 'levels',
+        category: EffectCategory.filter,
+        params: [
+          const EffectParam.number(
+            'channel',
+            min: 0,
+            max: 3,
+            defaultValue: 0,
+            step: 1,
+          ),
+          for (final k in ToneLevels.allParams)
+            EffectParam.number(
+              k,
+              min: k.endsWith('Gamma') ? 0.01 : 0,
+              max: k.endsWith('Gamma') ? 9.99 : 255,
+              defaultValue: ToneLevels.defaultOf(
+                k.endsWith('Gamma')
+                    ? 'gamma'
+                    : k.endsWith('White')
+                    ? 'inWhite'
+                    : 'inBlack',
+              ),
+            ),
+        ],
+        filter: (e, _) {
+          final lv = ToneLevels.read(e.number);
+          return lv.isIdentity ? null : ToneFilter(lv.lut());
+        },
       ),
     );
     register(

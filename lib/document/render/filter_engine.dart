@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter/painting.dart';
 
 import '../model/warp.dart';
+import 'blend_shader.dart';
 
 /// A pixel filter (Photoshop's Filter menu, applied as a smart filter):
 /// it works on the layer's own pixels, before the layer mask and before
@@ -262,6 +263,13 @@ class DispersionFilter extends PixFilter {
       distance * (1 + turbulence * 0.4) + size * (3 + stretch * 6);
 }
 
+/// Image ▸ Adjustments ▸ Curves / Levels: every channel mapped through a
+/// lookup table ([lut]: interleaved R, G, B, 256 entries each).
+class ToneFilter extends PixFilter {
+  const ToneFilter(this.lut);
+  final Uint8List lut;
+}
+
 /// Filter ▸ Distort ▸ Twirl / Pinch / Spherize / Ripple, over the layer
 /// box (mesh distortions, drawn on the GPU).
 enum DistortKind { twirl, pinch, spherize, ripple }
@@ -474,6 +482,7 @@ abstract final class FilterEngine {
         OffsetFilter o => _offset(img, o, space, rect, res),
         VignetteFilter v => _vignette(img, v, rect, res),
         DispersionFilter d => _dispersion(img, d, space, rect, res),
+        ToneFilter t => BlendShader.lookup(img, t.lut),
         DistortFilter d => _distort(img, d, rect, res),
       };
       if (!identical(input, img)) input.dispose();

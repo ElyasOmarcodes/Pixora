@@ -35,6 +35,7 @@ flutter:
   generate: true
   shaders:
     - shaders/blend.frag
+    - shaders/lut.frag
   assets:
     - assets/icons/
     - assets/images/

@@ -6,6 +6,7 @@ import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../effects_catalog.dart';
 import 'effect_panels.dart';
+import '../widgets/layer_thumbs.dart';
 
 /// Settings of one pixel filter on a layer (Gaussian blur, Add noise…),
 /// with show/hide and remove. Filters stack, so it edits by effect id.
@@ -92,6 +93,18 @@ class FilterEffectPanel extends StatelessWidget {
                     live: live,
                   ),
                   commit: () => editor.commit('effect'),
+                  effectContext: FxEffectContext(
+                    effect: effect,
+                    set: (k, v, {live = false}) => editor.setEffectParamById(
+                      layer.id,
+                      effectId,
+                      k,
+                      v,
+                      live: live,
+                    ),
+                    commit: () => editor.commit('effect'),
+                    histogram: LayerThumbs.instance.histogramOf(layer, editor),
+                  ),
                 ),
             ],
           ),

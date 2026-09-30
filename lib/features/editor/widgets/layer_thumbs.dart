@@ -7,6 +7,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../document/effects/tone.dart' show ToneHistogram;
 import '../../../document/model/layer.dart';
 import '../../../document/model/layer_transform.dart';
 import '../../../document/render/document_renderer.dart';
@@ -71,6 +72,25 @@ class LayerThumbs {
       _schedule();
     }
     return hit?.image;
+  }
+
+  /// The generation thumbnails are currently rendered for.
+  static int get generation => _LayerThumbImageState._generation;
+
+  static final Expando<Future<ToneHistogram?>> _histograms = Expando();
+
+  /// [layer]'s colour histogram, from its thumbnail (its content without
+  /// effects, like the input Photoshop's Curves and Levels show); null
+  /// until the thumbnail exists.
+  Future<ToneHistogram?>? histogramOf(Layer layer, EditorController editor) {
+    final image = lookup(layer, editor, generation, () {});
+    if (image == null) return null;
+    return _histograms[image] ??= () async {
+      final data = await image.toByteData();
+      return data == null
+          ? null
+          : ToneHistogram.fromRgba(data.buffer.asUint8List());
+    }();
   }
 
   /// How light [layer]'s thumbnail content is (0 black … 1 white), once

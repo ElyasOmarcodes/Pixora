@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../document/effects/effect_registry.dart';
+import '../../../document/effects/tone.dart' show ToneHistogram;
+import '../../../document/model/effect.dart' show LayerEffect;
 import '../../../document/model/blend.dart';
 import '../../../document/model/fill.dart';
 import '../../../document/model/layer.dart';
@@ -74,6 +76,28 @@ class FxCustom extends FxControl {
   builder;
 }
 
+/// What an [FxEffectCustom] editor gets: the whole effect (text params
+/// included), a setter, a commit for drags and — when the panel can
+/// compute it — the layer's histogram.
+class FxEffectContext {
+  const FxEffectContext({
+    required this.effect,
+    required this.set,
+    required this.commit,
+    this.histogram,
+  });
+  final LayerEffect effect;
+  final void Function(String key, Object value, {bool live}) set;
+  final VoidCallback commit;
+  final Future<ToneHistogram?>? histogram;
+}
+
+/// A whole custom editor for an effect (Curves, Levels).
+class FxEffectCustom extends FxControl {
+  const FxEffectCustom(this.builder);
+  final Widget Function(FxEffectContext c) builder;
+}
+
 /// A section title between controls.
 class FxLabel extends FxControl {
   const FxLabel(this.label);
@@ -91,6 +115,7 @@ Widget buildFxControl(
   required Color Function(String key) colorOf,
   required void Function(String key, Object value, {bool live}) set,
   required VoidCallback commit,
+  FxEffectContext? effectContext,
 }) {
   switch (c) {
     case FxSlider s:
@@ -175,6 +200,9 @@ Widget buildFxControl(
       return PanelLabel(lb.label);
     case FxCustom cu:
       return cu.builder(valueOf, set);
+    case FxEffectCustom ec:
+      final ctx = effectContext;
+      return ctx == null ? const SizedBox.shrink() : ec.builder(ctx);
   }
 }
 
