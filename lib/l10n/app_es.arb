@@ -782,5 +782,8 @@
   "permAllow": "Permitir",
   "permNotNow": "Ahora no",
   "permGranted": "¡Listo!",
-  "permLater": "Puedes permitirlo después, al guardar tu primera imagen."
+  "permLater": "Puedes permitirlo después, al guardar tu primera imagen.",
+  "tapWordsHint": "Toca una palabra y luego otra para seleccionar lo que hay entre ellas",
+  "growSelection": "Una letra más",
+  "shrinkSelection": "Una letra menos"
 }

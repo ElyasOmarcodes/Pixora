@@ -189,6 +189,27 @@ class _TextPartSelectorState extends State<TextPartSelector> {
                       );
                     },
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: ListenableBuilder(
+                      listenable: _c,
+                      builder: (context, _) {
+                        final s = _c.selection;
+                        return _WordPicker(
+                          text: widget.text,
+                          maxHeight: 220,
+                          selection: s.isValid && !s.isCollapsed
+                              ? TextRange(start: s.start, end: s.end)
+                              : null,
+                          fontFamily: widget.fontFamily,
+                          onSelect: (r) => _c.selection = TextSelection(
+                            baseOffset: r.start,
+                            extentOffset: r.end,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -347,6 +368,18 @@ class _TextPartSelectorState extends State<TextPartSelector> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      // Picking words by tapping: dragging a selection
+                      // through right-to-left text is erratic on phones.
+                      _WordPicker(
+                        text: widget.text,
+                        selection: _last,
+                        fontFamily: widget.fontFamily,
+                        onSelect: (r) => _c.selection = TextSelection(
+                          baseOffset: r.start,
+                          extentOffset: r.end,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         _last == null
@@ -365,6 +398,203 @@ class _TextPartSelectorState extends State<TextPartSelector> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// The text as tappable words: tap one to select it, another to select
+/// everything from the first to it; the arrows move either end by one
+/// letter. Laid out in the text's own direction, so right-to-left text
+/// reads — and selects — naturally.
+class _WordPicker extends StatefulWidget {
+  const _WordPicker({
+    required this.text,
+    required this.selection,
+    required this.fontFamily,
+    required this.onSelect,
+    this.maxHeight = 132,
+  });
+  final String text;
+  final TextRange? selection;
+  final String fontFamily;
+  final ValueChanged<TextRange> onSelect;
+  final double maxHeight;
+
+  @override
+  State<_WordPicker> createState() => _WordPickerState();
+}
+
+class _WordPickerState extends State<_WordPicker> {
+  /// The word the current range was started from.
+  int? _anchor;
+
+  List<TextRange> get _words => [
+    for (final m in RegExp(r'\S+').allMatches(widget.text))
+      TextRange(start: m.start, end: m.end),
+  ];
+
+  void _tap(List<TextRange> words, int i) {
+    final w = words[i];
+    final sel = widget.selection;
+    final a = _anchor;
+    if (a != null && a < words.length && sel != null && a != i) {
+      // Everything between the first tapped word and this one.
+      final from = words[a < i ? a : i], to = words[a < i ? i : a];
+      widget.onSelect(TextRange(start: from.start, end: to.end));
+      _anchor = null;
+    } else {
+      widget.onSelect(w);
+      _anchor = i;
+    }
+    setState(() {});
+  }
+
+  void _nudge({required bool start, required int by}) {
+    final sel = widget.selection;
+    if (sel == null) return;
+    final n = widget.text.length;
+    var s = sel.start, e = sel.end;
+    if (start) {
+      s = (s + by).clamp(0, e - 1);
+    } else {
+      e = (e + by).clamp(s + 1, n);
+    }
+    widget.onSelect(TextRange(start: s, end: e));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final words = _words;
+    final dir = detectTextDirection(widget.text);
+    final sel = widget.selection;
+    bool inside(TextRange w) =>
+        sel != null && w.start < sel.end && w.end > sel.start;
+    final font = widget.fontFamily == 'System' ? null : widget.fontFamily;
+    Widget arrow(IconData icon, String tip, VoidCallback f) => IconButton(
+      tooltip: tip,
+      visualDensity: VisualDensity.compact,
+      onPressed: sel == null ? null : f,
+      icon: Icon(icon, size: 20),
+    );
+    // In reading order the start of the text is on the right for RTL.
+    final rtl = dir == TextDirection.rtl;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: widget.maxHeight),
+          child: SingleChildScrollView(
+            child: Directionality(
+              textDirection: dir,
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (var i = 0; i < words.length; i++)
+                    _WordChip(
+                      text: widget.text.substring(words[i].start, words[i].end),
+                      font: font,
+                      selected: inside(words[i]),
+                      anchor: _anchor == i,
+                      onTap: () => _tap(words, i),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            // The text's start end.
+            arrow(
+              rtl ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+              l.growSelection,
+              () => _nudge(start: true, by: -1),
+            ),
+            arrow(
+              rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              l.shrinkSelection,
+              () => _nudge(start: true, by: 1),
+            ),
+            Expanded(
+              child: Text(
+                l.tapWordsHint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            // The text's finishing end.
+            arrow(
+              rtl ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+              l.shrinkSelection,
+              () => _nudge(start: false, by: -1),
+            ),
+            arrow(
+              rtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              l.growSelection,
+              () => _nudge(start: false, by: 1),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _WordChip extends StatelessWidget {
+  const _WordChip({
+    required this.text,
+    required this.font,
+    required this.selected,
+    required this.anchor,
+    required this.onTap,
+  });
+  final String text;
+  final String? font;
+  final bool selected;
+  final bool anchor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary
+                : scheme.onSurface.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: anchor ? scheme.tertiary : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontFamily: font,
+              fontFamilyFallback: FontCatalog.fallback,
+              fontSize: 17,
+              height: 1.3,
+              color: selected ? scheme.onPrimary : scheme.onSurface,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

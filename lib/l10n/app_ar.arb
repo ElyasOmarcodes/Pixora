@@ -782,5 +782,8 @@
   "permAllow": "السماح",
   "permNotNow": "ليس الآن",
   "permGranted": "كل شيء جاهز!",
-  "permLater": "يمكنك السماح لاحقًا عند حفظ أول صورة."
+  "permLater": "يمكنك السماح لاحقًا عند حفظ أول صورة.",
+  "tapWordsHint": "اضغط كلمة ثم أخرى لتحديد ما بينهما",
+  "growSelection": "حرف إضافي",
+  "shrinkSelection": "حرف أقل"
 }

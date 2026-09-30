@@ -874,5 +874,8 @@
   "permAllow": "Allow",
   "permNotNow": "Not now",
   "permGranted": "All set!",
-  "permLater": "You can allow it later when you first save an image."
+  "permLater": "You can allow it later when you first save an image.",
+  "tapWordsHint": "Tap a word, then another to select all between",
+  "growSelection": "One more letter",
+  "shrinkSelection": "One letter less"
 }

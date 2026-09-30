@@ -221,6 +221,8 @@ class DocumentRenderer {
       doc.layers,
       hidden: hidden,
       under: (c) => paintBackground(c, doc),
+      // What the background looks like, for reusing shader-blended results.
+      underKey: (doc.background, doc.backgroundEffects, doc.width, doc.height),
       area: bounds,
     );
     canvas
@@ -276,6 +278,7 @@ class DocumentRenderer {
     Set<String> hidden = const {},
     void Function(Canvas canvas)? under,
     Rect? area,
+    Object? underKey,
   }) {
     bool shown(Layer l) => l.props.visible && !hidden.contains(l.id);
     if (BlendShader.program != null &&
@@ -286,7 +289,7 @@ class DocumentRenderer {
               shown(l) &&
               l.props.opacity > 0,
         )) {
-      _paintLayersBlended(canvas, list, hidden, under, area);
+      _paintLayersBlended(canvas, list, hidden, under, area, underKey);
       return;
     }
     under?.call(canvas);
@@ -331,8 +334,9 @@ class DocumentRenderer {
     List<Layer> list,
     Set<String> hidden,
     void Function(Canvas canvas)? under,
-    Rect? area,
-  ) {
+    Rect? area, [
+    Object? underKey,
+  ]) {
     bool shown(Layer l) => l.props.visible && !hidden.contains(l.id);
     // The area the backdrop covers: the given one (the document), or the
     // layers' own bounds (inside groups), within the canvas clip.
@@ -385,6 +389,26 @@ class DocumentRenderer {
         paintLayers(accCanvas, unit, hidden: hidden);
       } else {
         final below = acc.endRecording();
+        // On screen, reuse the blended result while nothing under it (or
+        // the unit itself) changed: editing layers above a Linear Light
+        // layer used to re-read and re-blend the whole backdrop per frame.
+        final key = cache != null && (under == null || underKey != null)
+            ? _BlendKey(list.sublist(0, j), hidden, underKey, area0, w, h)
+            : null;
+        final reuse = key == null ? null : _blendCache[key];
+        if (reuse != null) {
+          below.dispose();
+          acc = ui.PictureRecorder();
+          accCanvas = Canvas(acc)
+            ..drawImageRect(
+              reuse,
+              Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+              area0,
+              Paint()..filterQuality = FilterQuality.medium,
+            );
+          i = j;
+          continue;
+        }
         final dst = raster((c) => c.drawPicture(below));
         // The unit on its own, in Normal mode.
         final src = raster((c) {
@@ -410,6 +434,15 @@ class DocumentRenderer {
         src.dispose();
         dst.dispose();
         below.dispose();
+        if (key != null) {
+          _blendCache.remove(key);
+          _blendCache[key] = out;
+          // Evicted images are left to the garbage collector: a picture
+          // being drawn may still hold them.
+          while (_blendCache.length > 3) {
+            _blendCache.remove(_blendCache.keys.first);
+          }
+        }
         acc = ui.PictureRecorder();
         accCanvas = Canvas(acc)
           ..drawImageRect(
@@ -424,6 +457,9 @@ class DocumentRenderer {
     final picture = acc.endRecording();
     canvas.drawPicture(picture);
   }
+
+  /// Recent shader-blended results (see [_paintLayersBlended]).
+  static final LinkedHashMap<_BlendKey, ui.Image> _blendCache = LinkedHashMap();
 
   /// Paints one layer (and, for groups, its subtree). With [asClipBase] the
   /// layer's blend mode is skipped because the enclosing clip group applies
@@ -2666,33 +2702,28 @@ class _Stamp {
     final res = _res;
     final outR = s.outside, inR = s.inside;
     final box = rect.inflate(outR + 2);
-    // The outside of the shape, for erosion: shape − grow(outside).
-    final outside = inR > 0
-        ? _make(rect.inflate(inR + 2), res, (c) {
-            final b = rect.inflate(inR + 2);
-            c.drawRect(b, Paint()..color = const Color(0xFFFFFFFF));
-            draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
-          })
-        : null;
+    // Grown and shrunk shapes as true morphology — the maximum (or
+    // minimum) of the alpha under a disk, like Photoshop. Stamping the
+    // layer over itself summed faint pixels (soft shadows inside a photo)
+    // into solid ones, more so at higher resolutions, so the export's
+    // stroke differed from the one on screen.
+    final grown = _morph(box, res, outR, grow: true);
+    final shrunk = inR > 0 ? _morph(box, res, inR, grow: false) : null;
     final band = _make(box, res, (c) {
       c.saveLayer(box, Paint());
-      // Grown shape.
-      draw(c);
-      for (final o in _disk(outR, res)) {
-        draw(c, o);
-      }
+      grown.draw(c, Offset.zero, Paint()..colorFilter = _grayToAlpha);
       // Minus the shrunk shape.
-      c.saveLayer(box, Paint()..blendMode = BlendMode.dstOut);
-      draw(c);
-      if (outside != null) {
-        c.saveLayer(box, Paint()..blendMode = BlendMode.dstOut);
-        outside.draw(c);
-        for (final o in _disk(inR, res)) {
-          outside.draw(c, o);
-        }
-        c.restore();
+      if (shrunk != null) {
+        shrunk.draw(
+          c,
+          Offset.zero,
+          Paint()
+            ..colorFilter = _grayToAlpha
+            ..blendMode = BlendMode.dstOut,
+        );
+      } else {
+        draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
       }
-      c.restore();
       // Colour it.
       c.drawRect(
         box,
@@ -2701,9 +2732,39 @@ class _Stamp {
       );
       c.restore();
     });
-    outside?.dispose();
+    grown.dispose();
+    shrunk?.dispose();
     return band;
   }
+
+  /// This stamp's alpha grown ([grow]) or shrunk by [r] (local units),
+  /// over [box], as an opaque grey image (grey = alpha): max / min of the
+  /// alpha under a disk, stamped with Lighten / Darken on opaque greys so
+  /// values never add up.
+  _Stamp _morph(Rect box, double res, double r, {required bool grow}) =>
+      _make(box, res, (c) {
+        c.drawRect(box, Paint()..color = const Color(0xFF000000));
+        draw(c, Offset.zero, Paint()..colorFilter = _alphaToGray);
+        final p = Paint()
+          ..colorFilter = _alphaToGray
+          ..blendMode = grow ? BlendMode.lighten : BlendMode.darken;
+        for (final o in _disk(r, res)) {
+          draw(c, o, p);
+        }
+      });
+
+  static const _alphaToGray = ColorFilter.matrix([
+    0, 0, 0, 1, 0, //
+    0, 0, 0, 1, 0, //
+    0, 0, 0, 1, 0, //
+    0, 0, 0, 0, 255, //
+  ]);
+  static const _grayToAlpha = ColorFilter.matrix([
+    0, 0, 0, 0, 255, //
+    0, 0, 0, 0, 255, //
+    0, 0, 0, 0, 255, //
+    1, 0, 0, 0, 0, //
+  ]);
 
   void dispose() => image.dispose();
 }
@@ -2964,8 +3025,39 @@ class _LayerPlan {
       canvas.restore();
       return;
     }
-    for (final p in parts) {
-      _draw(canvas, p, p.body ? blend : p.mode, p.alpha * opacity);
+    // Consecutive plain parts (the layer and its stroke, say) take the
+    // layer's opacity together, as one — like Photoshop, and exactly as
+    // the canvas's cached bitmaps do. Fading each on its own let a stroke
+    // show through the content it overlaps, so exports differed from the
+    // screen.
+    var i = 0;
+    while (i < parts.length) {
+      final p = parts[i];
+      final mode = p.body ? blend : p.mode;
+      var j = i + 1;
+      if (mode == BlendMode.srcOver && p.alpha >= 1) {
+        while (j < parts.length &&
+            (parts[j].body ? blend : parts[j].mode) == BlendMode.srcOver &&
+            parts[j].alpha >= 1) {
+          j++;
+        }
+      }
+      if (j - i == 1) {
+        _draw(canvas, p, mode, p.alpha * opacity);
+      } else {
+        final fade = opacity < 1;
+        if (fade) {
+          canvas.saveLayer(
+            bounds,
+            Paint()..color = Color.fromRGBO(0, 0, 0, opacity.clamp(0.0, 1.0)),
+          );
+        }
+        for (var k = i; k < j; k++) {
+          parts[k].draw(canvas);
+        }
+        if (fade) canvas.restore();
+      }
+      i = j;
     }
   }
 
@@ -3022,4 +3114,41 @@ class _RecentFilter {
   final int costMs;
   final DateTime computed;
   DateTime requested;
+}
+
+/// Identifies a shader-blended result: the same layer objects (compared
+/// by identity — layers are immutable), background and area.
+class _BlendKey {
+  _BlendKey(this.layers, this.hidden, this.under, this.area, this.w, this.h);
+  final List<Layer> layers;
+  final Set<String> hidden;
+  final Object? under;
+  final Rect area;
+  final int w, h;
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _BlendKey ||
+        other.w != w ||
+        other.h != h ||
+        other.area != area ||
+        other.under != under ||
+        other.layers.length != layers.length ||
+        !setEquals(other.hidden, hidden)) {
+      return false;
+    }
+    for (var i = 0; i < layers.length; i++) {
+      if (!identical(other.layers[i], layers[i])) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    w,
+    h,
+    area,
+    under,
+    Object.hashAll(layers.map(identityHashCode)),
+  );
 }

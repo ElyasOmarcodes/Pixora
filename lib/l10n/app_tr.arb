@@ -782,5 +782,8 @@
   "permAllow": "İzin ver",
   "permNotNow": "Şimdi değil",
   "permGranted": "Her şey hazır!",
-  "permLater": "İlk görseli kaydederken de izin verebilirsiniz."
+  "permLater": "İlk görseli kaydederken de izin verebilirsiniz.",
+  "tapWordsHint": "Bir kelimeye, sonra diğerine dokunun; aradakiler seçilir",
+  "growSelection": "Bir harf daha",
+  "shrinkSelection": "Bir harf eksik"
 }

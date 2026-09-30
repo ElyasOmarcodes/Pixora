@@ -782,5 +782,8 @@
   "permAllow": "Autoriser",
   "permNotNow": "Pas maintenant",
   "permGranted": "Tout est prêt !",
-  "permLater": "Vous pourrez l’autoriser plus tard, au premier enregistrement."
+  "permLater": "Vous pourrez l’autoriser plus tard, au premier enregistrement.",
+  "tapWordsHint": "Touchez un mot, puis un autre pour tout sélectionner entre eux",
+  "growSelection": "Une lettre de plus",
+  "shrinkSelection": "Une lettre de moins"
 }
