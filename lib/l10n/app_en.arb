@@ -907,5 +907,35 @@
   "presetIncreaseContrast3": "Increase Contrast 3",
   "presetLightenShadows": "Lighten Shadows",
   "presetMidtonesBrighter": "Midtones Brighter",
-  "presetMidtonesDarker": "Midtones Darker"
+  "presetMidtonesDarker": "Midtones Darker",
+  "fmtWebp": "Small, for the web",
+  "fmtPdf": "Document · print (RGB / CMYK)",
+  "fmtSvg": "Vector · drawing",
+  "fmtTiff": "Lossless · for print",
+  "fmtBmp": "Raw picture",
+  "fmtLossless": "Lossless",
+  "pdfColor": "Colour mode",
+  "pdfRgbHint": "RGB · screens and home printers",
+  "pdfCmykHint": "CMYK · for print shops",
+  "pdfPageSize": "Page: {w} × {h} cm at {dpi} dpi",
+  "@pdfPageSize": {
+    "placeholders": {
+      "w": {
+        "type": "String"
+      },
+      "h": {
+        "type": "String"
+      },
+      "dpi": {
+        "type": "String"
+      }
+    }
+  },
+  "svgHint": "Shapes, icons and pen paths stay vector; photos, text and effects are embedded as pictures.",
+  "fileName": "File name",
+  "fileNameProject": "Project name",
+  "fileNameLayer": "From text",
+  "fileNameCustom": "Custom",
+  "fileNameLayerHint": "The file takes this layer’s text — and follows every change to it.",
+  "noTextLayers": "No text layers in this project yet."
 }

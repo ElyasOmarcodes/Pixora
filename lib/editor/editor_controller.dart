@@ -1550,6 +1550,14 @@ class EditorController extends ChangeNotifier {
   void renameDocument(String name) =>
       apply('rename_document', (d) => d.copyWith(name: name));
 
+  /// How exported files are named (see [PixDocument.exportName]).
+  void setExportName(String? value) => apply(
+    'export_name',
+    (d) => value == null
+        ? d.copyWith(clearExportName: true)
+        : d.copyWith(exportName: value),
+  );
+
   /// Changes the canvas size. When [scaleContent] is true layers are scaled
   /// and moved proportionally, otherwise they keep their size and stay
   /// centred.

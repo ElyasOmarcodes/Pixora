@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "کنټراست زیات ۳",
   "presetLightenShadows": "سیوري روښانه",
   "presetMidtonesBrighter": "منځني رنګونه روښانه",
-  "presetMidtonesDarker": "منځني رنګونه تیاره"
+  "presetMidtonesDarker": "منځني رنګونه تیاره",
+  "fmtWebp": "کوچنی، د وېب لپاره",
+  "fmtPdf": "سند · چاپ (RGB / CMYK)",
+  "fmtSvg": "وکټور · رسم",
+  "fmtTiff": "بې تاوانه · د چاپ لپاره",
+  "fmtBmp": "خام انځور",
+  "fmtLossless": "بې تاوانه",
+  "pdfColor": "د رنګ حالت",
+  "pdfRgbHint": "RGB · سکرینونه او کورني پرنټرونه",
+  "pdfCmykHint": "CMYK · د چاپخونو لپاره",
+  "pdfPageSize": "پاڼه: {w} × {h} سانتي متره، {dpi} dpi",
+  "svgHint": "شکلونه، آیکونونه او د قلم لارې وکټور پاتې کېږي؛ انځورونه، متن او افکټونه د انځور په توګه ورننوځي.",
+  "fileName": "د فایل نوم",
+  "fileNameProject": "د پروژې نوم",
+  "fileNameLayer": "له متن څخه",
+  "fileNameCustom": "خپله",
+  "fileNameLayerHint": "فایل د دې لایر متن اخلي — او د هغه هر بدلون تعقیبوي.",
+  "noTextLayers": "په دې پروژه کې لا متني لایر نشته."
 }

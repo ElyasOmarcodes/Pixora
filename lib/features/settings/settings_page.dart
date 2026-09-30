@@ -12,9 +12,10 @@ import '../../l10n/app_localizations.dart';
 import '../../ui/widgets/pixora_logo.dart';
 import '../../ui/widgets/pressable.dart';
 import '../about/developer_page.dart';
+import '../editor/widgets/export_sheet.dart' show exportFormats;
 import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.28.0';
+const String kAppVersion = '0.29.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -152,15 +153,22 @@ class SettingsPage extends StatelessWidget {
                     ListTile(
                       leading: const Icon(Icons.image_rounded),
                       title: Text(l.defaultFormat),
-                      trailing: SegmentedButton<String>(
-                        showSelectedIcon: false,
-                        segments: const [
-                          ButtonSegment(value: 'png', label: Text('PNG')),
-                          ButtonSegment(value: 'jpg', label: Text('JPG')),
+                      trailing: DropdownButton<String>(
+                        value: exportFormats.containsKey(settings.exportFormat)
+                            ? settings.exportFormat
+                            : 'png',
+                        underline: const SizedBox.shrink(),
+                        borderRadius: BorderRadius.circular(14),
+                        items: [
+                          for (final f in exportFormats.keys)
+                            DropdownMenuItem(
+                              value: f,
+                              child: Text(f.toUpperCase()),
+                            ),
                         ],
-                        selected: {settings.exportFormat},
-                        onSelectionChanged: (s) =>
-                            settings.exportFormat = s.first,
+                        onChanged: (v) {
+                          if (v != null) settings.exportFormat = v;
+                        },
                       ),
                     ),
                     if (settings.exportFormat == 'jpg')

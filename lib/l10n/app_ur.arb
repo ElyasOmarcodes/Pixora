@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "کنٹراسٹ بڑھائیں 3",
   "presetLightenShadows": "سائے ہلکے",
   "presetMidtonesBrighter": "درمیانی رنگ روشن",
-  "presetMidtonesDarker": "درمیانی رنگ گہرے"
+  "presetMidtonesDarker": "درمیانی رنگ گہرے",
+  "fmtWebp": "چھوٹا، ویب کے لیے",
+  "fmtPdf": "دستاویز · پرنٹ (RGB / CMYK)",
+  "fmtSvg": "ویکٹر · ڈرائنگ",
+  "fmtTiff": "بغیر نقصان · پرنٹ کے لیے",
+  "fmtBmp": "خام تصویر",
+  "fmtLossless": "بغیر نقصان",
+  "pdfColor": "رنگ موڈ",
+  "pdfRgbHint": "RGB · اسکرین اور گھریلو پرنٹر",
+  "pdfCmykHint": "CMYK · پرنٹنگ پریس کے لیے",
+  "pdfPageSize": "صفحہ: {w} × {h} سینٹی میٹر، {dpi} dpi",
+  "svgHint": "شکلیں، آئیکن اور پین پاتھ ویکٹر رہتے ہیں؛ تصاویر، متن اور ایفیکٹس بطور تصویر شامل ہوتے ہیں۔",
+  "fileName": "فائل کا نام",
+  "fileNameProject": "پروجیکٹ کا نام",
+  "fileNameLayer": "متن سے",
+  "fileNameCustom": "اپنی مرضی",
+  "fileNameLayerHint": "فائل اس لیئر کا متن لیتی ہے — اور اس کی ہر تبدیلی کے ساتھ بدلتی ہے۔",
+  "noTextLayers": "اس پروجیکٹ میں ابھی کوئی متنی لیئر نہیں۔"
 }

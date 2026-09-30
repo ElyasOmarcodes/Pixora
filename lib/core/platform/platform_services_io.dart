@@ -6,6 +6,7 @@ import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../imaging/image_formats.dart';
 import '../../projects/legacy_folder_store.dart';
 import '../../projects/pixora_file_store.dart';
 import '../../projects/pixora_format.dart';
@@ -179,9 +180,20 @@ class IoPlatformServices extends PlatformServices {
 
   @override
   Future<PickedFile?> pickImage() async {
-    final file = await FilePicker.pickFile(type: FileType.image);
+    // Phones open the photo gallery; desktops list every format Pixora
+    // reads (TIFF, PSD, SVG … are converted on the way in).
+    final file = info.isMobile
+        ? await FilePicker.pickFile(type: FileType.image)
+        : await FilePicker.pickFile(
+            type: FileType.custom,
+            allowedExtensions: ImageFormats.openable,
+          );
     if (file == null) return null;
-    return PickedFile(file.name, await file.readAsBytes());
+    final bytes = await file.readAsBytes();
+    return PickedFile(
+      file.name,
+      await ImageFormats.normalize(file.name, bytes),
+    );
   }
 
   @override
@@ -226,6 +238,12 @@ class IoPlatformServices extends PlatformServices {
     String fileName,
     String mimeType,
   ) async {
+    // PDF, SVG, TIFF, BMP don't belong in a photo gallery: phones save
+    // them as files instead.
+    if (info.isMobile && !_galleryTypes.contains(mimeType)) {
+      final r = await saveFileAs(bytes, fileName, mimeType);
+      return ExportResult(r, ExportDestination.download);
+    }
     if (info.isMobile) {
       try {
         if (!await Gal.hasAccess(toAlbum: true)) {
@@ -261,6 +279,8 @@ class IoPlatformServices extends PlatformServices {
       return const ExportResult(SaveOutcome.failed, ExportDestination.folder);
     }
   }
+
+  static const _galleryTypes = {'image/png', 'image/jpeg', 'image/webp'};
 
   Future<File> _unique(Directory dir, String fileName) async {
     final dot = fileName.lastIndexOf('.');

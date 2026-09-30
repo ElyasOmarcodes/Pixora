@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "افزایش کنتراست ۳",
   "presetLightenShadows": "روشن کردن سایه‌ها",
   "presetMidtonesBrighter": "میانه‌ها روشن‌تر",
-  "presetMidtonesDarker": "میانه‌ها تیره‌تر"
+  "presetMidtonesDarker": "میانه‌ها تیره‌تر",
+  "fmtWebp": "کم‌حجم، برای وب",
+  "fmtPdf": "سند · چاپ (RGB / CMYK)",
+  "fmtSvg": "وکتور · طراحی",
+  "fmtTiff": "بدون افت · برای چاپ",
+  "fmtBmp": "تصویر خام",
+  "fmtLossless": "بدون افت کیفیت",
+  "pdfColor": "حالت رنگ",
+  "pdfRgbHint": "RGB · صفحه‌نمایش و چاپگر خانگی",
+  "pdfCmykHint": "CMYK · برای چاپخانه",
+  "pdfPageSize": "صفحه: {w} × {h} سانتی‌متر با {dpi} dpi",
+  "svgHint": "شکل‌ها، آیکون‌ها و مسیرهای قلم وکتور می‌مانند؛ عکس‌ها، متن و افکت‌ها به‌صورت تصویر جاسازی می‌شوند.",
+  "fileName": "نام فایل",
+  "fileNameProject": "نام پروژه",
+  "fileNameLayer": "از متن",
+  "fileNameCustom": "دلخواه",
+  "fileNameLayerHint": "فایل متن این لایه را می‌گیرد — و هر تغییر آن را دنبال می‌کند.",
+  "noTextLayers": "این پروژه هنوز لایه متنی ندارد."
 }

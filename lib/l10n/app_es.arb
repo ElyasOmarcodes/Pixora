@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "Aumentar contraste 3",
   "presetLightenShadows": "Aclarar sombras",
   "presetMidtonesBrighter": "Medios tonos más claros",
-  "presetMidtonesDarker": "Medios tonos más oscuros"
+  "presetMidtonesDarker": "Medios tonos más oscuros",
+  "fmtWebp": "Ligero, para la web",
+  "fmtPdf": "Documento · impresión (RGB / CMYK)",
+  "fmtSvg": "Vectorial · dibujo",
+  "fmtTiff": "Sin pérdida · para imprimir",
+  "fmtBmp": "Imagen sin comprimir",
+  "fmtLossless": "Sin pérdida",
+  "pdfColor": "Modo de color",
+  "pdfRgbHint": "RGB · pantallas e impresoras domésticas",
+  "pdfCmykHint": "CMYK · para imprentas",
+  "pdfPageSize": "Página: {w} × {h} cm a {dpi} ppp",
+  "svgHint": "Formas, iconos y trazados siguen siendo vectores; fotos, texto y efectos se incrustan como imágenes.",
+  "fileName": "Nombre del archivo",
+  "fileNameProject": "Nombre del proyecto",
+  "fileNameLayer": "Desde un texto",
+  "fileNameCustom": "Personalizado",
+  "fileNameLayerHint": "El archivo toma el texto de esta capa y sigue cada cambio.",
+  "noTextLayers": "Este proyecto aún no tiene capas de texto."
 }

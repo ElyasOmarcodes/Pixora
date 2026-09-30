@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "Plus de contraste 3",
   "presetLightenShadows": "Éclaircir les ombres",
   "presetMidtonesBrighter": "Tons moyens plus clairs",
-  "presetMidtonesDarker": "Tons moyens plus sombres"
+  "presetMidtonesDarker": "Tons moyens plus sombres",
+  "fmtWebp": "Léger, pour le web",
+  "fmtPdf": "Document · impression (RGB / CMYK)",
+  "fmtSvg": "Vectoriel · dessin",
+  "fmtTiff": "Sans perte · pour l’impression",
+  "fmtBmp": "Image brute",
+  "fmtLossless": "Sans perte",
+  "pdfColor": "Mode colorimétrique",
+  "pdfRgbHint": "RGB · écrans et imprimantes domestiques",
+  "pdfCmykHint": "CMYK · pour les imprimeurs",
+  "pdfPageSize": "Page : {w} × {h} cm à {dpi} ppp",
+  "svgHint": "Formes, icônes et tracés restent vectoriels ; photos, texte et effets sont intégrés en images.",
+  "fileName": "Nom du fichier",
+  "fileNameProject": "Nom du projet",
+  "fileNameLayer": "Depuis un texte",
+  "fileNameCustom": "Personnalisé",
+  "fileNameLayerHint": "Le fichier prend le texte de ce calque et suit chaque modification.",
+  "noTextLayers": "Ce projet n’a pas encore de calque de texte."
 }

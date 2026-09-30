@@ -815,5 +815,22 @@
   "presetIncreaseContrast3": "زيادة التباين 3",
   "presetLightenShadows": "تفتيح الظلال",
   "presetMidtonesBrighter": "درجات متوسطة أفتح",
-  "presetMidtonesDarker": "درجات متوسطة أغمق"
+  "presetMidtonesDarker": "درجات متوسطة أغمق",
+  "fmtWebp": "صغير، للويب",
+  "fmtPdf": "مستند · طباعة (RGB / CMYK)",
+  "fmtSvg": "متجه · رسم",
+  "fmtTiff": "بلا فقد · للطباعة",
+  "fmtBmp": "صورة خام",
+  "fmtLossless": "بلا فقد",
+  "pdfColor": "وضع الألوان",
+  "pdfRgbHint": "RGB · للشاشات والطابعات المنزلية",
+  "pdfCmykHint": "CMYK · للمطابع",
+  "pdfPageSize": "الصفحة: {w} × {h} سم بدقة {dpi} dpi",
+  "svgHint": "تبقى الأشكال والأيقونات ومسارات القلم متجهة؛ وتُضمَّن الصور والنصوص والتأثيرات كصور.",
+  "fileName": "اسم الملف",
+  "fileNameProject": "اسم المشروع",
+  "fileNameLayer": "من نص",
+  "fileNameCustom": "مخصص",
+  "fileNameLayerHint": "يأخذ الملف نص هذه الطبقة — ويتبع كل تغيير فيه.",
+  "noTextLayers": "لا توجد طبقات نص في هذا المشروع بعد."
 }

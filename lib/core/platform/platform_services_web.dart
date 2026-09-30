@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../projects/project_store.dart';
 import 'platform_info.dart';
 import 'platform_services.dart';
+import '../imaging/image_formats.dart';
 
 PlatformServices createPlatformServices(PlatformInfo info) =>
     WebPlatformServices(info);
@@ -32,7 +33,18 @@ class WebPlatformServices extends PlatformServices {
   }
 
   @override
-  Future<PickedFile?> pickImage() => _pick(FileType.image);
+  Future<PickedFile?> pickImage() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ImageFormats.openable,
+    );
+    if (file == null) return null;
+    final bytes = await file.readAsBytes();
+    return PickedFile(
+      file.name,
+      await ImageFormats.normalize(file.name, bytes),
+    );
+  }
 
   @override
   Future<PickedFile?> pickProjectFile() => _pick(FileType.any);

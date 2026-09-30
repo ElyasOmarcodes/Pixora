@@ -25,6 +25,7 @@ class PixDocument {
     CanvasGuides? guides,
     this.dpi = 72,
     List<LayerEffect> backgroundEffects = const [],
+    this.exportName,
   }) : id = id ?? newId('doc'),
        layers = List.unmodifiable(layers),
        backgroundEffects = List.unmodifiable(backgroundEffects),
@@ -53,6 +54,34 @@ class PixDocument {
   /// Resolution for print units (cm, mm, inches): pixels per inch.
   final double dpi;
 
+  /// How exported files are named: null = after the project, `layer:<id>`
+  /// = the current text of that text layer (it follows every edit),
+  /// anything else = that name.
+  final String? exportName;
+
+  static const exportNameLayerPrefix = 'layer:';
+
+  /// The file name (without extension) exports get now.
+  String get exportFileName {
+    final n = exportName;
+    var out = name;
+    if (n != null && n.startsWith(exportNameLayerPrefix)) {
+      final l = layerById(n.substring(exportNameLayerPrefix.length));
+      if (l is TextLayer) {
+        final t = l.text
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty);
+        if (t.isNotEmpty) out = t.first;
+      }
+    } else if (n != null && n.trim().isNotEmpty) {
+      out = n;
+    }
+    out = out.replaceAll(RegExp(r'[\\/:*?"<>|\u0000-\u001f]'), '_').trim();
+    if (out.length > 90) out = out.substring(0, 90).trim();
+    return out.isEmpty ? 'pixora' : out;
+  }
+
   Size get size => Size(width, height);
   Rect get bounds => Offset.zero & size;
   Offset get center => Offset(width / 2, height / 2);
@@ -67,6 +96,8 @@ class PixDocument {
     CanvasGuides? guides,
     double? dpi,
     List<LayerEffect>? backgroundEffects,
+    String? exportName,
+    bool clearExportName = false,
   }) => PixDocument(
     id: id,
     name: name ?? this.name,
@@ -77,6 +108,7 @@ class PixDocument {
     guides: guides ?? this.guides,
     dpi: dpi ?? this.dpi,
     backgroundEffects: backgroundEffects ?? this.backgroundEffects,
+    exportName: clearExportName ? null : (exportName ?? this.exportName),
   );
 
   // ---------------------------------------------------------------- queries
@@ -253,6 +285,7 @@ class PixDocument {
     if (dpi != 72) 'dpi': dpi,
     if (backgroundEffects.isNotEmpty)
       'backgroundEffects': [for (final e in backgroundEffects) e.toJson()],
+    if (exportName != null) 'exportName': exportName,
   };
 
   static PixDocument fromJson(Json m) => PixDocument(
@@ -273,6 +306,7 @@ class PixDocument {
       for (final e in readList(m['backgroundEffects']))
         if (e is Map) LayerEffect.fromJson(readMap(e)),
     ],
+    exportName: m['exportName'] is String ? m['exportName'] as String : null,
   );
 
   @override
@@ -285,6 +319,7 @@ class PixDocument {
       other.background == background &&
       other.guides == guides &&
       other.dpi == dpi &&
+      other.exportName == exportName &&
       listEquals(other.backgroundEffects, backgroundEffects) &&
       listEquals(other.layers, layers);
 

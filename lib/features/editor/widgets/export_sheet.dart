@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -11,13 +12,28 @@ import 'package:image/image.dart' as img;
 
 import '../../../app/app_scope.dart';
 import '../../../app/theme/app_theme.dart';
+import '../../../core/imaging/image_formats.dart';
+import '../../../core/imaging/svg_export.dart';
 import '../../../core/platform/platform_services.dart';
+import '../../../document/model/layer.dart';
 import '../../../document/model/document.dart';
 import '../../../editor/editor_controller.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/pressable.dart';
 
-/// Encodes the document as PNG or JPEG at [width] × [height] pixels.
+/// Export formats: extension → MIME type.
+const exportFormats = {
+  'png': 'image/png',
+  'jpg': 'image/jpeg',
+  'webp': 'image/webp',
+  'pdf': 'application/pdf',
+  'svg': 'image/svg+xml',
+  'tiff': 'image/tiff',
+  'bmp': 'image/bmp',
+};
+
+/// Encodes the document as [format] (see [exportFormats]) at [width] ×
+/// [height] pixels.
 Future<Uint8List> encodeDocument(
   EditorController editor,
   PixDocument doc, {
@@ -25,6 +41,8 @@ Future<Uint8List> encodeDocument(
   required int width,
   required int height,
   int quality = 92,
+  bool lossless = true,
+  bool cmyk = false,
 }) async {
   final renderer = editor.renderer;
   if (format == 'png') {
@@ -33,17 +51,49 @@ Future<Uint8List> encodeDocument(
     image.dispose();
     return data!.buffer.asUint8List();
   }
+  if (format == 'svg') {
+    final svg = await SvgExport.build(doc, renderer, scale: width / doc.width);
+    return Uint8List.fromList(utf8.encode(svg));
+  }
+  final opaque = format == 'jpg' || format == 'pdf';
   final image = await renderer.renderImage(
     doc,
     width: width,
     height: height,
-    matte: const Color(0xFFFFFFFF),
+    matte: opaque ? const Color(0xFFFFFFFF) : null,
   );
-  final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  final data = await image.toByteData(
+    format: opaque
+        ? ui.ImageByteFormat.rawRgba
+        : ui.ImageByteFormat.rawStraightRgba,
+  );
   final w = image.width, h = image.height;
   image.dispose();
-  // JPEG encoding takes seconds for big images: off the UI thread.
-  return compute(_encodeJpg, (data!.buffer.asUint8List(), w, h, quality));
+  final rgba = data!.buffer.asUint8List();
+  switch (format) {
+    case 'jpg':
+      // JPEG encoding takes seconds for big images: off the UI thread.
+      return compute(_encodeJpg, (rgba, w, h, quality));
+    case 'pdf':
+      // Same physical size whatever the pixel size chosen.
+      return ImageFormats.encodePdf(
+        rgba,
+        w,
+        h,
+        dpi: doc.dpi * w / doc.width,
+        cmyk: cmyk,
+        title: doc.name,
+      );
+    default:
+      return ImageFormats.encodeRaster(
+        format,
+        rgba,
+        w,
+        h,
+        quality: quality,
+        lossless: lossless,
+      );
+  }
 }
 
 Uint8List _encodeJpg((Uint8List, int, int, int) job) {
@@ -91,8 +141,22 @@ class _ExportSheet extends StatefulWidget {
 
 class _ExportSheetState extends State<_ExportSheet> {
   late final _services = AppScope.of(context);
-  late String _format = _services.settings.exportFormat;
+  late String _format =
+      exportFormats.containsKey(_services.settings.exportFormat)
+      ? _services.settings.exportFormat
+      : 'png';
   late int _quality = _services.settings.exportQuality;
+  bool _lossless = true;
+  bool _cmyk = false;
+  late final _customName = TextEditingController(
+    text: _isCustomName ? _doc.exportName! : _doc.name,
+  );
+
+  bool get _isCustomName {
+    final n = _doc.exportName;
+    return n != null && !n.startsWith(PixDocument.exportNameLayerPrefix);
+  }
+
   _SizePreset _preset = _SizePreset.original;
   bool _lockRatio = true;
   late final _w = TextEditingController(text: '${_doc.width.round()}');
@@ -105,6 +169,7 @@ class _ExportSheetState extends State<_ExportSheet> {
   void dispose() {
     _w.dispose();
     _h.dispose();
+    _customName.dispose();
     super.dispose();
   }
 
@@ -169,10 +234,11 @@ class _ExportSheetState extends State<_ExportSheet> {
         width: w,
         height: h,
         quality: _quality,
+        lossless: _lossless,
+        cmyk: _cmyk,
       );
-      final safe = _doc.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-      final name = '${safe.isEmpty ? 'pixora' : safe}.$_format';
-      final mime = _format == 'png' ? 'image/png' : 'image/jpeg';
+      final name = '${_doc.exportFileName}.$_format';
+      final mime = exportFormats[_format]!;
       final platform = _services.platform;
       switch (mode) {
         case 'share':
@@ -297,28 +363,105 @@ class _ExportSheetState extends State<_ExportSheet> {
 
             // ---- format
             _SectionTitle(l.imageFormat),
-            Row(
-              children: [
-                Expanded(
-                  child: _ChoiceCard(
-                    selected: _format == 'png',
-                    icon: Icons.layers_clear_rounded,
-                    title: 'PNG',
-                    subtitle: l.pngTransparent,
-                    onTap: () => setState(() => _format = 'png'),
+            LayoutBuilder(
+              builder: (context, box) {
+                final cw = (box.maxWidth - 10) / 2;
+                final cards = [
+                  ('png', Icons.layers_clear_rounded, l.pngTransparent),
+                  ('jpg', Icons.photo_rounded, l.jpgBackground),
+                  ('webp', Icons.public_rounded, l.fmtWebp),
+                  ('pdf', Icons.picture_as_pdf_rounded, l.fmtPdf),
+                  ('svg', Icons.polyline_rounded, l.fmtSvg),
+                  ('tiff', Icons.print_rounded, l.fmtTiff),
+                  ('bmp', Icons.grid_on_rounded, l.fmtBmp),
+                ];
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final (f, icon, sub) in cards)
+                      SizedBox(
+                        width: cw,
+                        child: _ChoiceCard(
+                          selected: _format == f,
+                          icon: icon,
+                          title: f.toUpperCase(),
+                          subtitle: sub,
+                          onTap: () => setState(() => _format = f),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            // ---- format options
+            AnimatedSize(
+              duration: PixTokens.medium,
+              curve: PixTokens.emphasized,
+              child: switch (_format) {
+                'webp' => Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(l.fmtLossless),
+                    value: _lossless,
+                    onChanged: (v) => setState(() => _lossless = v),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ChoiceCard(
-                    selected: _format == 'jpg',
-                    icon: Icons.photo_rounded,
-                    title: 'JPG',
-                    subtitle: l.jpgBackground,
-                    onTap: () => setState(() => _format = 'jpg'),
+                'pdf' => Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _SectionTitle(l.pdfColor),
+                      SegmentedButton<bool>(
+                        segments: [
+                          const ButtonSegment(
+                            value: false,
+                            label: Text('RGB'),
+                            icon: Icon(Icons.monitor_rounded),
+                          ),
+                          const ButtonSegment(
+                            value: true,
+                            label: Text('CMYK'),
+                            icon: Icon(Icons.print_rounded),
+                          ),
+                        ],
+                        selected: {_cmyk},
+                        onSelectionChanged: (v) =>
+                            setState(() => _cmyk = v.first),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${_cmyk ? l.pdfCmykHint : l.pdfRgbHint}\n${l.pdfPageSize((_doc.width / _doc.dpi * 2.54).toStringAsFixed(1), (_doc.height / _doc.dpi * 2.54).toStringAsFixed(1), _doc.dpi.round().toString())}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+                'svg' => Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    l.svgHint,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                _ => const SizedBox(width: double.infinity),
+              },
+            ),
+            const SizedBox(height: 18),
+
+            // ---- file name
+            _SectionTitle(l.fileName),
+            _FileNameSection(
+              editor: widget.editor,
+              custom: _customName,
+              extension: _format,
+              onChanged: () => setState(() {}),
             ),
             const SizedBox(height: 18),
 
@@ -405,7 +548,7 @@ class _ExportSheetState extends State<_ExportSheet> {
             AnimatedSize(
               duration: PixTokens.medium,
               curve: PixTokens.emphasized,
-              child: _format != 'jpg'
+              child: !(_format == 'jpg' || (_format == 'webp' && !_lossless))
                   ? const SizedBox(width: double.infinity)
                   : Padding(
                       padding: const EdgeInsets.only(top: 14),
@@ -464,6 +607,160 @@ class _ExportSheetState extends State<_ExportSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Project name · a text layer's text (kept in sync) · custom — stored in
+/// the document, so the choice stays with the project.
+class _FileNameSection extends StatelessWidget {
+  const _FileNameSection({
+    required this.editor,
+    required this.custom,
+    required this.extension,
+    required this.onChanged,
+  });
+  final EditorController editor;
+  final TextEditingController custom;
+  final String extension;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final doc = editor.document;
+    final n = doc.exportName;
+    final mode = n == null
+        ? 0
+        : n.startsWith(PixDocument.exportNameLayerPrefix)
+        ? 1
+        : 2;
+    final texts = [
+      for (final x in doc.allLayers)
+        if (x is TextLayer && x.text.trim().isNotEmpty) x,
+    ].reversed.toList();
+    final boundId = mode == 1
+        ? n!.substring(PixDocument.exportNameLayerPrefix.length)
+        : null;
+    void set(String? v) {
+      editor.setExportName(v);
+      onChanged();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: [
+            ButtonSegment(
+              value: 0,
+              icon: const Icon(Icons.folder_rounded, size: 18),
+              label: Text(l.fileNameProject),
+            ),
+            ButtonSegment(
+              value: 1,
+              icon: const Icon(Icons.text_fields_rounded, size: 18),
+              label: Text(l.fileNameLayer),
+            ),
+            ButtonSegment(
+              value: 2,
+              icon: const Icon(Icons.edit_rounded, size: 18),
+              label: Text(l.fileNameCustom),
+            ),
+          ],
+          selected: {mode},
+          onSelectionChanged: (v) => switch (v.first) {
+            0 => set(null),
+            1 when texts.isNotEmpty => set(
+              '${PixDocument.exportNameLayerPrefix}${texts.first.id}',
+            ),
+            1 => onChanged(),
+            _ => set(custom.text.trim().isEmpty ? doc.name : custom.text),
+          },
+        ),
+        const SizedBox(height: 10),
+        if (mode == 1)
+          texts.isEmpty
+              ? Text(l.noTextLayers)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: texts.any((t) => t.id == boundId)
+                          ? boundId
+                          : null,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      items: [
+                        for (final t in texts)
+                          DropdownMenuItem(
+                            value: t.id,
+                            child: Text(
+                              t.text.replaceAll('\n', ' '),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (id) => id == null
+                          ? null
+                          : set('${PixDocument.exportNameLayerPrefix}$id'),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l.fileNameLayerHint,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+        if (mode == 2)
+          TextField(
+            controller: custom,
+            decoration: InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (v) => set(v.trim().isEmpty ? doc.name : v),
+          ),
+        const SizedBox(height: 8),
+        // What the file will be called.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.description_rounded, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${editor.document.exportFileName}.$extension',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -655,7 +952,7 @@ Future<void> showSaveSheet(
                 child: tile(
                   Icons.image_rounded,
                   l.saveImage,
-                  'PNG · JPG',
+                  'PNG · JPG · WEBP · PDF · SVG · TIFF · BMP',
                   onSaveImage,
                 ),
               ),
