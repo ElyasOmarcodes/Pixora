@@ -1466,6 +1466,14 @@ class DocumentRenderer {
       final jobs = _styleJobs(base, s, (_) {}, null, start: false);
       if (jobs.any((j) => !j.exact)) return null;
     }
+    // Zoomed in past the bitmap's size limit: curved text with nothing
+    // else costly is drawn directly — it keeps its own sharp bitmap of the
+    // part in view — rather than from a blurry, stepped enlargement.
+    if (s < bucket * 0.99 &&
+        layer is TextLayer &&
+        !_isExpensive(layer.copyWith(curve: 0))) {
+      return null;
+    }
     final w = math.max(1, (rect.width * s).ceil());
     final h = math.max(1, (rect.height * s).ceil());
     final r = DocumentRenderer(

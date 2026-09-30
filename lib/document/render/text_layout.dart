@@ -110,63 +110,153 @@ class TextLayoutCache {
   }
 }
 
-/// Curved text: the straight layout is rendered once into a bitmap and
-/// drawn bent over a triangle strip that follows concentric arcs. Every
-/// glyph bends continuously (no seams or gaps, Arabic-script joins stay
-/// intact) and the bitmap is reused until the zoom level doubles/halves.
+/// Curved text: the straight layout is drawn into a bitmap and bent over
+/// a grid of cells that follows concentric arcs. Every glyph bends
+/// continuously (no seams or gaps, Arabic-script joins stay intact).
+///
+/// The bitmap is made at the screen's resolution for the part in view —
+/// as sharp as vector outlines at any zoom, the way Photoshop and
+/// Illustrator redraw warped type — instead of one whole-text bitmap
+/// capped at 4096 px, which broke into steps when zoomed in.
 class _CurveMesh {
-  _CurveMesh({required this.source, required this.positions, required this.xs});
+  _CurveMesh({
+    required this.source,
+    required this.columns,
+    required this.rows,
+    required this.grid,
+  });
 
   /// Straight-layout area that is bent (text box plus padding).
   final Rect source;
 
-  /// Triangle strip, top/bottom pairs, relative to the layer centre.
-  final Float32List positions;
+  /// Cells across and down.
+  final int columns, rows;
 
-  /// Straight x of every column (relative to [source.left]).
-  final List<double> xs;
+  /// Bent grid points, (columns + 1) × (rows + 1), column by column,
+  /// relative to the layer centre.
+  final Float32List grid;
 
-  double? _scale;
+  (int, int, int, int, double)? _key;
   ui.Image? _image;
   ui.Vertices? _vertices;
+
+  int _at(int i, int j) => (i * (rows + 1) + j) * 2;
+
+  /// Most pixels one bitmap may have (64 MB).
+  static const _maxPixels = 16e6;
 
   void paint(Canvas canvas, double pixelScale, void Function(Canvas) draw) {
     var bucket = 1.0;
     // Oversampled: the bitmap is resampled once more when bent.
-    final want = (pixelScale * 1.5).clamp(1 / 16, 16.0);
+    final want = (pixelScale * 1.5).clamp(1 / 16, 256.0);
     while (bucket < want) {
       bucket *= 2;
     }
     while (bucket / 2 >= want) {
       bucket /= 2;
     }
-    final longest = math.max(source.width, source.height);
-    final s = math.min(bucket, 4096 / longest);
-    if (_scale != s || _image == null) {
-      final w = math.max(1, (source.width * s).ceil());
-      final h = math.max(1, (source.height * s).ceil());
+    double fit(double w, double h) => math.min(
+      bucket,
+      math.min(4096 / math.max(w, h), math.sqrt(_maxPixels / (w * h))),
+    );
+    var i0 = 0, i1 = columns - 1, j0 = 0, j1 = rows - 1;
+    if (fit(source.width, source.height) < bucket) {
+      // Too big to draw whole at this zoom: only the cells in view (and
+      // a margin, snapped, so panning keeps the bitmap for a while).
+      final view = canvas.getLocalClipBounds();
+      var a0 = columns, a1 = -1, b0 = rows, b1 = -1;
+      for (var i = 0; i < columns; i++) {
+        for (var j = 0; j < rows; j++) {
+          var l = double.infinity, t = double.infinity;
+          var r = -double.infinity, b = -double.infinity;
+          for (final (ii, jj) in [
+            (i, j),
+            (i + 1, j),
+            (i, j + 1),
+            (i + 1, j + 1),
+          ]) {
+            final k = _at(ii, jj);
+            final x = grid[k], y = grid[k + 1];
+            if (x < l) l = x;
+            if (x > r) r = x;
+            if (y < t) t = y;
+            if (y > b) b = y;
+          }
+          if (r < view.left ||
+              l > view.right ||
+              b < view.top ||
+              t > view.bottom) {
+            continue;
+          }
+          if (i < a0) a0 = i;
+          if (i > a1) a1 = i;
+          if (j < b0) b0 = j;
+          if (j > b1) b1 = j;
+        }
+      }
+      if (a1 < 0) return;
+      const snap = 4;
+      final mi = math.max(1, (a1 - a0 + 1) ~/ 4);
+      final mj = math.max(1, (b1 - b0 + 1) ~/ 4);
+      i0 = math.max(0, (a0 - mi) ~/ snap * snap);
+      i1 = math.min(columns - 1, ((a1 + mi) ~/ snap + 1) * snap - 1);
+      j0 = math.max(0, (b0 - mj) ~/ snap * snap);
+      j1 = math.min(rows - 1, ((b1 + mj) ~/ snap + 1) * snap - 1);
+    }
+    final cw = source.width / columns, ch = source.height / rows;
+    final part = Rect.fromLTRB(
+      source.left + i0 * cw,
+      source.top + j0 * ch,
+      source.left + (i1 + 1) * cw,
+      source.top + (j1 + 1) * ch,
+    );
+    final s = fit(part.width, part.height);
+    final key = (i0, i1, j0, j1, s);
+    if (_key != key || _image == null) {
+      final w = math.max(1, (part.width * s).ceil());
+      final h = math.max(1, (part.height * s).ceil());
       final recorder = ui.PictureRecorder();
       final c = Canvas(recorder)
-        ..scale(w / source.width, h / source.height)
-        ..translate(-source.left, -source.top);
+        ..scale(w / part.width, h / part.height)
+        ..translate(-part.left, -part.top);
       draw(c);
       final picture = recorder.endRecording();
+      // The previous bitmap is left to the GC: a frame may still use it.
       _image = picture.toImageSync(w, h);
       picture.dispose();
-      final tex = Float32List(xs.length * 4);
-      final kx = w / source.width;
-      for (var i = 0; i < xs.length; i++) {
-        tex[i * 4] = xs[i] * kx;
-        tex[i * 4 + 1] = 0;
-        tex[i * 4 + 2] = xs[i] * kx;
-        tex[i * 4 + 3] = h.toDouble();
+      final nc = i1 - i0 + 1, nr = j1 - j0 + 1;
+      final pos = Float32List((nc + 1) * (nr + 1) * 2);
+      final tex = Float32List(pos.length);
+      for (var i = 0; i <= nc; i++) {
+        for (var j = 0; j <= nr; j++) {
+          final o = (i * (nr + 1) + j) * 2, k = _at(i0 + i, j0 + j);
+          pos[o] = grid[k];
+          pos[o + 1] = grid[k + 1];
+          tex[o] = i * cw / part.width * w;
+          tex[o + 1] = j * ch / part.height * h;
+        }
+      }
+      final idx = Uint16List(nc * nr * 6);
+      var n = 0;
+      for (var i = 0; i < nc; i++) {
+        for (var j = 0; j < nr; j++) {
+          final a = i * (nr + 1) + j, b = a + nr + 1;
+          idx
+            ..[n++] = a
+            ..[n++] = b
+            ..[n++] = a + 1
+            ..[n++] = a + 1
+            ..[n++] = b
+            ..[n++] = b + 1;
+        }
       }
       _vertices = ui.Vertices.raw(
-        ui.VertexMode.triangleStrip,
-        positions,
+        ui.VertexMode.triangles,
+        pos,
         textureCoordinates: tex,
+        indices: idx,
       );
-      _scale = s;
+      _key = key;
     }
     canvas.drawVertices(
       _vertices!,
@@ -178,22 +268,10 @@ class _CurveMesh {
           TileMode.clamp,
           TileMode.clamp,
           Float64List.fromList([
-            1,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            1,
-            0,
-            0,
-            0,
-            0,
-            1,
+            1, 0, 0, 0, //
+            0, 1, 0, 0, //
+            0, 0, 1, 0, //
+            0, 0, 0, 1, //
           ]),
           filterQuality: FilterQuality.medium,
         ),
@@ -497,11 +575,12 @@ class TextLayoutEntry {
     final padX = pad + l.fontSize * 0.1;
     final padY = pad + l.fontSize * 0.35;
     final source = Rect.fromLTRB(-padX, -padY, w + padX, h + padY);
-    // One column per degree (or finer for small, strongly bent text).
+    // One column per degree (or finer for small, strongly bent text);
+    // rows so cells are about square (they matter only for drawing just
+    // the part in view — radii map straight).
     final sweep = source.width / r0 * 180 / math.pi;
     final n = sweep.ceil().clamp(4, 720);
-    final xs = <double>[];
-    final pos = Float32List((n + 1) * 4);
+    final m = (source.height / (source.width / n)).ceil().clamp(1, 60);
     var bounds = Rect.zero;
     var first = true;
     final lines = fill.computeLineMetrics();
@@ -510,14 +589,15 @@ class TextLayoutEntry {
       gTop = lines.first.baseline - lines.first.ascent - pad;
       gBottom = lines.last.baseline + lines.last.descent + pad;
     }
+    final grid = Float32List((n + 1) * (m + 1) * 2);
     for (var i = 0; i <= n; i++) {
       final x = source.left + source.width * i / n;
-      xs.add(x - source.left);
-      final t = map(x, source.top), b = map(x, source.bottom);
-      pos[i * 4] = t.dx;
-      pos[i * 4 + 1] = t.dy;
-      pos[i * 4 + 2] = b.dx;
-      pos[i * 4 + 3] = b.dy;
+      for (var j = 0; j <= m; j++) {
+        final p = map(x, source.top + source.height * j / m);
+        final k = (i * (m + 1) + j) * 2;
+        grid[k] = p.dx;
+        grid[k + 1] = p.dy;
+      }
       if (x < -pad || x > w + pad) continue;
       for (final p in [map(x, gTop), map(x, gBottom)]) {
         final pr = Rect.fromLTRB(p.dx, p.dy, p.dx, p.dy);
@@ -527,9 +607,9 @@ class TextLayoutEntry {
     }
     // Centre the bent text on the layer origin.
     final c = bounds.center;
-    for (var i = 0; i < pos.length; i += 2) {
-      pos[i] -= c.dx;
-      pos[i + 1] -= c.dy;
+    for (var k = 0; k < grid.length; k += 2) {
+      grid[k] -= c.dx;
+      grid[k + 1] -= c.dy;
     }
     final size = Size(
       bounds.width + 2 * math.max(pad, bgPad.width),
@@ -540,7 +620,7 @@ class TextLayoutEntry {
       fill,
       stroke,
       size,
-      _CurveMesh(source: source, positions: pos, xs: xs),
+      _CurveMesh(source: source, columns: n, rows: m, grid: grid),
       (p) => make(p, stroke: true),
     );
   }
