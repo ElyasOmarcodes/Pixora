@@ -2707,20 +2707,19 @@ class _Stamp {
     // layer over itself summed faint pixels (soft shadows inside a photo)
     // into solid ones, more so at higher resolutions, so the export's
     // stroke differed from the one on screen.
-    final grown = _morph(box, res, outR, grow: true);
-    final shrunk = inR > 0 ? _morph(box, res, inR, grow: false) : null;
+    final gray = _make(box, res, (c) {
+      c.drawRect(box, Paint()..color = const Color(0xFF000000));
+      draw(c, Offset.zero, Paint()..colorFilter = _alphaToGray);
+    });
+    final grown = _morph(gray, outR, grow: true);
+    final shrunk = inR > 0 ? _morph(gray, inR, grow: false) : null;
+    gray.dispose();
     final band = _make(box, res, (c) {
       c.saveLayer(box, Paint());
-      grown.draw(c, Offset.zero, Paint()..colorFilter = _grayToAlpha);
+      grown.draw(c);
       // Minus the shrunk shape.
       if (shrunk != null) {
-        shrunk.draw(
-          c,
-          Offset.zero,
-          Paint()
-            ..colorFilter = _grayToAlpha
-            ..blendMode = BlendMode.dstOut,
-        );
+        shrunk.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
       } else {
         draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
       }
@@ -2737,21 +2736,30 @@ class _Stamp {
     return band;
   }
 
-  /// This stamp's alpha grown ([grow]) or shrunk by [r] (local units),
-  /// over [box], as an opaque grey image (grey = alpha): max / min of the
-  /// alpha under a disk, stamped with Lighten / Darken on opaque greys so
-  /// values never add up.
-  _Stamp _morph(Rect box, double res, double r, {required bool grow}) =>
-      _make(box, res, (c) {
-        c.drawRect(box, Paint()..color = const Color(0xFF000000));
-        draw(c, Offset.zero, Paint()..colorFilter = _alphaToGray);
-        final p = Paint()
-          ..colorFilter = _alphaToGray
-          ..blendMode = grow ? BlendMode.lighten : BlendMode.darken;
-        for (final o in _disk(r, res)) {
-          draw(c, o, p);
-        }
-      });
+  /// [gray] (an opaque grey image of an alpha: grey = alpha) grown
+  /// ([grow]) or shrunk by [r] (local units), back as alpha: the max /
+  /// min of the alpha under a disk, stamped with Lighten / Darken on
+  /// opaque greys so values never add up. Each pass is a plain draw —
+  /// Impeller dropped colour filters on Lighten / Darken draws, which
+  /// emptied the shrunk shape and filled inside strokes solid.
+  static _Stamp _morph(_Stamp gray, double r, {required bool grow}) {
+    final box = gray.rect, res = gray._res;
+    final spread = _make(box, res, (c) {
+      gray.draw(c, Offset.zero, Paint());
+      final p = Paint()
+        ..blendMode = grow ? BlendMode.lighten : BlendMode.darken;
+      for (final o in _disk(r, res)) {
+        gray.draw(c, o, p);
+      }
+    });
+    final out = _make(
+      box,
+      res,
+      (c) => spread.draw(c, Offset.zero, Paint()..colorFilter = _grayToAlpha),
+    );
+    spread.dispose();
+    return out;
+  }
 
   static const _alphaToGray = ColorFilter.matrix([
     0, 0, 0, 1, 0, //
