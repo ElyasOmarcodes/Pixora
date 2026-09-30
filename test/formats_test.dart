@@ -36,6 +36,36 @@ void main() {
     }
   });
 
+  test('BMP and TIFF keep every pixel, alpha and orientation', () async {
+    // Several TIFF strips, rows that differ, see-through pixels.
+    const w = 300, h = 200;
+    final px = Uint8List(w * h * 4);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final i = (y * w + x) * 4;
+        px
+          ..[i] = x % 256
+          ..[i + 1] = y
+          ..[i + 2] = (x + y) % 256
+          ..[i + 3] = x < 150 ? 255 : 128;
+      }
+    }
+    for (final f in ['bmp', 'tiff']) {
+      final bytes = await ImageFormats.encodeRaster(f, px, w, h, dpi: 300);
+      final back = img.decodeImage(bytes)!;
+      expect((back.width, back.height), (w, h), reason: f);
+      for (final (x, y) in [(0, 0), (299, 0), (10, 199), (200, 120)]) {
+        final p = back.getPixel(x, y);
+        final i = (y * w + x) * 4;
+        expect(
+          [p.r.toInt(), p.g.toInt(), p.b.toInt(), p.a.toInt()],
+          px.sublist(i, i + 4),
+          reason: '$f at $x,$y',
+        );
+      }
+    }
+  });
+
   test('PDF: one page at print size, RGB or CMYK', () async {
     final rgb = await ImageFormats.encodePdf(
       _rgba(300, 150),

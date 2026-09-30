@@ -1017,6 +1017,17 @@ abstract final class FilterEngine {
   static ui.Image? _unsharp(ui.Image src, double amount, double sigma) {
     if (amount <= 0.001 || sigma < 0.05) return null;
     final blur = _gaussian(src, sigma)!;
+    final fast = BlendShader.arith(
+      base: src,
+      a: src,
+      b: blur,
+      k: amount,
+      alpha: src,
+    );
+    if (fast != null) {
+      blur.dispose();
+      return fast;
+    }
     final (pos, neg) = _signed(src, blur);
     final out = _addParts(src, pos, neg, amount, src);
     for (final i in [blur, pos, neg]) {
@@ -1050,6 +1061,17 @@ abstract final class FilterEngine {
   static ui.Image? _highPass(ui.Image src, double sigma) {
     if (sigma < 0.05) return null;
     final blur = _gaussian(src, sigma)!;
+    final fast = BlendShader.arith(
+      grey: 0.5,
+      a: src,
+      b: blur,
+      k: 1,
+      alpha: src,
+    );
+    if (fast != null) {
+      blur.dispose();
+      return fast;
+    }
     final (pos, neg) = _signed(src, blur);
     final grey = _grey(src);
     final out = _addParts(grey, pos, neg, 1, src);
@@ -1088,6 +1110,19 @@ abstract final class FilterEngine {
       );
     });
     final lit = shifted(d / 2), shade = shifted(-d / 2);
+    final fast = BlendShader.arith(
+      grey: 0.5,
+      a: lit,
+      b: shade,
+      k: e.amount,
+      alpha: src,
+    );
+    if (fast != null) {
+      for (final i in [lum, lit, shade]) {
+        i.dispose();
+      }
+      return fast;
+    }
     final (pos, neg) = _signed(lit, shade);
     final grey = _grey(src);
     final out = _addParts(grey, pos, neg, e.amount, src);

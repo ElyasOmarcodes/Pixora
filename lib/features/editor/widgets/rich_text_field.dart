@@ -4,7 +4,6 @@ import '../../../core/fonts/font_catalog.dart';
 import '../../../document/model/text_span_style.dart';
 import '../../../document/render/text_layout.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../ui/widgets/pix_dialog.dart';
 
 /// Text controller that shows per-range fonts and colours while typing and
 /// keeps the ranges attached to their words as the text changes.
@@ -137,119 +136,142 @@ class _TextPartSelectorState extends State<TextPartSelector> {
   /// long texts are easy to pick. It edits the same selection.
   Future<void> _fullPage() async {
     final l = AppLocalizations.of(context);
-    await showPixDialog<void>(
-      context: context,
-      builder: (context) {
-        final theme = Theme.of(context);
-        final scheme = theme.colorScheme;
-        return Dialog.fullscreen(
-          child: Scaffold(
-            appBar: AppBar(
-              title: Text(l.partOfText),
-              actions: [
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(end: 12),
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.check_rounded),
-                    label: Text(l.done),
-                  ),
-                ),
-              ],
+    // An opaque page with a short fade: the see-through dialog kept the
+    // editor's canvas painting under it through a long scale animation,
+    // so the page opened and closed slowly.
+    await Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        opaque: true,
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 150),
+        transitionsBuilder: (context, animation, _, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: SlideTransition(
+              position: Tween(
+                begin: const Offset(0, 0.03),
+                end: Offset.zero,
+              ).animate(curved),
+              child: child,
             ),
-            body: SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ListenableBuilder(
-                    listenable: _c,
-                    builder: (context, _) {
-                      final sel = _c.selection;
-                      final n = sel.isValid ? sel.end - sel.start : 0;
-                      return Container(
-                        margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: n > 0
-                              ? scheme.primary.withValues(alpha: 0.1)
-                              : scheme.onSurface.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Text(
-                          n > 0 ? l.partSelected(n) : l.selectPartHint,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: n > 0 ? scheme.primary : null,
-                            fontWeight: n > 0 ? FontWeight.w700 : null,
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+          );
+        },
+        pageBuilder: (context, _, _) {
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
+          return RepaintBoundary(
+            child: Scaffold(
+              appBar: AppBar(
+                title: Text(l.partOfText),
+                actions: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: ListenableBuilder(
-                      listenable: _c,
-                      builder: (context, _) {
-                        final s = _c.selection;
-                        return _WordPicker(
-                          text: widget.text,
-                          maxHeight: 220,
-                          selection: s.isValid && !s.isCollapsed
-                              ? TextRange(start: s.start, end: s.end)
-                              : null,
-                          fontFamily: widget.fontFamily,
-                          onSelect: (r) => _c.selection = TextSelection(
-                            baseOffset: r.start,
-                            extentOffset: r.end,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: TextField(
-                        controller: _c,
-                        readOnly: true,
-                        showCursor: true,
-                        autofocus: true,
-                        enableInteractiveSelection: true,
-                        expands: true,
-                        maxLines: null,
-                        textAlignVertical: TextAlignVertical.top,
-                        textDirection: detectTextDirection(widget.text),
-                        style: TextStyle(
-                          fontFamily: widget.fontFamily == 'System'
-                              ? null
-                              : widget.fontFamily,
-                          fontFamilyFallback: FontCatalog.fallback,
-                          fontSize: 26,
-                          height: 1.6,
-                          color: scheme.onSurface,
-                        ),
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: scheme.onSurface.withValues(alpha: 0.04),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.all(18),
-                        ),
-                      ),
+                    padding: const EdgeInsetsDirectional.only(end: 12),
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.check_rounded),
+                      label: Text(l.done),
                     ),
                   ),
                 ],
               ),
+              body: SafeArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ListenableBuilder(
+                      listenable: _c,
+                      builder: (context, _) {
+                        final sel = _c.selection;
+                        final n = sel.isValid ? sel.end - sel.start : 0;
+                        return Container(
+                          margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: n > 0
+                                ? scheme.primary.withValues(alpha: 0.1)
+                                : scheme.onSurface.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            n > 0 ? l.partSelected(n) : l.selectPartHint,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: n > 0 ? scheme.primary : null,
+                              fontWeight: n > 0 ? FontWeight.w700 : null,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: ListenableBuilder(
+                        listenable: _c,
+                        builder: (context, _) {
+                          final s = _c.selection;
+                          return _WordPicker(
+                            text: widget.text,
+                            maxHeight: 220,
+                            selection: s.isValid && !s.isCollapsed
+                                ? TextRange(start: s.start, end: s.end)
+                                : null,
+                            fontFamily: widget.fontFamily,
+                            onSelect: (r) => _c.selection = TextSelection(
+                              baseOffset: r.start,
+                              extentOffset: r.end,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: TextField(
+                          controller: _c,
+                          readOnly: true,
+                          showCursor: true,
+                          enableInteractiveSelection: true,
+                          expands: true,
+                          maxLines: null,
+                          textAlignVertical: TextAlignVertical.top,
+                          textDirection: detectTextDirection(widget.text),
+                          style: TextStyle(
+                            fontFamily: widget.fontFamily == 'System'
+                                ? null
+                                : widget.fontFamily,
+                            fontFamilyFallback: FontCatalog.fallback,
+                            fontSize: 26,
+                            height: 1.6,
+                            color: scheme.onSurface,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: scheme.onSurface.withValues(alpha: 0.04),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.all(18),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
     _onSel();
   }

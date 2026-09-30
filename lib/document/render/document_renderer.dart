@@ -1713,19 +1713,24 @@ class DocumentRenderer {
       if (x.layerMaterial) {
         // The layer's colours, opaque right to the anti-aliased rim (a
         // faint rim would stack into streaks along the sides).
-        c.saveLayer(
-          r,
-          Paint()
-            ..blendMode = BlendMode.multiply
-            ..colorFilter = const ColorFilter.matrix([
-              1, 0, 0, 0, 0, //
-              0, 1, 0, 0, 0, //
-              0, 0, 1, 0, 0, //
-              0, 0, 0, 0, 255, //
-            ]),
-        );
+        // (Blend and colour filter in separate layers: Impeller drops a
+        // colour filter paired with Multiply.)
+        c
+          ..saveLayer(r, Paint()..blendMode = BlendMode.multiply)
+          ..saveLayer(
+            r,
+            Paint()
+              ..colorFilter = const ColorFilter.matrix([
+                1, 0, 0, 0, 0, //
+                0, 1, 0, 0, 0, //
+                0, 0, 1, 0, 0, //
+                0, 0, 0, 0, 255, //
+              ]),
+          );
         content(c);
-        c.restore();
+        c
+          ..restore()
+          ..restore();
       } else {
         c.drawRect(
           r,

@@ -43,6 +43,7 @@ Future<Uint8List> encodeDocument(
   int quality = 92,
   bool lossless = true,
   bool cmyk = false,
+  PlatformServices? platform,
 }) async {
   final renderer = editor.renderer;
   if (format == 'png') {
@@ -62,6 +63,20 @@ Future<Uint8List> encodeDocument(
     height: height,
     matte: opaque ? const Color(0xFFFFFFFF) : null,
   );
+  // The system's encoder where there is one (Android, browsers): encoding
+  // big pictures in Dart took long and, at high sizes, ran out of memory.
+  if (format == 'webp' || format == 'jpg') {
+    final native = await platform?.encodeNative(
+      image,
+      format,
+      quality: quality,
+      lossless: format == 'webp' && lossless,
+    );
+    if (native != null) {
+      image.dispose();
+      return native;
+    }
+  }
   final data = await image.toByteData(
     format: opaque
         ? ui.ImageByteFormat.rawRgba
@@ -92,6 +107,7 @@ Future<Uint8List> encodeDocument(
         h,
         quality: quality,
         lossless: lossless,
+        dpi: doc.dpi * w / doc.width,
       );
   }
 }
@@ -236,6 +252,7 @@ class _ExportSheetState extends State<_ExportSheet> {
         quality: _quality,
         lossless: _lossless,
         cmyk: _cmyk,
+        platform: _services.platform,
       );
       final name = '${_doc.exportFileName}.$_format';
       final mime = exportFormats[_format]!;

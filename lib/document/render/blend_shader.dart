@@ -11,6 +11,9 @@ class BlendShader {
   /// The Curves / Levels lookup shader (shaders/lut.frag).
   static ui.FragmentProgram? lutProgram;
 
+  /// The signed arithmetic shader (shaders/arith.frag).
+  static ui.FragmentProgram? arithProgram;
+
   /// Loads the shader once (at startup). Without it those modes fall back
   /// to the nearest built-in mode.
   static Future<void> load() async {
@@ -26,6 +29,13 @@ class BlendShader {
         lutProgram = await ui.FragmentProgram.fromAsset('shaders/lut.frag');
       } catch (_) {
         lutProgram = null;
+      }
+    }
+    if (arithProgram == null) {
+      try {
+        arithProgram = await ui.FragmentProgram.fromAsset('shaders/arith.frag');
+      } catch (_) {
+        arithProgram = null;
       }
     }
   }
@@ -65,6 +75,41 @@ class BlendShader {
     picture.dispose();
     shader.dispose();
     table.dispose();
+    return out;
+  }
+
+  /// `base + k·(a − b)` on straight colour, with [alpha]'s transparency
+  /// (all the same size); [grey] (0..1) stands in for a flat base. Null
+  /// when the shader is unavailable.
+  static ui.Image? arith({
+    ui.Image? base,
+    double? grey,
+    required ui.Image a,
+    required ui.Image b,
+    required double k,
+    required ui.Image alpha,
+  }) {
+    final prog = arithProgram;
+    if (prog == null) return null;
+    final w = a.width, h = a.height;
+    final shader = prog.fragmentShader()
+      ..setFloat(0, w.toDouble())
+      ..setFloat(1, h.toDouble())
+      ..setFloat(2, k)
+      ..setFloat(3, grey ?? -1)
+      ..setImageSampler(0, base ?? a)
+      ..setImageSampler(1, a)
+      ..setImageSampler(2, b)
+      ..setImageSampler(3, alpha);
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder).drawRect(
+      ui.Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()),
+      ui.Paint()..shader = shader,
+    );
+    final picture = recorder.endRecording();
+    final out = picture.toImageSync(w, h);
+    picture.dispose();
+    shader.dispose();
     return out;
   }
 

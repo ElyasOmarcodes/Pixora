@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -249,12 +251,16 @@ class IoPlatformServices extends PlatformServices {
         if (!await Gal.hasAccess(toAlbum: true)) {
           await Gal.requestAccess(toAlbum: true);
         }
-        final dot = fileName.lastIndexOf('.');
-        await Gal.putImageBytes(
-          bytes,
-          album: _folder,
-          name: dot > 0 ? fileName.substring(0, dot) : fileName,
-        );
+        // Through a file named with its extension: saving bytes let the
+        // gallery guess the type, and it didn't know WebP.
+        final dir = await getTemporaryDirectory();
+        final tmp = File('${dir.path}$_sep$fileName');
+        await tmp.writeAsBytes(bytes, flush: true);
+        try {
+          await Gal.putImage(tmp.path, album: _folder);
+        } finally {
+          await tmp.delete().catchError((_) => tmp);
+        }
         return const ExportResult(SaveOutcome.saved, ExportDestination.gallery);
       } catch (e) {
         debugPrint('Pixora: gallery save failed: $e');
@@ -281,6 +287,33 @@ class IoPlatformServices extends PlatformServices {
   }
 
   static const _galleryTypes = {'image/png', 'image/jpeg', 'image/webp'};
+
+  static const _codec = MethodChannel('pixora/codec');
+
+  @override
+  Future<Uint8List?> encodeNative(
+    ui.Image image,
+    String format, {
+    int quality = 92,
+    bool lossless = false,
+  }) async {
+    if (!info.isAndroid || (format != 'webp' && format != 'jpg')) return null;
+    try {
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (data == null) return null;
+      return await _codec.invokeMethod<Uint8List>('encode', {
+        'rgba': data.buffer.asUint8List(),
+        'width': image.width,
+        'height': image.height,
+        'format': format,
+        'quality': quality,
+        'lossless': lossless,
+      });
+    } catch (e) {
+      debugPrint('Pixora: native encode failed: $e');
+      return null;
+    }
+  }
 
   Future<File> _unique(Directory dir, String fileName) async {
     final dot = fileName.lastIndexOf('.');

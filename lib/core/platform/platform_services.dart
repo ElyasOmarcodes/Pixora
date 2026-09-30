@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -106,6 +107,16 @@ abstract class PlatformServices {
     String fileName,
     String mimeType,
   );
+
+  /// [image] encoded as 'webp' or 'jpg' by the platform's own codec
+  /// (Android, browsers) — much faster and lighter on memory than encoding
+  /// in Dart — or null when there is none.
+  Future<Uint8List?> encodeNative(
+    ui.Image image,
+    String format, {
+    int quality = 92,
+    bool lossless = false,
+  }) async => null;
 
   /// Lets the user choose where to save a file (save dialog / document
   /// picker / download).

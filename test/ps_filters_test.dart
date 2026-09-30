@@ -8,6 +8,7 @@ import 'package:pixora/document/model/document.dart';
 import 'package:pixora/document/model/fill.dart';
 import 'package:pixora/document/model/layer.dart';
 import 'package:pixora/document/model/layer_transform.dart';
+import 'package:pixora/document/render/blend_shader.dart';
 import 'package:pixora/document/render/document_renderer.dart';
 
 /// A black square with a white half, 100×100 on a 100×100 canvas.
@@ -70,6 +71,8 @@ Future<(Color Function(int, int), int)> render(
 double lum(Color c) => (c.r + c.g + c.b) / 3;
 
 void main() {
+  setUpAll(BlendShader.load);
+
   test('unsharp mask raises contrast at the edge', () async {
     final (px, _) = await render('unsharpMask', {'amount': 300, 'radius': 3});
     // Just inside the white side it overshoots to white, the black side

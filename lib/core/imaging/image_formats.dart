@@ -74,7 +74,8 @@ abstract final class ImageFormats {
 
   // ─────────────────────────────── writing
 
-  /// Encodes straight RGBA pixels as [format] ('webp', 'bmp', 'tiff').
+  /// Encodes straight RGBA pixels as [format] ('webp', 'bmp', 'tiff');
+  /// [dpi] is written into BMP and TIFF files.
   static Future<Uint8List> encodeRaster(
     String format,
     Uint8List rgba,
@@ -82,7 +83,15 @@ abstract final class ImageFormats {
     int h, {
     int quality = 90,
     bool lossless = true,
-  }) => compute(_encode, (format, rgba, w, h, quality, lossless));
+    double dpi = 72,
+  }) async {
+    // BMP and TIFF are plain copies of the pixels: quick enough to write
+    // right here (and far quicker than the general encoder, which froze
+    // the web page for seconds on big pictures).
+    if (format == 'bmp') return bmp(rgba, w, h, dpi: dpi);
+    if (format == 'tiff') return tiff(rgba, w, h, dpi: dpi);
+    return compute(_encode, (format, rgba, w, h, quality, lossless));
+  }
 
   static Uint8List _encode((String, Uint8List, int, int, int, bool) job) {
     final (format, rgba, w, h, quality, lossless) = job;
@@ -90,15 +99,143 @@ abstract final class ImageFormats {
       width: w,
       height: h,
       bytes: rgba.buffer,
+      bytesOffset: rgba.offsetInBytes,
       numChannels: 4,
       order: img.ChannelOrder.rgba,
     );
     return switch (format) {
-      'webp' => img.encodeWebP(raster, lossless: lossless, quality: quality),
-      'bmp' => img.encodeBmp(raster),
-      'tiff' => img.encodeTiff(raster),
+      // Effort 1: about four times faster than the default for a slightly
+      // bigger file (this is the fallback where the system has no WebP
+      // encoder).
+      'webp' => img.encodeWebP(
+        raster,
+        lossless: lossless,
+        quality: quality,
+        method: 1,
+        exact: false,
+      ),
       _ => img.encodePng(raster),
     };
+  }
+
+  /// A 32-bit BMP (BITMAPV4HEADER with an alpha mask) of straight RGBA
+  /// pixels, rows bottom-up as most readers expect.
+  static Uint8List bmp(Uint8List rgba, int w, int h, {double dpi = 72}) {
+    const header = 14 + 108;
+    final size = header + w * h * 4;
+    final out = Uint8List(size);
+    final b = ByteData.sublistView(out);
+    b
+      ..setUint8(0, 0x42) // 'BM'
+      ..setUint8(1, 0x4D)
+      ..setUint32(2, size, Endian.little)
+      ..setUint32(10, header, Endian.little)
+      ..setUint32(14, 108, Endian.little)
+      ..setInt32(18, w, Endian.little)
+      ..setInt32(22, h, Endian.little)
+      ..setUint16(26, 1, Endian.little)
+      ..setUint16(28, 32, Endian.little)
+      ..setUint32(30, 3, Endian.little) // BI_BITFIELDS
+      ..setUint32(34, w * h * 4, Endian.little);
+    final ppm = (dpi / 0.0254).round();
+    b
+      ..setInt32(38, ppm, Endian.little)
+      ..setInt32(42, ppm, Endian.little)
+      ..setUint32(54, 0x00FF0000, Endian.little) // red
+      ..setUint32(58, 0x0000FF00, Endian.little) // green
+      ..setUint32(62, 0x000000FF, Endian.little) // blue
+      ..setUint32(66, 0xFF000000, Endian.little) // alpha
+      ..setUint32(70, 0x73524742, Endian.little); // 'sRGB'
+    // R G B A → B G R A, a row at a time from the bottom.
+    final src = ByteData.sublistView(rgba);
+    for (var y = 0; y < h; y++) {
+      var o = header + (h - 1 - y) * w * 4;
+      var i = y * w * 4;
+      for (var x = 0; x < w; x++, i += 4, o += 4) {
+        final v = src.getUint32(i, Endian.little); // A B G R
+        b.setUint32(
+          o,
+          (v & 0xFF00FF00) | ((v & 0xFF) << 16) | ((v >> 16) & 0xFF),
+          Endian.little,
+        );
+      }
+    }
+    return out;
+  }
+
+  /// An uncompressed baseline TIFF of straight RGBA pixels (alpha as
+  /// unassociated extra sample), in strips of about 64 KB.
+  static Uint8List tiff(Uint8List rgba, int w, int h, {double dpi = 72}) {
+    final rowBytes = w * 4;
+    final rowsPerStrip = math.max(1, 65536 ~/ math.max(1, rowBytes));
+    final strips = (h + rowsPerStrip - 1) ~/ rowsPerStrip;
+    const entries = 14;
+    const ifd = 8;
+    const ifdSize = 2 + entries * 12 + 4;
+    const bps = ifd + ifdSize; // 4 shorts
+    const res = bps + 8; // 2 rationals
+    const offsets = res + 16;
+    final counts = offsets + strips * 4;
+    final data = counts + strips * 4;
+    final out = Uint8List(data + rowBytes * h);
+    final b = ByteData.sublistView(out);
+    b
+      ..setUint8(0, 0x49) // 'II'
+      ..setUint8(1, 0x49)
+      ..setUint16(2, 42, Endian.little)
+      ..setUint32(4, ifd, Endian.little)
+      ..setUint16(ifd, entries, Endian.little);
+    var e = ifd + 2;
+    void tag(int id, int type, int count, int value) {
+      b
+        ..setUint16(e, id, Endian.little)
+        ..setUint16(e + 2, type, Endian.little)
+        ..setUint32(e + 4, count, Endian.little);
+      if (type == 3 && count == 1) {
+        b.setUint16(e + 8, value, Endian.little);
+      } else {
+        b.setUint32(e + 8, value, Endian.little);
+      }
+      e += 12;
+    }
+
+    const short = 3, long = 4, rational = 5;
+    tag(256, long, 1, w); // width
+    tag(257, long, 1, h); // height
+    tag(258, short, 4, bps); // bits per sample
+    tag(259, short, 1, 1); // no compression
+    tag(262, short, 1, 2); // RGB
+    tag(273, long, strips, strips == 1 ? data : offsets); // strip offsets
+    tag(277, short, 1, 4); // samples per pixel
+    tag(278, long, 1, rowsPerStrip);
+    tag(279, long, strips, strips == 1 ? rowBytes * h : counts);
+    tag(282, rational, 1, res); // x resolution
+    tag(283, rational, 1, res + 8); // y resolution
+    tag(284, short, 1, 1); // chunky
+    tag(296, short, 1, 2); // inches
+    tag(338, short, 1, 2); // extra sample: unassociated alpha
+    b.setUint32(e, 0, Endian.little); // no next IFD
+    for (var k = 0; k < 4; k++) {
+      b.setUint16(bps + k * 2, 8, Endian.little);
+    }
+    final d = (dpi * 100).round();
+    for (final at in [res, res + 8]) {
+      b
+        ..setUint32(at, d, Endian.little)
+        ..setUint32(at + 4, 100, Endian.little);
+    }
+    for (var k = 0; k < strips; k++) {
+      final rows = math.min(rowsPerStrip, h - k * rowsPerStrip);
+      b
+        ..setUint32(
+          offsets + k * 4,
+          data + k * rowsPerStrip * rowBytes,
+          Endian.little,
+        )
+        ..setUint32(counts + k * 4, rows * rowBytes, Endian.little);
+    }
+    out.setRange(data, data + rowBytes * h, rgba);
+    return out;
   }
 
   /// A one-page PDF holding the picture at its print size ([dpi]): RGB, or
