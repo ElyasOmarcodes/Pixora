@@ -154,16 +154,27 @@ class _NumFieldState extends State<_NumField> {
   }
 }
 
-/// Loads the histogram once and repaints when it arrives.
-class _HistogramLoader extends StatelessWidget {
+/// Loads the histogram and repaints when it arrives, keeping the last one
+/// meanwhile (no blank flash while a new one is measured).
+class _HistogramLoader extends StatefulWidget {
   const _HistogramLoader({required this.future, required this.builder});
   final Future<ToneHistogram?>? future;
   final Widget Function(ToneHistogram? h) builder;
 
   @override
+  State<_HistogramLoader> createState() => _HistogramLoaderState();
+}
+
+class _HistogramLoaderState extends State<_HistogramLoader> {
+  ToneHistogram? _last;
+
+  @override
   Widget build(BuildContext context) => FutureBuilder<ToneHistogram?>(
-    future: future,
-    builder: (context, snap) => builder(snap.data),
+    future: widget.future,
+    builder: (context, snap) {
+      if (snap.hasData) _last = snap.data;
+      return RepaintBoundary(child: widget.builder(_last));
+    },
   );
 }
 

@@ -77,20 +77,44 @@ class LayerThumbs {
   /// The generation thumbnails are currently rendered for.
   static int get generation => _LayerThumbImageState._generation;
 
-  static final Expando<Future<ToneHistogram?>> _histograms = Expando();
+  /// Each layer's histogram with what it was measured from.
+  final Map<String, (Layer, ui.Image, Future<ToneHistogram?>)> _histograms = {};
 
   /// [layer]'s colour histogram, from its thumbnail (its content without
   /// effects, like the input Photoshop's Curves and Levels show); null
-  /// until the thumbnail exists.
+  /// until the thumbnail exists. Moving or restyling the layer keeps the
+  /// same histogram (it used to be measured again on every move).
   Future<ToneHistogram?>? histogramOf(Layer layer, EditorController editor) {
+    final content = _contentOf(layer);
+    final hit = _histograms[layer.id];
+    if (hit != null && hit.$1 == content) return hit.$3;
     final image = lookup(layer, editor, generation, () {});
-    if (image == null) return null;
-    return _histograms[image] ??= () async {
+    if (image == null) return hit?.$3;
+    // Still the old thumbnail: keep the old histogram until it updates.
+    if (hit != null && identical(hit.$2, image)) return hit.$3;
+    final future = () async {
       final data = await image.toByteData();
       return data == null
           ? null
           : ToneHistogram.fromRgba(data.buffer.asUint8List());
     }();
+    _histograms[layer.id] = (content, image, future);
+    if (_histograms.length > 64) _histograms.remove(_histograms.keys.first);
+    return future;
+  }
+
+  /// What a thumbnail shows of [layer]: its content, not its placement,
+  /// opacity or effects.
+  static Layer _contentOf(Layer layer) {
+    final t = layer.props.transform;
+    return layer.withProps(
+      layer.props.copyWith(
+        transform: LayerTransform(scaleX: t.scaleX.sign, scaleY: t.scaleY.sign),
+        opacity: 1,
+        effects: const [],
+        clearStroke: true,
+      ),
+    );
   }
 
   /// How light [layer]'s thumbnail content is (0 black … 1 white), once

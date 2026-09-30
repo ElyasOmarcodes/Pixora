@@ -2875,11 +2875,44 @@ class _ShapeSource {
       }
     }
     final watch = Stopwatch()..start();
-    final plain = _Stamp._make(
-      box,
-      rs.toDouble(),
-      (c) => r._paintContent(c, layer, hidden),
-    );
+    // The unfiltered pixels are kept too: while a filter's settings change
+    // (a Levels or Curves slider), only the filter runs again. (On screen
+    // only: exports are big and one-off.)
+    final plainKey = key == null || !r._live
+        ? null
+        : (
+            layer.withProps(
+              key.$1.props.copyWith(
+                effects: [
+                  for (final e in layer.props.effects)
+                    if (e.enabled && r._fx[e.type]?.filter == null) e,
+                ],
+              ),
+            ),
+            rs,
+            box,
+            TextLayoutCache.generation,
+          );
+    final kept = plainKey == null ? null : _plainCache[layer.id];
+    final _Stamp plain;
+    if (kept != null && kept.$1 == plainKey) {
+      plain = kept.$2;
+    } else {
+      plain = _Stamp._make(
+        box,
+        rs.toDouble(),
+        (c) => r._paintContent(c, layer, hidden),
+      );
+      if (plainKey != null) {
+        // Replaced images are left to the garbage collector (a filter may
+        // still be reading one).
+        _plainCache.remove(layer.id);
+        _plainCache[layer.id] = (plainKey, plain);
+        while (_plainCache.length > 3) {
+          _plainCache.remove(_plainCache.keys.first);
+        }
+      }
+    }
     final out = FilterEngine.apply(
       plain.image,
       box,
@@ -2888,7 +2921,7 @@ class _ShapeSource {
       // Photos blur with solid edges, as in Photoshop.
       solid: layer is RasterLayer ? local : null,
     );
-    plain.dispose();
+    if (plainKey == null) plain.dispose();
     final stamp = _Stamp._(out, box);
     if (key != null) {
       _recent[layer.id] = _RecentFilter(
@@ -2914,6 +2947,10 @@ class _ShapeSource {
 
   /// Recently filtered layer pixels (filters are the slow part).
   static final LinkedHashMap<Object, _Stamp> _filteredCache = LinkedHashMap();
+
+  /// A few layers' unfiltered pixels, by layer id.
+  static final LinkedHashMap<String, (Object, _Stamp)> _plainCache =
+      LinkedHashMap();
 
   /// Each layer's latest filtered pixels, whatever its placement.
   static final LinkedHashMap<String, _RecentFilter> _recent = LinkedHashMap();

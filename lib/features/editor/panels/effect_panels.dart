@@ -202,7 +202,40 @@ Widget buildFxControl(
       return cu.builder(valueOf, set);
     case FxEffectCustom ec:
       final ctx = effectContext;
-      return ctx == null ? const SizedBox.shrink() : ec.builder(ctx);
+      return ctx == null
+          ? const SizedBox.shrink()
+          : _KeepBuilt(ctx: ctx, builder: ec.builder);
+  }
+}
+
+/// Rebuilds a custom effect editor only when its effect or histogram
+/// changes: the panel rebuilds on every frame while the layer moves, and
+/// the Curves / Levels editors are big.
+class _KeepBuilt extends StatefulWidget {
+  const _KeepBuilt({required this.ctx, required this.builder});
+  final FxEffectContext ctx;
+  final Widget Function(FxEffectContext c) builder;
+
+  @override
+  State<_KeepBuilt> createState() => _KeepBuiltState();
+}
+
+class _KeepBuiltState extends State<_KeepBuilt> {
+  Widget? _child;
+  LayerEffect? _effect;
+  Future<ToneHistogram?>? _histogram;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctx = widget.ctx;
+    if (_child == null ||
+        _effect != ctx.effect ||
+        !identical(_histogram, ctx.histogram)) {
+      _child = widget.builder(ctx);
+      _effect = ctx.effect;
+      _histogram = ctx.histogram;
+    }
+    return _child!;
   }
 }
 
