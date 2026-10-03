@@ -84,7 +84,12 @@ class ToolContext {
     required this.style,
     required this.requestRepaint,
     this.pointerDown,
+    this.pressure,
   });
+
+  /// Stylus pressure of the current touch, 0..1 (null for fingers, mice
+  /// and pens that report none).
+  final double? pressure;
 
   /// Where the current gesture's first finger went down (screen space).
   /// Gesture starts are reported after the touch slop; tools that draw

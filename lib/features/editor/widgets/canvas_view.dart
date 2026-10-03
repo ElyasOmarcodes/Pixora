@@ -153,8 +153,18 @@ class _CanvasViewState extends State<CanvasView>
   /// is never taken for one.
   Timer? _pressTimer;
   int _pointers = 0;
+  double? _pressure;
+
+  void _readPressure(PointerEvent e) {
+    _pressure =
+        e.kind == PointerDeviceKind.stylus && e.pressureMax > e.pressureMin
+        ? ((e.pressure - e.pressureMin) / (e.pressureMax - e.pressureMin))
+              .clamp(0.0, 1.0)
+        : null;
+  }
 
   void _pointerDownAt(PointerDownEvent e) {
+    _readPressure(e);
     _pointerDown = e.localPosition;
     _pointers++;
     _pressTimer?.cancel();
@@ -171,6 +181,7 @@ class _CanvasViewState extends State<CanvasView>
   }
 
   void _pointerMove(PointerMoveEvent e) {
+    _readPressure(e);
     if (_pressTimer != null &&
         (e.localPosition - (_pointerDown ?? e.localPosition)).distance > 10) {
       _pressTimer?.cancel();
@@ -197,6 +208,7 @@ class _CanvasViewState extends State<CanvasView>
         handleFill: Colors.white,
       ),
       requestRepaint: () => _overlayTick.value++,
+      pressure: _pressure,
     );
   }
 

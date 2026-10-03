@@ -15,6 +15,7 @@ class BrushSettings extends ChangeNotifier {
   double _softness = 0;
   double _smoothing = 0.5;
   bool _eraser = false;
+  BrushTip? _tip;
 
   BrushType get type => _type;
 
@@ -30,7 +31,24 @@ class BrushSettings extends ChangeNotifier {
 
   set type(BrushType v) => _set(() {
     _type = v;
+    _tip = null;
     _eraser = false;
+  });
+
+  /// The tip settings in use (the brush's preset until changed); null
+  /// for line brushes.
+  BrushTip? get tip => _tip ?? BrushTip.presetFor(_type);
+
+  /// Whether the brush has tip settings changed from its preset.
+  bool get tipChanged => _tip != null;
+
+  /// Changes the tip settings; a line brush becomes the round tip brush
+  /// with the same edge.
+  set tip(BrushTip? v) => _set(() {
+    if (v != null && BrushTip.presetFor(_type) == null) {
+      _type = BrushType.round;
+    }
+    _tip = v;
   });
   set size(double v) => _set(() => _size = v.clamp(0.5, 500.0));
   set color(Color v) => _set(() {
@@ -47,17 +65,29 @@ class BrushSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  BrushStroke stroke(List<Offset> points, double scale, int seed) =>
-      BrushStroke(
-        points: points,
-        type: _eraser ? BrushType.pen : _type,
-        color: _color,
-        width: _size * scale,
-        opacity: _eraser ? 1 : _opacity,
-        softness: _softness,
-        eraser: _eraser,
-        seed: seed,
-      );
+  BrushStroke stroke(
+    List<Offset> points,
+    double scale,
+    int seed, [
+    List<double>? pressures,
+  ]) {
+    final t = tip;
+    return BrushStroke(
+      points: points,
+      // The eraser keeps a tip brush's shape; line brushes erase round.
+      type: _eraser && t == null ? BrushType.pen : _type,
+      color: _color,
+      width: _size * scale,
+      opacity: _eraser ? 1 : _opacity,
+      softness: _softness,
+      eraser: _eraser,
+      seed: seed,
+      tip: t,
+      pressures: t != null && (t.pressureSize || t.pressureOpacity)
+          ? pressures
+          : null,
+    );
+  }
 }
 
 /// Draws brush strokes into the selected drawing layer. One finger draws;
@@ -68,7 +98,33 @@ class DrawTool extends EditorTool {
   final BrushSettings settings;
   String? _layerId;
   List<Offset> _points = [];
+  List<double> _pressures = [];
   Offset? _smoothed;
+
+  // Pressure from speed when the pen reports none (like Procreate:
+  // faster strokes come out thinner).
+  DateTime _lastTime = DateTime(0);
+  Offset _lastScreen = Offset.zero;
+  double _speedPressure = 0.7;
+
+  double _pressureNow(ToolContext ctx, Offset screen, {bool start = false}) {
+    final now = DateTime.now();
+    final stylus = ctx.pressure;
+    if (start) {
+      _lastTime = now;
+      _lastScreen = screen;
+      _speedPressure = 0.7;
+      return stylus ?? _speedPressure;
+    }
+    final dt = math.max(1, now.difference(_lastTime).inMilliseconds);
+    final v = (screen - _lastScreen).distance / dt; // px per ms
+    _lastTime = now;
+    _lastScreen = screen;
+    final target = (1.15 - v / 2.2).clamp(0.2, 1.0);
+    _speedPressure += (target - _speedPressure) * 0.35;
+    return stylus ?? _speedPressure;
+  }
+
   Offset? _cursor;
   double _scale = 1;
 
@@ -113,6 +169,7 @@ class DrawTool extends EditorTool {
     _scale = _localScale(l);
     final p = l.props.transform.toLocal(ctx.viewport.toDoc(d.localFocalPoint));
     _points = [p];
+    _pressures = [_pressureNow(ctx, d.localFocalPoint, start: true)];
     _smoothed = p;
     _cursor = d.localFocalPoint;
     _seedNow = _seed;
@@ -127,7 +184,7 @@ class DrawTool extends EditorTool {
     if (id == null) return;
     ctx.editor.addBrushStroke(
       id,
-      settings.stroke(_points, _scale, _seedNow),
+      settings.stroke(_points, _scale, _seedNow, _pressures),
       live: true,
     );
   }
@@ -147,9 +204,11 @@ class DrawTool extends EditorTool {
     final prev = _smoothed ?? raw;
     final p = prev + (raw - prev) * k;
     _smoothed = p;
+    final pressure = _pressureNow(ctx, d.localFocalPoint);
     final minStep = 1.2 / ctx.viewport.scale * _scale;
     if ((p - _points.last).distance < minStep) return;
     _points = [..._points, p];
+    _pressures = [..._pressures, pressure];
     _preview(ctx);
   }
 
@@ -159,6 +218,7 @@ class DrawTool extends EditorTool {
     if (ctx.editor.isPreviewing) ctx.editor.commit('draw');
     _layerId = null;
     _points = [];
+    _pressures = [];
     _smoothed = null;
     ctx.requestRepaint();
   }

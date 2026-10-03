@@ -11,6 +11,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../ui/widgets/color_picker.dart';
 import '../../../ui/widgets/pix_slider.dart';
 import '../../../ui/widgets/pressable.dart';
+import 'brush_settings_sheet.dart';
 
 String brushLabel(AppLocalizations l, BrushType t) => switch (t) {
   BrushType.pen => l.brushPen,
@@ -21,6 +22,13 @@ String brushLabel(AppLocalizations l, BrushType t) => switch (t) {
   BrushType.calligraphy => l.brushCalligraphy,
   BrushType.spray => l.brushSpray,
   BrushType.neon => l.brushNeon,
+  BrushType.round => l.brushRound,
+  BrushType.ink => l.brushInk,
+  BrushType.chalk => l.brushChalk,
+  BrushType.watercolor => l.brushWatercolor,
+  BrushType.dotted => l.brushDotted,
+  BrushType.stars => l.brushStars,
+  BrushType.leaves => l.brushLeaves,
 };
 
 /// Freehand drawing: brush tips with live previews, draw / erase, size,
@@ -112,15 +120,27 @@ class BrushPanel extends StatelessWidget {
                 format: (v) => '${(v * 100).round()}%',
                 onChanged: (v) => b.opacity = v,
               ),
-            PixSlider(
-              label: l.softness,
-              value: b.softness,
-              min: 0,
-              max: 1,
-              defaultValue: 0,
-              format: (v) => '${(v * 100).round()}%',
-              onChanged: (v) => b.softness = v,
-            ),
+            // Tip brushes have Photoshop's hardness; line brushes soften.
+            if (b.tip case final tip?)
+              PixSlider(
+                label: l.hardness,
+                value: tip.hardness,
+                min: 0,
+                max: 1,
+                defaultValue: 1,
+                format: (v) => '${(v * 100).round()}%',
+                onChanged: (v) => b.tip = tip.copyWith(hardness: v),
+              )
+            else
+              PixSlider(
+                label: l.softness,
+                value: b.softness,
+                min: 0,
+                max: 1,
+                defaultValue: 0,
+                format: (v) => '${(v * 100).round()}%',
+                onChanged: (v) => b.softness = v,
+              ),
             PixSlider(
               label: l.smoothing,
               value: b.smoothing,
@@ -129,6 +149,17 @@ class BrushPanel extends StatelessWidget {
               defaultValue: 0.5,
               format: (v) => '${(v * 100).round()}%',
               onChanged: (v) => b.smoothing = v,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(44),
+                ),
+                onPressed: () => showBrushSettings(context, b),
+                icon: const Icon(Icons.tune_rounded),
+                label: Text(l.brushSettings),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),

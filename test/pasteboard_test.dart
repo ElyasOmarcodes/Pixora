@@ -19,10 +19,7 @@ void main() {
     background: PixFill.color(const ui.Color(0xFFFFFFFF)),
     layers: [
       ShapeLayer(
-        LayerProps(
-          name: 's',
-          transform: const LayerTransform(x: 100, y: 50),
-        ),
+        LayerProps(name: 's', transform: const LayerTransform(x: 100, y: 50)),
         shape: ShapeKind.rectangle,
         width: 80,
         height: 40,
@@ -46,17 +43,28 @@ void main() {
     // Without the pasteboard: nothing beyond the canvas edge.
     expect(await at((c) => r.paint(c, doc), 120, 50), [0, 0, 0, 0]);
     // With it: the outside part, faded.
-    final out = await at((c) {
-      r.paint(c, doc);
-      r.paintPasteboard(c, doc);
-    }, 120, 50);
+    final out = await at(
+      (c) {
+        r.paint(c, doc);
+        r.paintPasteboard(c, doc);
+      },
+      120,
+      50,
+    );
     expect(out[0], greaterThan(100));
     expect(out[3], inInclusiveRange(120, 180));
     // Inside the canvas the layer is painted once, at full strength.
-    expect(await at((c) {
-      r.paint(c, doc);
-      r.paintPasteboard(c, doc);
-    }, 80, 50), [255, 0, 0, 255]);
+    expect(
+      await at(
+        (c) {
+          r.paint(c, doc);
+          r.paintPasteboard(c, doc);
+        },
+        80,
+        50,
+      ),
+      [255, 0, 0, 255],
+    );
     // The export is the canvas only.
     final img = await r.renderImage(doc);
     expect((img.width, img.height), (100, 100));
