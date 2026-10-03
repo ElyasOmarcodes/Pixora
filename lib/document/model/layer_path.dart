@@ -136,10 +136,33 @@ class PathContour {
 }
 
 /// Line end decorations.
-enum ArrowHead { none, arrow, triangle, circle, square, diamond, bar }
+enum ArrowHead {
+  none,
+  arrow,
+  triangle,
+  circle,
+  square,
+  diamond,
+  bar,
 
-/// Stroke dash patterns.
-enum DashStyle { solid, dashed, dotted, dashDot }
+  /// Concave "stealth" arrow.
+  stealth,
+
+  /// Outlined triangle and circle.
+  openTriangle,
+  openCircle,
+}
+
+/// Stroke dash patterns; [custom] uses [PathLayer.dashPattern].
+enum DashStyle { solid, dashed, dotted, dashDot, custom }
+
+/// Where a closed path's stroke sits on its edge (Illustrator's Align
+/// Stroke).
+enum StrokeAlign { center, inside, outside }
+
+/// How the stroke's width runs along the path (Illustrator's width
+/// profiles).
+enum WidthProfile { uniform, taperStart, taperEnd, taperBoth, bulge }
 
 /// A vector drawn with the pen tool or from the vector presets: bezier
 /// contours with fill, stroke, dashes and arrowheads — like Illustrator
@@ -160,7 +183,13 @@ final class PathLayer extends Layer {
     this.endHead = ArrowHead.none,
     this.headSize = 1,
     this.evenOdd = false,
-  }) : contours = List.unmodifiable(contours);
+    this.miterLimit = 4,
+    this.align = StrokeAlign.center,
+    this.profile = WidthProfile.uniform,
+    this.endHeadSize,
+    List<double> dashPattern = const [3, 2],
+  }) : contours = List.unmodifiable(contours),
+       dashPattern = List.unmodifiable(dashPattern);
 
   final List<PathContour> contours;
 
@@ -183,6 +212,24 @@ final class PathLayer extends Layer {
   /// Even-odd fill rule (holes where contours overlap).
   final bool evenOdd;
 
+  /// How far mitred corners may reach (in stroke widths) before they are
+  /// bevelled.
+  final double miterLimit;
+
+  /// Stroke position on closed paths.
+  final StrokeAlign align;
+
+  /// Width along the path.
+  final WidthProfile profile;
+
+  /// Arrowhead size at the end ([headSize] is the start's); null: same.
+  final double? endHeadSize;
+
+  /// Custom dashes: dash, gap, dash, gap… in stroke widths.
+  final List<double> dashPattern;
+
+  double get endSize => endHeadSize ?? headSize;
+
   @override
   LayerKind get kind => LayerKind.path;
 
@@ -204,6 +251,11 @@ final class PathLayer extends Layer {
     ArrowHead? endHead,
     double? headSize,
     bool? evenOdd,
+    double? miterLimit,
+    StrokeAlign? align,
+    WidthProfile? profile,
+    double? endHeadSize,
+    List<double>? dashPattern,
   }) => PathLayer(
     props ?? this.props,
     contours: contours ?? this.contours,
@@ -218,6 +270,31 @@ final class PathLayer extends Layer {
     endHead: endHead ?? this.endHead,
     headSize: headSize ?? this.headSize,
     evenOdd: evenOdd ?? this.evenOdd,
+    miterLimit: miterLimit ?? this.miterLimit,
+    align: align ?? this.align,
+    profile: profile ?? this.profile,
+    endHeadSize: endHeadSize ?? this.endHeadSize,
+    dashPattern: dashPattern ?? this.dashPattern,
+  );
+
+  /// The same path drawn the other way (Illustrator's Reverse Path
+  /// Direction): arrowheads, their sizes and the width profile stay on the
+  /// path's start and end, so they move to the other ends.
+  PathLayer reversed() => copyWith(
+    contours: [
+      for (final c in contours)
+        c.copyWith(
+          nodes: [
+            for (final n in c.nodes.reversed)
+              PathNode(
+                n.point,
+                inHandle: n.outHandle,
+                outHandle: n.inHandle,
+                type: n.type,
+              ),
+          ],
+        ),
+    ],
   );
 
   @override
@@ -234,6 +311,11 @@ final class PathLayer extends Layer {
     if (endHead != ArrowHead.none) 'endHead': endHead.name,
     if (headSize != 1) 'headSize': headSize,
     if (evenOdd) 'evenOdd': true,
+    if (miterLimit != 4) 'miterLimit': miterLimit,
+    if (align != StrokeAlign.center) 'align': align.name,
+    if (profile != WidthProfile.uniform) 'profile': profile.name,
+    if (endHeadSize != null) 'endHeadSize': endHeadSize,
+    if (dash == DashStyle.custom) 'dashPattern': dashPattern,
   };
 
   static PathLayer fromJson(LayerProps props, Json m) => PathLayer(
@@ -253,6 +335,16 @@ final class PathLayer extends Layer {
     endHead: readEnum(ArrowHead.values, m['endHead'], ArrowHead.none),
     headSize: readDouble(m['headSize'], 1),
     evenOdd: readBool(m['evenOdd']),
+    miterLimit: readDouble(m['miterLimit'], 4).clamp(1, 50).toDouble(),
+    align: readEnum(StrokeAlign.values, m['align'], StrokeAlign.center),
+    profile: readEnum(WidthProfile.values, m['profile'], WidthProfile.uniform),
+    endHeadSize: m['endHeadSize'] == null
+        ? null
+        : readDouble(m['endHeadSize'], 1),
+    dashPattern: [
+      for (final v in readList(m['dashPattern']))
+        readDouble(v, 1).clamp(0.0, 100.0).toDouble(),
+    ].take(6).toList().let((l) => l.length >= 2 ? l : const [3.0, 2.0]),
   );
 
   @override
@@ -270,7 +362,12 @@ final class PathLayer extends Layer {
       other.startHead == startHead &&
       other.endHead == endHead &&
       other.headSize == headSize &&
-      other.evenOdd == evenOdd;
+      other.evenOdd == evenOdd &&
+      other.miterLimit == miterLimit &&
+      other.align == align &&
+      other.profile == profile &&
+      other.endHeadSize == endHeadSize &&
+      listEquals(other.dashPattern, dashPattern);
 
   @override
   int get hashCode => Object.hash(
@@ -286,6 +383,11 @@ final class PathLayer extends Layer {
     startHead,
     endHead,
     headSize,
-    evenOdd,
+    Object.hash(evenOdd, miterLimit, align, profile, endHeadSize),
+    Object.hashAll(dashPattern),
   );
+}
+
+extension<T> on T {
+  R let<R>(R Function(T) f) => f(this);
 }

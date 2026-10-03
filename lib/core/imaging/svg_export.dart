@@ -131,6 +131,8 @@ abstract final class SvgExport {
         if (pl.startHead != ArrowHead.none ||
             pl.endHead != ArrowHead.none ||
             pl.dash != DashStyle.solid ||
+            pl.profile != WidthProfile.uniform ||
+            pl.align != StrokeAlign.center ||
             (pl.fill != null && pl.fill!.kind != FillKind.solid)) {
           return null;
         }
@@ -140,6 +142,7 @@ abstract final class SvgExport {
             '${fill == null ? 'fill="none"' : _fillAttr(fill.colors.first)}'
             '${pl.strokeWidth > 0 ? ' stroke="${_hex(pl.strokeColor)}" stroke-width="${_n(pl.strokeWidth)}"'
                       ' stroke-linecap="${pl.cap.name}" stroke-linejoin="${pl.join.name}"'
+                      '${pl.join == StrokeJoin.miter ? ' stroke-miterlimit="${_n(pl.miterLimit)}"' : ''}'
                       '${pl.strokeColor.a < 1 ? ' stroke-opacity="${pl.strokeColor.a.toStringAsFixed(3)}"' : ''}' : ''}';
       default:
         return null;

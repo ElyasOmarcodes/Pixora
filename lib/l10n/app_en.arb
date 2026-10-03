@@ -986,5 +986,46 @@
   "saturationJitter": "Saturation jitter",
   "brightnessJitter": "Brightness jitter",
   "resetBrush": "Reset brush",
-  "brushSettingsHint": "Line brushes become the Round tip brush when changed here."
+  "brushSettingsHint": "Line brushes become the Round tip brush when changed here.",
+  "lineCap": "Cap",
+  "lineCorner": "Corner",
+  "joinMiter": "Sharp",
+  "joinRound": "Round",
+  "joinBevel": "Bevel",
+  "miterLimit": "Corner limit",
+  "strokeAlign": "Align stroke",
+  "widthProfile": "Width profile",
+  "profileUniform": "Even",
+  "profileTaperStart": "Taper in",
+  "profileTaperEnd": "Taper out",
+  "profileTaperBoth": "Pointed",
+  "profileBulge": "Bulge",
+  "dashCustom": "Custom",
+  "dashSegment": "Dash {n}",
+  "@dashSegment": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "gapSegment": "Gap {n}",
+  "@gapSegment": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "startHeadSize": "Start size",
+  "endHeadSize": "End size",
+  "reversePath": "Reverse direction",
+  "vArc": "Arc",
+  "vSpiral": "Spiral",
+  "vLoop": "Loop",
+  "vBrace": "Brace",
+  "vSwoosh": "Swoosh",
+  "vectorStroke": "Stroke",
+  "vectorArrows": "Arrowheads",
+  "vectorPath": "Path"
 }

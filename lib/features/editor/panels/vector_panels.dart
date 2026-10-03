@@ -407,6 +407,36 @@ List<VectorPreset> vectorPresets(double s) {
               ),
       ),
   ];
+  // Smooth nodes through points (Catmull-Rom handles).
+  List<PathNode> smooth(List<Offset> p) => [
+    for (var i = 0; i < p.length; i++)
+      () {
+        final prev = p[math.max(0, i - 1)],
+            next = p[math.min(p.length - 1, i + 1)];
+        final t = (next - prev) / 6;
+        return PathNode(
+          p[i],
+          inHandle: i == 0 ? null : p[i] - t,
+          outHandle: i == p.length - 1 ? null : p[i] + t,
+          type: PathNodeType.smooth,
+        );
+      }(),
+  ];
+  final spiral = <Offset>[
+    for (var i = 0; i <= 28; i++)
+      Offset.fromDirection(i * 0.42, s * 0.08 + s * 0.9 * i / 28),
+  ];
+  final loop = <Offset>[
+    for (var i = 0; i <= 24; i++)
+      () {
+        final t = i / 24 * 2 * math.pi;
+        // A curve with one loop in the middle.
+        return Offset(
+          -s + 2 * s * i / 24 + math.sin(t) * s * 0.35,
+          -math.sin(t) * s * 0.18 - (1 - math.cos(t)) * s * 0.22,
+        );
+      }(),
+  ];
   return [
     VectorPreset('line', line([n(-s, 0), n(s, 0)]), (l) => l.shapeLine),
     VectorPreset(
@@ -460,6 +490,49 @@ List<VectorPreset> vectorPresets(double s) {
       (l) => l.vZigzag,
     ),
     VectorPreset('wave', line(wave), (l) => l.vWave),
+    VectorPreset(
+      'arc',
+      line([
+        n(-s, s * 0.3, o: Offset(-s * 0.55, -s * 0.6)),
+        n(s, s * 0.3, i: Offset(s * 0.55, -s * 0.6)),
+      ]),
+      (l) => l.vArc,
+    ),
+    VectorPreset('spiral', line(smooth(spiral)), (l) => l.vSpiral),
+    VectorPreset(
+      'loop',
+      line(smooth(loop), end: ArrowHead.arrow),
+      (l) => l.vLoop,
+    ),
+    VectorPreset(
+      'brace',
+      line([
+        n(-s * 0.15, -s, o: Offset(-s * 0.45, -s)),
+        n(
+          -s * 0.2,
+          -s * 0.15,
+          i: Offset(-s * 0.2, -s * 0.6),
+          o: Offset(-s * 0.2, -s * 0.05),
+        ),
+        n(-s * 0.45, 0),
+        n(
+          -s * 0.2,
+          s * 0.15,
+          i: Offset(-s * 0.2, s * 0.05),
+          o: Offset(-s * 0.2, s * 0.6),
+        ),
+        n(-s * 0.15, s, i: Offset(-s * 0.45, s)),
+      ]),
+      (l) => l.vBrace,
+    ),
+    VectorPreset(
+      'swoosh',
+      line([
+        n(-s, s * 0.35, o: Offset(-s * 0.3, s * 0.45)),
+        n(s, -s * 0.35, i: Offset(s * 0.2, s * 0.25)),
+      ]).copyWith(profile: WidthProfile.taperBoth, strokeWidth: 14),
+      (l) => l.vSwoosh,
+    ),
     VectorPreset(
       'blob',
       line(
@@ -779,6 +852,29 @@ class LinePanel extends StatelessWidget {
         editor.editSelected<PathLayer>(f, live: live, label: 'line');
     void commit([_]) => editor.commit('line');
 
+    Widget chips<T>(List<(T, Widget)> items, T value, void Function(T) set) =>
+        SizedBox(
+          height: 52,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: [
+              for (final (v, label) in items)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3,
+                    vertical: 4,
+                  ),
+                  child: ChoiceChip(
+                    label: label,
+                    selected: value == v,
+                    onSelected: (_) => set(v),
+                  ),
+                ),
+            ],
+          ),
+        );
+
     Widget heads(
       String title,
       ArrowHead value,
@@ -789,33 +885,26 @@ class LinePanel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         PanelLabel(title),
-        SizedBox(
-          height: 52,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              for (final h in ArrowHead.values)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 3,
-                    vertical: 4,
-                  ),
-                  child: ChoiceChip(
-                    label: _HeadGlyph(h, start: start),
-                    selected: value == h,
-                    onSelected: (_) => set(h),
-                  ),
-                ),
-            ],
-          ),
+        chips(
+          [for (final h in ArrowHead.values) (h, _HeadGlyph(h, start: start))],
+          value,
+          set,
         ),
       ],
     );
 
+    final closed =
+        layer.contours.isNotEmpty && layer.contours.every((c) => c.closed);
+    final open = layer.contours.any((c) => !c.closed && c.nodes.length > 1);
+    final pattern = [...layer.dashPattern];
+    while (pattern.length < 4) {
+      pattern.add(pattern.length.isEven ? 3 : 2);
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        PanelLabel(l.vectorStroke),
         PixSlider(
           label: l.strokeWidth,
           value: layer.strokeWidth,
@@ -830,51 +919,126 @@ class LinePanel extends StatelessWidget {
             if (c != null) edit((p) => p.copyWith(strokeColor: c), live: live);
           },
         ),
-        PanelLabel(l.lineStyle),
-        SizedBox(
-          height: 52,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [
-              for (final (d, label) in [
-                (DashStyle.solid, l.solid),
-                (DashStyle.dashed, l.vDashed),
-                (DashStyle.dotted, l.vDotted),
-                (DashStyle.dashDot, l.dashDot),
-              ])
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 3,
-                    vertical: 4,
-                  ),
-                  child: ChoiceChip(
-                    label: Text(label),
-                    selected: layer.dash == d,
-                    onSelected: (_) => edit((p) => p.copyWith(dash: d)),
-                  ),
-                ),
-              const SizedBox(width: 10),
-              for (final (c, icon) in [
-                (StrokeCap.round, Icons.circle),
-                (StrokeCap.butt, Icons.stop),
-                (StrokeCap.square, Icons.crop_square),
-              ])
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 3,
-                    vertical: 4,
-                  ),
-                  child: ChoiceChip(
-                    label: Icon(icon, size: 16),
-                    selected: layer.cap == c,
-                    onSelected: (_) => edit((p) => p.copyWith(cap: c)),
-                  ),
-                ),
+        PanelLabel(l.lineCap),
+        chips(
+          [
+            (
+              StrokeCap.butt,
+              const Icon(Icons.horizontal_rule_rounded, size: 18),
+            ),
+            (StrokeCap.round, const Icon(Icons.circle, size: 16)),
+            (StrokeCap.square, const Icon(Icons.crop_square, size: 18)),
+          ],
+          layer.cap,
+          (c) => edit((p) => p.copyWith(cap: c)),
+        ),
+        PanelLabel(l.lineCorner),
+        chips(
+          [
+            (StrokeJoin.miter, Text(l.joinMiter)),
+            (StrokeJoin.round, Text(l.joinRound)),
+            (StrokeJoin.bevel, Text(l.joinBevel)),
+          ],
+          layer.join,
+          (j) => edit((p) => p.copyWith(join: j)),
+        ),
+        if (layer.join == StrokeJoin.miter)
+          PixSlider(
+            label: l.miterLimit,
+            value: layer.miterLimit,
+            min: 1,
+            max: 20,
+            defaultValue: 4,
+            format: (v) => '×${v.toStringAsFixed(1)}',
+            onChanged: (v) =>
+                edit((p) => p.copyWith(miterLimit: v), live: true),
+            onChangeEnd: commit,
+          ),
+        if (closed) ...[
+          PanelLabel(l.strokeAlign),
+          chips(
+            [
+              (StrokeAlign.center, Text(l.strokeCenter)),
+              (StrokeAlign.inside, Text(l.strokeInside)),
+              (StrokeAlign.outside, Text(l.strokeOutside)),
             ],
+            layer.align,
+            (a) => edit((p) => p.copyWith(align: a)),
+          ),
+        ],
+        PanelLabel(l.widthProfile),
+        chips(
+          [
+            for (final w in WidthProfile.values)
+              (
+                w,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CustomPaint(
+                      size: const Size(30, 14),
+                      painter: _ProfileGlyph(
+                        w,
+                        IconTheme.of(context).color ??
+                            Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(switch (w) {
+                      WidthProfile.uniform => l.profileUniform,
+                      WidthProfile.taperStart => l.profileTaperStart,
+                      WidthProfile.taperEnd => l.profileTaperEnd,
+                      WidthProfile.taperBoth => l.profileTaperBoth,
+                      WidthProfile.bulge => l.profileBulge,
+                    }),
+                  ],
+                ),
+              ),
+          ],
+          layer.profile,
+          (w) => edit(
+            (p) => p.copyWith(
+              profile: w,
+              // Width profiles draw solid lines, as in Illustrator.
+              dash: w == WidthProfile.uniform ? p.dash : DashStyle.solid,
+            ),
           ),
         ),
-        if (layer.dash != DashStyle.solid)
+        PanelLabel(l.lineStyle),
+        chips(
+          [
+            (DashStyle.solid, Text(l.solid)),
+            (DashStyle.dashed, Text(l.vDashed)),
+            (DashStyle.dotted, Text(l.vDotted)),
+            (DashStyle.dashDot, Text(l.dashDot)),
+            (DashStyle.custom, Text(l.dashCustom)),
+          ],
+          layer.dash,
+          (d) => edit(
+            (p) => p.copyWith(
+              dash: d,
+              profile: d == DashStyle.solid ? p.profile : WidthProfile.uniform,
+            ),
+          ),
+        ),
+        if (layer.dash == DashStyle.custom)
+          for (var i = 0; i < 4; i++)
+            PixSlider(
+              label: i.isEven
+                  ? l.dashSegment(i ~/ 2 + 1)
+                  : l.gapSegment(i ~/ 2 + 1),
+              value: pattern[i].clamp(0, 20).toDouble(),
+              min: 0,
+              max: 20,
+              defaultValue: i.isEven ? 3 : 2,
+              format: (v) => '×${v.toStringAsFixed(1)}',
+              onChanged: (v) => edit((p) {
+                final next = [...pattern]..[i] = v;
+                return p.copyWith(dashPattern: next);
+              }, live: true),
+              onChangeEnd: commit,
+            )
+        else if (layer.dash != DashStyle.solid)
           PixSlider(
             label: l.dashLength,
             value: layer.dashScale,
@@ -885,29 +1049,77 @@ class LinePanel extends StatelessWidget {
             onChanged: (v) => edit((p) => p.copyWith(dashScale: v), live: true),
             onChangeEnd: commit,
           ),
-        heads(
-          l.startHead,
-          layer.startHead,
-          (h) => edit((p) => p.copyWith(startHead: h)),
-          start: true,
-        ),
-        heads(
-          l.endHead,
-          layer.endHead,
-          (h) => edit((p) => p.copyWith(endHead: h)),
-        ),
-        if (layer.startHead != ArrowHead.none ||
-            layer.endHead != ArrowHead.none)
-          PixSlider(
-            label: l.headSize,
-            value: layer.headSize,
-            min: 0.3,
-            max: 4,
-            defaultValue: 1,
-            format: (v) => '×${v.toStringAsFixed(1)}',
-            onChanged: (v) => edit((p) => p.copyWith(headSize: v), live: true),
-            onChangeEnd: commit,
+        if (open) ...[
+          heads(
+            l.startHead,
+            layer.startHead,
+            (h) => edit((p) => p.copyWith(startHead: h)),
+            start: true,
           ),
+          if (layer.startHead != ArrowHead.none)
+            PixSlider(
+              label: l.startHeadSize,
+              value: layer.headSize,
+              min: 0.3,
+              max: 4,
+              defaultValue: 1,
+              format: (v) => '×${v.toStringAsFixed(1)}',
+              onChanged: (v) => edit(
+                (p) => p.copyWith(
+                  headSize: v,
+                  // Keep the end where it was when it followed the start.
+                  endHeadSize: p.endHeadSize ?? p.headSize,
+                ),
+                live: true,
+              ),
+              onChangeEnd: commit,
+            ),
+          heads(
+            l.endHead,
+            layer.endHead,
+            (h) => edit((p) => p.copyWith(endHead: h)),
+          ),
+          if (layer.endHead != ArrowHead.none)
+            PixSlider(
+              label: l.endHeadSize,
+              value: layer.endSize,
+              min: 0.3,
+              max: 4,
+              defaultValue: 1,
+              format: (v) => '×${v.toStringAsFixed(1)}',
+              onChanged: (v) =>
+                  edit((p) => p.copyWith(endHeadSize: v), live: true),
+              onChangeEnd: commit,
+            ),
+        ],
+        PanelLabel(l.vectorPath),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => edit((p) => p.reversed()),
+                icon: const Icon(Icons.swap_horiz_rounded),
+                label: Text(l.reversePath),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => edit(
+                  (p) => p.copyWith(
+                    contours: [
+                      for (final c in p.contours) c.copyWith(closed: !closed),
+                    ],
+                  ),
+                ),
+                icon: Icon(
+                  closed ? Icons.timeline_rounded : Icons.pentagon_outlined,
+                ),
+                label: Text(closed ? l.openPath : l.closePath),
+              ),
+            ],
+          ),
+        ),
         SwitchListTile.adaptive(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -933,6 +1145,38 @@ class LinePanel extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A tiny line showing a width profile.
+class _ProfileGlyph extends CustomPainter {
+  _ProfileGlyph(this.profile, this.color);
+  final WidthProfile profile;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    paintPathLayer(
+      canvas,
+      PathLayer(
+        LayerProps(name: ''),
+        contours: [
+          PathContour(
+            nodes: [
+              PathNode(Offset(3, size.height / 2)),
+              PathNode(Offset(size.width - 3, size.height / 2)),
+            ],
+          ),
+        ],
+        strokeWidth: size.height * 0.7,
+        strokeColor: color,
+        profile: profile,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ProfileGlyph old) =>
+      old.profile != profile || old.color != color;
 }
 
 class _HeadGlyph extends StatelessWidget {
