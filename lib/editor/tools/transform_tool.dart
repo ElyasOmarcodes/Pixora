@@ -65,6 +65,9 @@ class TransformTool extends EditorTool {
 
   static const double handleRadius = 8;
   static const double handleHitRadius = 22;
+
+  /// Shortest side (screen px) that still gets side handles.
+  static const double minSideForEdgeHandles = 64;
   static const double rotateHandleGap = 30;
   static const double snapPx = 7;
 
@@ -148,10 +151,16 @@ class TransformTool extends EditorTool {
     );
 
     final leaf = _singleLeaf(ctx);
+    // Side handles only where the side is long enough on screen to hold
+    // them apart from the corners (Canva / Photoshop hide them on small
+    // boxes, so a corner is not caught instead of a side or vice versa).
+    final wide = (c[1] - c[0]).distance >= minSideForEdgeHandles;
+    final tall = (c[3] - c[0]).distance >= minSideForEdgeHandles;
     if (leaf is TextLayer) {
       return [
         rotate,
-        _Handle(HandleKind.textWidth, mid(c[1], c[2]), const Offset(1, 0)),
+        if (tall)
+          _Handle(HandleKind.textWidth, mid(c[1], c[2]), const Offset(1, 0)),
         _Handle(HandleKind.fontSize, c[3], const Offset(-1, 1)),
       ];
     }
@@ -165,18 +174,49 @@ class TransformTool extends EditorTool {
     return [
       rotate,
       ...cornerHandles,
-      _Handle(HandleKind.left, mid(c[0], c[3]), const Offset(-1, 0)),
-      _Handle(HandleKind.right, mid(c[1], c[2]), const Offset(1, 0)),
-      _Handle(HandleKind.top, topMid, const Offset(0, -1)),
-      _Handle(HandleKind.bottom, bottomMid, const Offset(0, 1)),
+      if (tall) ...[
+        _Handle(HandleKind.left, mid(c[0], c[3]), const Offset(-1, 0)),
+        _Handle(HandleKind.right, mid(c[1], c[2]), const Offset(1, 0)),
+      ],
+      if (wide) ...[
+        _Handle(HandleKind.top, topMid, const Offset(0, -1)),
+        _Handle(HandleKind.bottom, bottomMid, const Offset(0, 1)),
+      ],
     ];
   }
 
+  /// The handle under [screen]: the nearest one within reach, where reach
+  /// shrinks to half the gap to the closest other handle — on a small
+  /// layer, aiming at one handle never grabs its neighbour.
   _Handle? _handleAt(ToolContext ctx, Offset screen) {
-    for (final h in _handles(ctx)) {
-      if ((screen - h.screen).distance <= handleHitRadius) return h;
+    return nearestHandle(_handles(ctx), screen, (h) => h.screen);
+  }
+
+  /// See [_handleAt]; [at] gives each handle's screen position.
+  @visibleForTesting
+  static T? nearestHandle<T>(
+    List<T> handles,
+    Offset screen,
+    Offset Function(T) at,
+  ) {
+    T? best;
+    var bestD = double.infinity;
+    for (final h in handles) {
+      final p = at(h);
+      var gap = double.infinity;
+      for (final o in handles) {
+        if (identical(o, h)) continue;
+        final d = (at(o) - p).distance;
+        if (d < gap) gap = d;
+      }
+      final reach = math.min(handleHitRadius, math.max(10.0, gap / 2));
+      final d = (screen - p).distance;
+      if (d <= reach && d < bestD) {
+        best = h;
+        bestD = d;
+      }
     }
-    return null;
+    return best;
   }
 
   // ----------------------------------------------------------------- taps
@@ -708,7 +748,11 @@ class TransformTool extends EditorTool {
           );
         case HandleKind.corner:
           _paintCircle(canvas, h.screen, style, active: active);
+        // Pills lie along their side of the box, as in Canva and
+        // Photoshop (the pill is drawn upright, then turned).
         case HandleKind.left || HandleKind.right:
+          _paintPill(canvas, h.screen, edgeAngle, style, active: active);
+        case HandleKind.top || HandleKind.bottom:
           _paintPill(
             canvas,
             h.screen,
@@ -716,13 +760,11 @@ class TransformTool extends EditorTool {
             style,
             active: active,
           );
-        case HandleKind.top || HandleKind.bottom:
-          _paintPill(canvas, h.screen, edgeAngle, style, active: active);
         case HandleKind.textWidth:
           _paintPill(
             canvas,
             h.screen,
-            edgeAngle + math.pi / 2,
+            edgeAngle,
             style,
             long: 30,
             thick: 16,
@@ -785,8 +827,8 @@ class TransformTool extends EditorTool {
     Offset p,
     double angle,
     ToolStyle style, {
-    double long = 22,
-    double thick = 8,
+    double long = 24,
+    double thick = 7,
     IconData? icon,
     bool active = false,
   }) {

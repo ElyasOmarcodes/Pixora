@@ -46,11 +46,12 @@ class RecentColors extends ChangeNotifier {
     }
   }
 
+  /// Remembers [c] first in line; a colour already there keeps its place
+  /// (choosing it again must not shuffle the swatches under the finger).
   void addColor(Color c) {
     final v = c.toARGB32();
-    _colors
-      ..removeWhere((x) => x.toARGB32() == v)
-      ..insert(0, c);
+    if (_colors.any((x) => x.toARGB32() == v)) return;
+    _colors.insert(0, c);
     if (_colors.length > max) _colors.removeRange(max, _colors.length);
     notifyListeners();
     _prefs?.setStringList(_kColors, [

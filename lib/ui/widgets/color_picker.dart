@@ -59,11 +59,30 @@ class ColorStrip extends StatelessWidget {
       builder: (context, _) {
         final recent = RecentColors.instance.colors;
         final recentSet = {for (final c in recent) c.toARGB32()};
-        Widget swatch(Color c) => _Swatch(
-          selected: value?.toARGB32() == c.toARGB32(),
-          onTap: () => _final(c),
-          child: _ColorDot(c),
-        );
+        // Tapping a swatch keeps it where it is (only new colours from
+        // the picker or the eyedropper join the recent ones).
+        Widget swatch(Color c) {
+          final on = value?.toARGB32() == c.toARGB32();
+          return _Swatch(
+            selected: on,
+            onTap: () => onChanged(c, live: false),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _ColorDot(c),
+                if (on)
+                  Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: c.a < 0.5 || c.computeLuminance() > 0.55
+                        ? Colors.black87
+                        : Colors.white,
+                  ),
+              ],
+            ),
+          );
+        }
+
         return SizedBox(
           height: 52,
           child: ListView(

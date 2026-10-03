@@ -66,15 +66,18 @@ void main() {
     rec.endRecording().dispose();
   });
 
-  test('recent colours: newest first, unique, at most 20', () {
+  test('recent colours: newest first, unique, at most 20, stay put', () {
     final r = RecentColors.instance;
     for (var i = 0; i < 25; i++) {
       r.addColor(Color(0xFF000000 + i));
     }
-    r.addColor(const Color(0xFF000005));
+    final before = [...r.colors];
+    // Choosing a colour that is already there keeps every swatch in place.
+    r.addColor(const Color(0xFF000010));
+    expect(r.colors, before);
     expect(r.colors.length, RecentColors.max);
-    expect(r.colors.first, const Color(0xFF000005));
-    expect(r.colors.where((c) => c == const Color(0xFF000005)).length, 1);
+    expect(r.colors.first, const Color(0xFF000018));
+    expect(r.colors.where((c) => c == const Color(0xFF000010)).length, 1);
     final g = PixFill.linear(const [Colors.red, Colors.blue]);
     r
       ..addGradient(g)

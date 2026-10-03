@@ -581,9 +581,6 @@ class _CompactBar extends StatelessWidget {
             end: AlignmentDirectional.bottomEnd,
             colors: [bg, bg2],
           ),
-          borderRadius: const BorderRadius.vertical(
-            bottom: Radius.circular(24),
-          ),
           boxShadow: [
             BoxShadow(
               color: bg.withValues(alpha: 0.28),

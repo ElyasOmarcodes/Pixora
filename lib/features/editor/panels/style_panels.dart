@@ -59,6 +59,7 @@ class FillPanel extends StatefulWidget {
 
 class _FillPanelState extends State<FillPanel> {
   TextRange? _range;
+  bool _part = false;
 
   @override
   Widget build(BuildContext context) {
@@ -124,8 +125,11 @@ class _FillPanelState extends State<FillPanel> {
             spans: text.spans,
             fontFamily: text.fontFamily,
             onChanged: (v) => setState(() => _range = v),
+            onPartMode: (on) => setState(() => _part = on),
           ),
-        if (r == null)
+        // Part mode with no words picked yet: nothing to colour (the whole
+        // text's options here changed everything by mistake).
+        if (r == null && !(_part && text != null))
           FillPicker(
             value: fill,
             // The box the gradient is laid out in (text: the glyph box).
