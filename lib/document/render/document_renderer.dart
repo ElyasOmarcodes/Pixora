@@ -230,6 +230,39 @@ class DocumentRenderer {
       ..restore();
   }
 
+  /// The parts of [doc]'s layers that lie outside the canvas, faded by
+  /// [opacity] — the pasteboard of InDesign: kept for later, never
+  /// exported (exports only ever paint the canvas).
+  void paintPasteboard(Canvas canvas, PixDocument doc, {double opacity = 0.6}) {
+    Rect? area;
+    for (final l in doc.layers) {
+      if (!l.props.visible) continue;
+      final b = layerDocumentBounds(l).inflate(_effectSpill([l]) + 4);
+      area = area == null ? b : area.expandToInclude(b);
+    }
+    if (area == null ||
+        doc.bounds.contains(area.topLeft) &&
+            doc.bounds.contains(area.bottomRight)) {
+      return;
+    }
+    canvas
+      ..save()
+      ..clipPath(
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(area)
+          ..addRect(doc.bounds),
+      )
+      ..saveLayer(
+        area,
+        Paint()..color = Color.fromRGBO(0, 0, 0, opacity.clamp(0.0, 1.0)),
+      );
+    paintLayers(canvas, doc.layers, area: area);
+    canvas
+      ..restore()
+      ..restore();
+  }
+
   /// [paint], but letting the app draw frames between top-level layers:
   /// a big export no longer freezes the progress indicator.
   Future<void> paintAsync(Canvas canvas, PixDocument doc) async {

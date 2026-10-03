@@ -937,5 +937,17 @@
   "fileNameLayer": "From text",
   "fileNameCustom": "Custom",
   "fileNameLayerHint": "The file takes this layer’s text — and follows every change to it.",
-  "noTextLayers": "No text layers in this project yet."
+  "noTextLayers": "No text layers in this project yet.",
+  "pasteboard": "Pasteboard",
+  "pasteboardHint": "The area around the canvas. It is never exported.",
+  "pasteboardColor": "Colour",
+  "pasteboardPattern": "Pattern",
+  "patternPlain": "Plain",
+  "patternDots": "Dots",
+  "patternGrid": "Grid",
+  "patternLines": "Lines",
+  "patternChecker": "Checks",
+  "pasteboardLayers": "Keep layers on the pasteboard",
+  "pasteboardLayersHint": "Layers moved off the canvas stay visible around it, like InDesign’s pasteboard — only what is inside the canvas is exported.",
+  "useDefault": "Default"
 }

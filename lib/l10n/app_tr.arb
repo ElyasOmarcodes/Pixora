@@ -832,5 +832,17 @@
   "fileNameLayer": "Metinden",
   "fileNameCustom": "Özel",
   "fileNameLayerHint": "Dosya bu katmanın metnini alır ve her değişikliği izler.",
-  "noTextLayers": "Bu projede henüz metin katmanı yok."
+  "noTextLayers": "Bu projede henüz metin katmanı yok.",
+  "pasteboard": "Çalışma masası",
+  "pasteboardHint": "Tuvalin çevresindeki alan. Asla dışa aktarılmaz.",
+  "pasteboardColor": "Renk",
+  "pasteboardPattern": "Desen",
+  "patternPlain": "Düz",
+  "patternDots": "Noktalar",
+  "patternGrid": "Izgara",
+  "patternLines": "Çizgiler",
+  "patternChecker": "Damalı",
+  "pasteboardLayers": "Katmanları masada tut",
+  "pasteboardLayersHint": "Tuval dışına taşınan katmanlar çevrede görünür kalır (InDesign gibi); yalnızca tuvalin içi dışa aktarılır.",
+  "useDefault": "Varsayılan"
 }

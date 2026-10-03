@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -12,6 +13,7 @@ import '../../../core/units/units.dart';
 import '../../../editor/tools/editor_tool.dart';
 import '../../../editor/tools/grid_tool.dart';
 import '../../../ui/widgets/checkerboard.dart';
+import 'pasteboard.dart';
 
 /// Lets the page drive the canvas viewport (fit, zoom presets) and read
 /// the current zoom level.
@@ -45,7 +47,20 @@ class CanvasView extends StatefulWidget {
     this.guideColor = const Color(0xFF00C2FF),
     this.controller,
     this.onTap,
+    this.pasteboardColor,
+    this.pasteboardPattern = PasteboardPattern.plain,
+    this.pasteboardLayers = false,
+    this.onPasteboardMenu,
   });
+
+  /// The area around the canvas: colour (null: the theme's), pattern, and
+  /// whether layers off the canvas stay visible there.
+  final Color? pasteboardColor;
+  final PasteboardPattern pasteboardPattern;
+  final bool pasteboardLayers;
+
+  /// A long press on the area around the canvas.
+  final VoidCallback? onPasteboardMenu;
 
   /// Called after every single tap on the canvas (after the tool).
   final VoidCallback? onTap;
@@ -123,6 +138,7 @@ class _CanvasViewState extends State<CanvasView>
   @override
   void dispose() {
     if (widget.controller?._state == this) widget.controller?._state = null;
+    _pressTimer?.cancel();
     _pendingGuide.dispose();
     _picture.dispose();
     _anim.dispose();
@@ -131,6 +147,42 @@ class _CanvasViewState extends State<CanvasView>
   }
 
   Offset? _pointerDown;
+
+  /// A long press outside the canvas, timed by hand rather than with a
+  /// gesture recognizer, so holding still on a layer before dragging it
+  /// is never taken for one.
+  Timer? _pressTimer;
+  int _pointers = 0;
+
+  void _pointerDownAt(PointerDownEvent e) {
+    _pointerDown = e.localPosition;
+    _pointers++;
+    _pressTimer?.cancel();
+    final doc = _vp.toDoc(e.localPosition);
+    final outside = !widget.editor.document.bounds.contains(doc);
+    if (_pointers == 1 && outside && widget.onPasteboardMenu != null) {
+      final start = e.localPosition;
+      _pressTimer = Timer(const Duration(milliseconds: 480), () {
+        if (_pointers == 1 && _pointerDown == start) {
+          widget.onPasteboardMenu!();
+        }
+      });
+    }
+  }
+
+  void _pointerMove(PointerMoveEvent e) {
+    if (_pressTimer != null &&
+        (e.localPosition - (_pointerDown ?? e.localPosition)).distance > 10) {
+      _pressTimer?.cancel();
+      _pressTimer = null;
+    }
+  }
+
+  void _pointerUp(PointerEvent e) {
+    _pointers = math.max(0, _pointers - 1);
+    _pressTimer?.cancel();
+    _pressTimer = null;
+  }
 
   ToolContext get _ctx {
     final pix = PixColors.of(context);
@@ -301,10 +353,13 @@ class _CanvasViewState extends State<CanvasView>
         }
         final canvasWidget = ClipRect(
           child: ColoredBox(
-            color: pix.canvasBackdrop,
+            color: widget.pasteboardColor ?? pix.canvasBackdrop,
             child: Listener(
               onPointerSignal: _onPointerSignal,
-              onPointerDown: (e) => _pointerDown = e.localPosition,
+              onPointerDown: _pointerDownAt,
+              onPointerMove: _pointerMove,
+              onPointerUp: _pointerUp,
+              onPointerCancel: _pointerUp,
               child: MouseRegion(
                 cursor: _cursor,
                 onHover: _onHover,
@@ -328,6 +383,10 @@ class _CanvasViewState extends State<CanvasView>
                         devicePixelRatio: MediaQuery.devicePixelRatioOf(
                           context,
                         ),
+                        pasteboard:
+                            widget.pasteboardColor ?? pix.canvasBackdrop,
+                        pattern: widget.pasteboardPattern,
+                        pasteboardLayers: widget.pasteboardLayers,
                       ),
                       foregroundPainter: _OverlayPainter(
                         editor: widget.editor,
@@ -722,6 +781,7 @@ class _DocumentPicture {
   ui.Picture? _picture;
   double _detail = 0;
   int _gen = -1;
+  bool _pasteboard = false;
 
   void invalidate() {
     _picture?.dispose();
@@ -735,17 +795,26 @@ class _DocumentPicture {
     return math.pow(2, steps / 2).toDouble();
   }
 
-  ui.Picture pictureAt(double pixelScale) {
+  ui.Picture pictureAt(double pixelScale, {bool pasteboard = false}) {
     final detail = detailFor(pixelScale);
     final hit = _picture;
     // Fonts that finish loading change text without an edit.
     final gen = TextLayoutCache.generation;
-    if (hit != null && detail == _detail && gen == _gen) return hit;
+    if (hit != null &&
+        detail == _detail &&
+        gen == _gen &&
+        pasteboard == _pasteboard) {
+      return hit;
+    }
     hit?.dispose();
     _gen = gen;
+    _pasteboard = pasteboard;
     final recorder = ui.PictureRecorder();
     final doc = editor.document;
-    editor.viewRenderer(detail).paint(Canvas(recorder), doc);
+    final canvas = Canvas(recorder);
+    final renderer = editor.viewRenderer(detail);
+    renderer.paint(canvas, doc);
+    if (pasteboard) renderer.paintPasteboard(canvas, doc);
     _detail = detail;
     return _picture = recorder.endRecording();
   }
@@ -766,9 +835,15 @@ class _DocumentPainter extends CustomPainter {
     required this.checkerB,
     required this.shadow,
     required this.devicePixelRatio,
+    required this.pasteboard,
+    required this.pattern,
+    required this.pasteboardLayers,
   }) : super(repaint: editor);
 
   final double devicePixelRatio;
+  final Color pasteboard;
+  final PasteboardPattern pattern;
+  final bool pasteboardLayers;
 
   final EditorController editor;
   final _DocumentPicture picture;
@@ -787,6 +862,7 @@ class _DocumentPainter extends CustomPainter {
       doc.width * scale,
       doc.height * scale,
     );
+    paintPasteboardPattern(canvas, view, pattern, pasteboard, origin: offset);
 
     // Only the part near the screen: a blurred shadow the size of a
     // zoomed-in canvas is costly, and its far edges are off screen.
@@ -809,7 +885,12 @@ class _DocumentPainter extends CustomPainter {
       ..save()
       ..translate(offset.dx, offset.dy)
       ..scale(scale)
-      ..drawPicture(picture.pictureAt(scale * devicePixelRatio))
+      ..drawPicture(
+        picture.pictureAt(
+          scale * devicePixelRatio,
+          pasteboard: pasteboardLayers,
+        ),
+      )
       ..restore();
   }
 
@@ -819,7 +900,10 @@ class _DocumentPainter extends CustomPainter {
       old.offset != offset ||
       old.editor != editor ||
       old.devicePixelRatio != devicePixelRatio ||
-      old.checkerA != checkerA;
+      old.checkerA != checkerA ||
+      old.pasteboard != pasteboard ||
+      old.pattern != pattern ||
+      old.pasteboardLayers != pasteboardLayers;
 }
 
 class _OverlayPainter extends CustomPainter {

@@ -40,6 +40,7 @@ import '../../projects/project_store.dart';
 import '../../ui/layer_style.dart';
 import '../home/widgets/new_canvas_dialog.dart';
 import 'dialogs/crop_page.dart';
+import 'widgets/pasteboard.dart';
 import 'dialogs/effects_page.dart';
 import 'effects_catalog.dart';
 import '../home/widgets/text_prompt.dart';
@@ -989,6 +990,13 @@ class _EditorPageState extends State<EditorPage> {
         guideColor: s.guideColor,
         controller: _canvas,
         onTap: _onCanvasTap,
+        pasteboardColor: s.pasteboardColor,
+        pasteboardPattern: PasteboardPattern.of(s.pasteboardPattern),
+        pasteboardLayers: s.pasteboardLayers,
+        onPasteboardMenu: () {
+          HapticFeedback.mediumImpact();
+          showPasteboardSheet(context);
+        },
       ),
     );
   }

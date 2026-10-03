@@ -832,5 +832,17 @@
   "fileNameLayer": "از متن",
   "fileNameCustom": "دلخواه",
   "fileNameLayerHint": "فایل متن این لایه را می‌گیرد — و هر تغییر آن را دنبال می‌کند.",
-  "noTextLayers": "این پروژه هنوز لایه متنی ندارد."
+  "noTextLayers": "این پروژه هنوز لایه متنی ندارد.",
+  "pasteboard": "ناحیهٔ اطراف بوم",
+  "pasteboardHint": "ناحیهٔ دور بوم؛ هرگز خروجی گرفته نمی‌شود.",
+  "pasteboardColor": "رنگ",
+  "pasteboardPattern": "الگو",
+  "patternPlain": "ساده",
+  "patternDots": "نقطه‌ها",
+  "patternGrid": "شبکه",
+  "patternLines": "خطوط",
+  "patternChecker": "شطرنجی",
+  "pasteboardLayers": "نگه‌داشتن لایه‌ها بیرون از بوم",
+  "pasteboardLayersHint": "لایه‌هایی که بیرون از بوم بروند، اطراف آن دیده می‌شوند (مانند Pasteboard در InDesign) — فقط داخل بوم خروجی گرفته می‌شود.",
+  "useDefault": "پیش‌فرض"
 }

@@ -832,5 +832,17 @@
   "fileNameLayer": "له متن څخه",
   "fileNameCustom": "خپله",
   "fileNameLayerHint": "فایل د دې لایر متن اخلي — او د هغه هر بدلون تعقیبوي.",
-  "noTextLayers": "په دې پروژه کې لا متني لایر نشته."
+  "noTextLayers": "په دې پروژه کې لا متني لایر نشته.",
+  "pasteboard": "د کانواس شاوخوا ساحه",
+  "pasteboardHint": "د کانواس شاوخوا ساحه. هېڅکله په خروجي کې نه راځي.",
+  "pasteboardColor": "رنګ",
+  "pasteboardPattern": "نقشه",
+  "patternPlain": "ساده",
+  "patternDots": "ټکي",
+  "patternGrid": "جال",
+  "patternLines": "کرښې",
+  "patternChecker": "شطرنجي",
+  "pasteboardLayers": "لایرونه د کانواس بهر وساته",
+  "pasteboardLayersHint": "هغه لایرونه چې د کانواس بهر شي، شاوخوا ښکاري (لکه د InDesign پېسټبورډ) — په خروجي کې یوازې د کانواس دننه برخه راځي.",
+  "useDefault": "اصلي"
 }

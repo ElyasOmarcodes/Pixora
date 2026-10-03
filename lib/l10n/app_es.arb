@@ -832,5 +832,17 @@
   "fileNameLayer": "Desde un texto",
   "fileNameCustom": "Personalizado",
   "fileNameLayerHint": "El archivo toma el texto de esta capa y sigue cada cambio.",
-  "noTextLayers": "Este proyecto aún no tiene capas de texto."
+  "noTextLayers": "Este proyecto aún no tiene capas de texto.",
+  "pasteboard": "Mesa de trabajo",
+  "pasteboardHint": "La zona alrededor del lienzo. Nunca se exporta.",
+  "pasteboardColor": "Color",
+  "pasteboardPattern": "Patrón",
+  "patternPlain": "Liso",
+  "patternDots": "Puntos",
+  "patternGrid": "Cuadrícula",
+  "patternLines": "Líneas",
+  "patternChecker": "Cuadros",
+  "pasteboardLayers": "Dejar capas en la mesa de trabajo",
+  "pasteboardLayersHint": "Las capas fuera del lienzo siguen visibles a su alrededor, como en InDesign; solo se exporta lo que está dentro.",
+  "useDefault": "Predeterminado"
 }

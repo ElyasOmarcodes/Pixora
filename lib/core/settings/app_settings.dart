@@ -58,6 +58,9 @@ class AppSettings extends ChangeNotifier {
   static const _kSnapAngles = 'snapAngles';
   static const _kRulers = 'rulers';
   static const _kRulerLayer = 'rulerLayer';
+  static const _kPasteboardColor = 'pasteboardColor';
+  static const _kPasteboardPattern = 'pasteboardPattern';
+  static const _kPasteboardLayers = 'pasteboardLayers';
 
   /// `null` follows the system language.
   Locale? get locale {
@@ -154,6 +157,31 @@ class AppSettings extends ChangeNotifier {
   /// Marks the selected layer's span and size on the rulers.
   bool get rulerLayer => _prefs.getBool(_kRulerLayer) ?? true;
   set rulerLayer(bool v) => _setBool(_kRulerLayer, v);
+
+  /// The area around the canvas: its colour (null: the theme's), pattern
+  /// (a [PasteboardPattern] name) and whether layers moved off the canvas
+  /// stay visible there (never exported).
+  Color? get pasteboardColor {
+    final v = _prefs.getInt(_kPasteboardColor);
+    return v == null ? null : Color(v);
+  }
+
+  set pasteboardColor(Color? c) {
+    c == null
+        ? _prefs.remove(_kPasteboardColor)
+        : _prefs.setInt(_kPasteboardColor, c.toARGB32());
+    notifyListeners();
+  }
+
+  String get pasteboardPattern =>
+      _prefs.getString(_kPasteboardPattern) ?? 'plain';
+  set pasteboardPattern(String v) {
+    _prefs.setString(_kPasteboardPattern, v);
+    notifyListeners();
+  }
+
+  bool get pasteboardLayers => _prefs.getBool(_kPasteboardLayers) ?? false;
+  set pasteboardLayers(bool v) => _setBool(_kPasteboardLayers, v);
 
   /// 'png' or 'jpg'.
   String get exportFormat => _prefs.getString(_kExportFormat) ?? 'png';

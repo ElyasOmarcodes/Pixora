@@ -832,5 +832,17 @@
   "fileNameLayer": "Depuis un texte",
   "fileNameCustom": "Personnalisé",
   "fileNameLayerHint": "Le fichier prend le texte de ce calque et suit chaque modification.",
-  "noTextLayers": "Ce projet n’a pas encore de calque de texte."
+  "noTextLayers": "Ce projet n’a pas encore de calque de texte.",
+  "pasteboard": "Table de montage",
+  "pasteboardHint": "La zone autour du canevas. Elle n’est jamais exportée.",
+  "pasteboardColor": "Couleur",
+  "pasteboardPattern": "Motif",
+  "patternPlain": "Uni",
+  "patternDots": "Points",
+  "patternGrid": "Grille",
+  "patternLines": "Lignes",
+  "patternChecker": "Damier",
+  "pasteboardLayers": "Garder des calques sur la table de montage",
+  "pasteboardLayersHint": "Les calques hors du canevas restent visibles autour, comme dans InDesign ; seul l’intérieur est exporté.",
+  "useDefault": "Par défaut"
 }

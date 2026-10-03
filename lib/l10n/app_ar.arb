@@ -832,5 +832,17 @@
   "fileNameLayer": "من نص",
   "fileNameCustom": "مخصص",
   "fileNameLayerHint": "يأخذ الملف نص هذه الطبقة — ويتبع كل تغيير فيه.",
-  "noTextLayers": "لا توجد طبقات نص في هذا المشروع بعد."
+  "noTextLayers": "لا توجد طبقات نص في هذا المشروع بعد.",
+  "pasteboard": "المساحة حول اللوحة",
+  "pasteboardHint": "المنطقة حول اللوحة؛ لا تُصدَّر أبدًا.",
+  "pasteboardColor": "اللون",
+  "pasteboardPattern": "النقش",
+  "patternPlain": "سادة",
+  "patternDots": "نقاط",
+  "patternGrid": "شبكة",
+  "patternLines": "خطوط",
+  "patternChecker": "مربعات",
+  "pasteboardLayers": "إبقاء الطبقات خارج اللوحة",
+  "pasteboardLayersHint": "تبقى الطبقات المنقولة خارج اللوحة ظاهرة حولها (مثل InDesign) — ولا يُصدَّر إلا ما داخل اللوحة.",
+  "useDefault": "الافتراضي"
 }

@@ -832,5 +832,17 @@
   "fileNameLayer": "متن سے",
   "fileNameCustom": "اپنی مرضی",
   "fileNameLayerHint": "فائل اس لیئر کا متن لیتی ہے — اور اس کی ہر تبدیلی کے ساتھ بدلتی ہے۔",
-  "noTextLayers": "اس پروجیکٹ میں ابھی کوئی متنی لیئر نہیں۔"
+  "noTextLayers": "اس پروجیکٹ میں ابھی کوئی متنی لیئر نہیں۔",
+  "pasteboard": "کینوس کے اردگرد کی جگہ",
+  "pasteboardHint": "کینوس کے ارد گرد کا حصہ؛ کبھی ایکسپورٹ نہیں ہوتا۔",
+  "pasteboardColor": "رنگ",
+  "pasteboardPattern": "پیٹرن",
+  "patternPlain": "سادہ",
+  "patternDots": "نقطے",
+  "patternGrid": "گرڈ",
+  "patternLines": "لکیریں",
+  "patternChecker": "چیک",
+  "pasteboardLayers": "لیئرز کو کینوس سے باہر رکھیں",
+  "pasteboardLayersHint": "کینوس سے باہر گئی لیئرز اس کے گرد نظر آتی ہیں (InDesign کی طرح) — ایکسپورٹ میں صرف کینوس کے اندر کا حصہ آتا ہے۔",
+  "useDefault": "ڈیفالٹ"
 }
