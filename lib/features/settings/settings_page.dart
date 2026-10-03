@@ -15,7 +15,7 @@ import '../about/developer_page.dart';
 import '../editor/widgets/export_sheet.dart' show exportFormats;
 import '../intro/intro_page.dart';
 
-const String kAppVersion = '0.29.2';
+const String kAppVersion = '0.30.0';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
