@@ -571,7 +571,7 @@ class _Appear extends StatefulWidget {
 class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 460),
+    duration: const Duration(milliseconds: 220),
   );
   late final Animation<double> _a = CurvedAnimation(
     parent: _c,
@@ -595,7 +595,7 @@ class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
     }
     _seen.add(key);
     if (_seen.length > 4000) _seen.clear();
-    final delay = Duration(milliseconds: 40 * widget.index.clamp(0, 8));
+    final delay = Duration(milliseconds: 18 * widget.index.clamp(0, 8));
     Future.delayed(delay, () {
       if (mounted) _c.forward();
     });

@@ -217,9 +217,9 @@ class SettingsPage extends StatelessWidget {
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => Navigator.of(context).push(
                         PageRouteBuilder<void>(
-                          transitionDuration: const Duration(milliseconds: 520),
+                          transitionDuration: const Duration(milliseconds: 300),
                           reverseTransitionDuration: const Duration(
-                            milliseconds: 380,
+                            milliseconds: 220,
                           ),
                           pageBuilder: (_, _, _) => const DeveloperPage(),
                           transitionsBuilder: (_, a, _, child) =>

@@ -217,47 +217,16 @@ abstract final class AppTheme {
           fontFamily: PixTokens.fontFamily,
         ),
       ),
+      // Each platform's own page transitions, so screens move like the
+      // rest of the phone (a custom fade-and-grow felt like a web page).
       pageTransitionsTheme: const PageTransitionsTheme(
         builders: {
-          TargetPlatform.android: _SoftPageTransitions(),
+          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.macOS: _SoftPageTransitions(),
-          TargetPlatform.windows: _SoftPageTransitions(),
-          TargetPlatform.linux: _SoftPageTransitions(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
         },
-      ),
-    );
-  }
-}
-
-/// Fade + gentle scale-up used for route changes on non-iOS platforms.
-class _SoftPageTransitions extends PageTransitionsBuilder {
-  const _SoftPageTransitions();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    final curved = CurvedAnimation(
-      parent: animation,
-      curve: PixTokens.emphasized,
-    );
-    final outgoing = CurvedAnimation(
-      parent: secondaryAnimation,
-      curve: PixTokens.curve,
-    );
-    return FadeTransition(
-      opacity: Tween(begin: 1.0, end: 0.92).animate(outgoing),
-      child: FadeTransition(
-        opacity: curved,
-        child: ScaleTransition(
-          scale: Tween(begin: 0.965, end: 1.0).animate(curved),
-          child: child,
-        ),
       ),
     );
   }

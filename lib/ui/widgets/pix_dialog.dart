@@ -11,46 +11,34 @@ Future<T?> showPixDialog<T>({
   barrierDismissible: barrierDismissible,
   barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
   barrierColor: Colors.transparent,
-  transitionDuration: const Duration(milliseconds: 420),
+  // Short and plain, as the platform's own dialogs: a quick fade with a
+  // slight grow — no bounce, nothing arriving piece by piece.
+  transitionDuration: const Duration(milliseconds: 200),
   pageBuilder: (context, _, _) => builder(context),
   transitionBuilder: (context, animation, _, child) {
     final curved = CurvedAnimation(
       parent: animation,
-      curve: const Cubic(0.18, 0.9, 0.22, 1.08),
+      curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    final fade = CurvedAnimation(
-      parent: animation,
-      curve: const Interval(0, 0.6, curve: Curves.easeOut),
-      reverseCurve: Curves.easeIn,
-    );
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, child) {
-        final t = fade.value;
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: ColoredBox(
-                  color: Colors.black.withValues(alpha: 0.4 * t),
-                ),
-              ),
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: FadeTransition(
+              opacity: curved,
+              child: const ColoredBox(color: Color(0x66000000)),
             ),
-            Opacity(
-              opacity: t,
-              child: Transform.translate(
-                offset: Offset(0, 28 * (1 - curved.value)),
-                child: Transform.scale(
-                  scale: 0.9 + 0.1 * curved.value,
-                  child: child,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-      child: child,
+          ),
+        ),
+        FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.94, end: 1.0).animate(curved),
+            child: child,
+          ),
+        ),
+      ],
     );
   },
 );
@@ -161,10 +149,7 @@ class PixDialogCard extends StatelessWidget {
                         const SizedBox(height: 22),
                         for (var i = 0; i < actions.length; i++) ...[
                           if (i > 0) const SizedBox(height: 10),
-                          _Entrance(
-                            delay: Duration(milliseconds: 120 + 70 * i),
-                            child: actions[i],
-                          ),
+                          actions[i],
                         ],
                       ],
                     ],
@@ -179,88 +164,37 @@ class PixDialogCard extends StatelessWidget {
   }
 }
 
-/// A gradient circle with an icon that pops in and then breathes softly.
-class PixDialogBadge extends StatefulWidget {
+/// A gradient circle with the dialog's icon.
+class PixDialogBadge extends StatelessWidget {
   const PixDialogBadge({super.key, required this.icon, required this.color});
   final IconData icon;
   final Color color;
 
   @override
-  State<PixDialogBadge> createState() => _PixDialogBadgeState();
-}
-
-class _PixDialogBadgeState extends State<PixDialogBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _halo = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _halo.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final c = widget.color;
-    final hsl = HSLColor.fromColor(c);
+    final hsl = HSLColor.fromColor(color);
     final light = hsl
         .withLightness((hsl.lightness + 0.14).clamp(0.0, 1.0))
         .toColor();
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 700),
-      curve: Curves.elasticOut,
-      builder: (context, v, child) => Transform.scale(scale: v, child: child),
-      child: SizedBox(
-        width: 92,
-        height: 92,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // A ring that grows and fades, over and over.
-            AnimatedBuilder(
-              animation: _halo,
-              builder: (context, _) {
-                final t = Curves.easeOut.transform(_halo.value);
-                return Container(
-                  width: 68 + 24 * t,
-                  height: 68 + 24 * t,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: c.withValues(alpha: 0.35 * (1 - t)),
-                      width: 2,
-                    ),
-                  ),
-                );
-              },
-            ),
-            Container(
-              width: 68,
-              height: 68,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [light, c],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: c.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Icon(widget.icon, size: 32, color: Colors.white),
-            ),
-          ],
+    return Container(
+      width: 68,
+      height: 68,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [light, color],
         ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.3),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
+      child: Icon(icon, size: 32, color: Colors.white),
     );
   }
 }
@@ -295,10 +229,7 @@ class PixDialogButton extends StatelessWidget {
       label,
       style: const TextStyle(fontWeight: FontWeight.w700),
     );
-    return _Squish(
-      enabled: onPressed != null,
-      child: _button(scheme, shape, size, text),
-    );
+    return _button(scheme, shape, size, text);
   }
 
   Widget _button(
@@ -354,86 +285,4 @@ class PixDialogButton extends StatelessWidget {
         );
     }
   }
-}
-
-/// Fades and slides a dialog action in after [delay], so the buttons
-/// arrive one after another.
-class _Entrance extends StatefulWidget {
-  const _Entrance({required this.delay, required this.child});
-  final Duration delay;
-  final Widget child;
-
-  @override
-  State<_Entrance> createState() => _EntranceState();
-}
-
-class _EntranceState extends State<_Entrance>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 420),
-  );
-  late final Animation<double> _a = CurvedAnimation(
-    parent: _c,
-    curve: Curves.easeOutCubic,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(widget.delay, () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _a,
-    builder: (context, child) => Opacity(
-      opacity: _a.value,
-      child: Transform.translate(
-        offset: Offset(0, 14 * (1 - _a.value)),
-        child: child,
-      ),
-    ),
-    child: widget.child,
-  );
-}
-
-/// Shrinks its child a little while a finger is on it and springs back on
-/// release — a soft, tactile press for dialog buttons.
-class _Squish extends StatefulWidget {
-  const _Squish({required this.enabled, required this.child});
-  final bool enabled;
-  final Widget child;
-
-  @override
-  State<_Squish> createState() => _SquishState();
-}
-
-class _SquishState extends State<_Squish> {
-  bool _down = false;
-
-  void _set(bool v) {
-    if (widget.enabled && _down != v) setState(() => _down = v);
-  }
-
-  @override
-  Widget build(BuildContext context) => Listener(
-    onPointerDown: (_) => _set(true),
-    onPointerUp: (_) => _set(false),
-    onPointerCancel: (_) => _set(false),
-    child: AnimatedScale(
-      scale: _down ? 0.95 : 1,
-      duration: Duration(milliseconds: _down ? 110 : 320),
-      curve: _down ? Curves.easeOut : Curves.elasticOut,
-      child: widget.child,
-    ),
-  );
 }

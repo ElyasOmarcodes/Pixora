@@ -177,8 +177,8 @@ class _ProjectCardState extends State<ProjectCard> {
 
   Widget _star() => AnimatedScale(
     scale: widget.favorite ? 1 : 0,
-    duration: const Duration(milliseconds: 380),
-    curve: Curves.elasticOut,
+    duration: const Duration(milliseconds: 180),
+    curve: Curves.easeOutBack,
     child: const Icon(Icons.star_rounded, size: 18, color: Color(0xFFFFB300)),
   );
 

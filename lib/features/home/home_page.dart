@@ -360,7 +360,7 @@ class _Greeting extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 260),
       curve: Curves.easeOutCubic,
       builder: (context, v, child) => Opacity(
         opacity: v,
