@@ -1,7 +1,7 @@
 name: pixora
 description: "Pixora — a layered, cross-platform photo & graphic editor."
 publish_to: 'none'
-version: 0.31.0+40
+version: 0.32.0+41
 
 environment:
   sdk: ^3.13.4
@@ -143,6 +143,9 @@ flutter:
     - family: Righteous
       fonts:
         - asset: assets/fonts/Righteous-Regular.ttf
+    - family: Luckiest Guy
+      fonts:
+        - asset: assets/fonts/LuckiestGuy-Regular.ttf
     - family: Lobster
       fonts:
         - asset: assets/fonts/Lobster-Regular.ttf

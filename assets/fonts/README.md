@@ -1,6 +1,6 @@
 # Bundled fonts
 
-All fonts are from Google Fonts (https://github.com/google/fonts) and are licensed under the SIL Open Font License 1.1 (see OFL-fonts.txt), except Permanent Marker (Apache License 2.0). Vazirmatn: see Vazirmatn-OFL.txt.
+All fonts are from Google Fonts (https://github.com/google/fonts) and are licensed under the SIL Open Font License 1.1 (see OFL-fonts.txt), except Permanent Marker and Luckiest Guy (Apache License 2.0). Vazirmatn: see Vazirmatn-OFL.txt.
 
 - Lalezar
 - Amiri
@@ -34,3 +34,4 @@ All fonts are from Google Fonts (https://github.com/google/fonts) and are licens
 - Pacifico
 - Dancing Script
 - Permanent Marker
+- Luckiest Guy

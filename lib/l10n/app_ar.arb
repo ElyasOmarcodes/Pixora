@@ -911,5 +911,7 @@
   "vectorPath": "المسار",
   "frontColor": "لون الأمام",
   "backColor": "لون الخلف",
-  "backColorMix": "التدرج إلى لون الخلف"
+  "backColorMix": "التدرج إلى لون الخلف",
+  "floorShadow": "على الأرض",
+  "materialGradient": "تدرج"
 }

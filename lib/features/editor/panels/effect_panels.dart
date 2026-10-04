@@ -428,6 +428,11 @@ class ShadowPanel extends StatelessWidget {
                 FxSlider('spread', l.spread, format: (v) => '${v.round()}%'),
                 FxSlider('blur', l.size),
                 FxSlider('opacity', l.opacity),
+                FxSlider(
+                  'squash',
+                  l.floorShadow,
+                  format: (v) => '${v.round()}%',
+                ),
                 const FxColor('color'),
               ],
             ),
@@ -520,7 +525,7 @@ class Extrude3DPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final e = editor.effectOf(layer.id, 'extrude');
-    final layerMaterial = (e?.number('material', 0) ?? 0) >= 1;
+    final material = (e?.number('material', 0) ?? 0).round();
     String px(double v) => '${v.round()} px';
     String pct(double v) => '${v.round()}%';
     return Column(
@@ -540,14 +545,47 @@ class Extrude3DPanel extends StatelessWidget {
             FxLabel(l.material),
             FxChoice(
               'material',
-              [l.color, l.layerTexture],
-              icons: const [Icons.circle, Icons.texture_rounded],
+              [l.color, l.layerTexture, l.materialGradient],
+              icons: const [
+                Icons.circle,
+                Icons.texture_rounded,
+                Icons.gradient_rounded,
+              ],
             ),
-            if (!layerMaterial) ...[
-              FxColor('color', l.frontColor),
-              FxColor('color2', l.backColor),
-              FxSlider('backMix', l.backColorMix, format: pct),
-            ],
+            if (material == 2)
+              FxCustom((valueOf, set) {
+                final fx = editor.effectOf(layer.id, 'extrude');
+                final current =
+                    (fx == null ? null : ExtrudeSpec.of(fx).materialFill) ??
+                    PixFill.color(
+                      fx?.color('color', const Color(0xFF1E3A8A)) ??
+                          const Color(0xFF1E3A8A),
+                    );
+                final size = layerLocalSize(layer);
+                return FillPicker(
+                  value: current,
+                  aspect: size.height <= 0 ? 1 : size.width / size.height,
+                  onChanged: (f, {required live}) {
+                    final cur = editor.effectOf(layer.id, 'extrude');
+                    if (f == null || cur == null) return;
+                    editor.updateEffect(
+                      layer.id,
+                      cur.id,
+                      (e) => e.copyWith(
+                        params: {
+                          ...e.params,
+                          'color': f.primary.toARGB32(),
+                          'matFill': jsonEncode(f.toJson()),
+                        },
+                      ),
+                      live: live,
+                    );
+                  },
+                );
+              }),
+            if (material == 0) FxColor('color', l.frontColor),
+            FxColor('color2', l.backColor),
+            FxSlider('backMix', l.backColorMix, format: pct),
             FxSlider('shade', l.shading),
             FxLabel(l.light),
             FxCustom(

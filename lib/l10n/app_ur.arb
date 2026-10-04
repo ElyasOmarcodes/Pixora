@@ -911,5 +911,7 @@
   "vectorPath": "راستہ",
   "frontColor": "سامنے کا رنگ",
   "backColor": "پیچھے کا رنگ",
-  "backColorMix": "پیچھے کے رنگ کی طرف"
+  "backColorMix": "پیچھے کے رنگ کی طرف",
+  "floorShadow": "زمین پر",
+  "materialGradient": "گریڈینٹ"
 }

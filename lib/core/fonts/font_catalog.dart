@@ -65,6 +65,7 @@ class FontCatalog extends ChangeNotifier {
     BundledFont('Anton', FontScript.latin),
     BundledFont('Abril Fatface', FontScript.latin),
     BundledFont('Righteous', FontScript.latin),
+    BundledFont('Luckiest Guy', FontScript.latin),
     BundledFont('Lobster', FontScript.latin),
     BundledFont('Pacifico', FontScript.latin),
     BundledFont('Dancing Script', FontScript.latin),

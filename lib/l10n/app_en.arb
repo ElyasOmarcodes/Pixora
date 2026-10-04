@@ -1030,5 +1030,7 @@
   "vectorPath": "Path",
   "frontColor": "Front colour",
   "backColor": "Back colour",
-  "backColorMix": "Towards back colour"
+  "backColorMix": "Towards back colour",
+  "floorShadow": "On the ground",
+  "materialGradient": "Gradient"
 }

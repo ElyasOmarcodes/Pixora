@@ -911,5 +911,7 @@
   "vectorPath": "مسیر",
   "frontColor": "رنگ جلو",
   "backColor": "رنگ عقب",
-  "backColorMix": "تغییر به رنگ عقب"
+  "backColorMix": "تغییر به رنگ عقب",
+  "floorShadow": "روی زمین",
+  "materialGradient": "گرادیان"
 }

@@ -911,5 +911,7 @@
   "vectorPath": "Tracé",
   "frontColor": "Couleur avant",
   "backColor": "Couleur arrière",
-  "backColorMix": "Vers la couleur arrière"
+  "backColorMix": "Vers la couleur arrière",
+  "floorShadow": "Au sol",
+  "materialGradient": "Dégradé"
 }

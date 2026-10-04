@@ -911,5 +911,7 @@
   "vectorPath": "Yol",
   "frontColor": "Ön renk",
   "backColor": "Arka renk",
-  "backColorMix": "Arka renge geçiş"
+  "backColorMix": "Arka renge geçiş",
+  "floorShadow": "Zeminde",
+  "materialGradient": "Gradyan"
 }

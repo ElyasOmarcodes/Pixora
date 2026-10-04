@@ -911,5 +911,7 @@
   "vectorPath": "لار",
   "frontColor": "مخکنی رنګ",
   "backColor": "شاتنی رنګ",
-  "backColorMix": "شاتني رنګ ته اوښتل"
+  "backColorMix": "شاتني رنګ ته اوښتل",
+  "floorShadow": "پر ځمکه (پرسپکټیو)",
+  "materialGradient": "ګرادیانټ"
 }

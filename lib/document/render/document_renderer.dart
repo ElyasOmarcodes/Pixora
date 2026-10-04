@@ -557,6 +557,24 @@ class DocumentRenderer {
     plan.dispose();
   }
 
+  static double _groundOf(Layer layer, Rect local) {
+    if (layer is TextLayer && layer.curve == 0) {
+      final p = TextLayoutCache.instance.fill(layer);
+      final lines = p.computeLineMetrics();
+      if (lines.isNotEmpty) return -p.height / 2 + lines.last.baseline;
+    }
+    return local.bottom;
+  }
+
+  /// Flattens what follows towards the line y = [bottom] (a floor shadow).
+  static void _squash(Canvas canvas, double squash, double bottom) {
+    if (squash <= 0) return;
+    canvas
+      ..translate(0, bottom)
+      ..scale(1, 1 - squash)
+      ..translate(0, -bottom);
+  }
+
   /// Everything [layer] draws, as parts in layer space (see [paintLayer]).
   /// Dispose the plan once its parts are painted.
   _LayerPlan _plan(Layer layer, Set<String> hidden) {
@@ -711,6 +729,14 @@ class DocumentRenderer {
       );
     }
 
+    // Where a floor shadow meets the ground: the baseline of text (its box
+    // also holds the descenders' room), else the layer's bottom edge.
+    final ground =
+        shadows.any((s) => s.squash > 0) ||
+            spreadShadows.any((s) => s.$2.squash > 0)
+        ? _groundOf(layer, local)
+        : local.bottom;
+
     final parts = <_Part>[];
     void part(BlendMode mode, void Function(Canvas c) draw, [double a = 1]) =>
         parts.add(_Part(mode, a, draw));
@@ -732,6 +758,7 @@ class DocumentRenderer {
                 : null,
         );
         canvas.translate(lo.dx, lo.dy);
+        _squash(canvas, s.squash, ground);
         outerShape(canvas);
         canvas.restore();
       });
@@ -752,7 +779,11 @@ class DocumentRenderer {
         ..colorFilter = ColorFilter.mode(sp.color, BlendMode.srcIn);
       final from = Rect.fromLTWH(0, 0, m.width.toDouble(), m.height.toDouble());
       if (!inner) {
-        canvas.drawImageRect(m, from, r.rect.shift(o), paint);
+        canvas.save();
+        _squash(canvas, sp.squash, ground);
+        canvas
+          ..drawImageRect(m, from, r.rect.shift(o), paint)
+          ..restore();
         return;
       }
       canvas
@@ -795,8 +826,18 @@ class DocumentRenderer {
 
     // 3D extrusions. Rotated in 3D, a solid facing away from the viewer
     // shows its back: then the extrusion covers the layer instead.
+    // The solid is the whole outline — the layer and its stroke — as in
+    // Photoshop; extruding the bare shape left a thick outside stroke
+    // covering most of the depth.
     final extrudeStamp = extrudes.isEmpty
         ? null
+        : band != null
+        ? _Stamp.of(
+            layer,
+            outerShape,
+            pixelScale,
+            extra: src.reach + stroke!.outside,
+          )
         : (stamp ?? _Stamp.of(layer, shape, pixelScale, extra: src.reach));
     final solid = t.hasTilt;
     final facing = !solid || t.axes.$3[2] >= 0;
@@ -813,7 +854,7 @@ class DocumentRenderer {
           toLocal,
           extrudeStamp!,
           normals: jobFor(e),
-          content: shape,
+          content: band != null ? outerShape : shape,
         ),
       );
       facing ? parts.add(p) : lateParts.add(p);
@@ -1133,8 +1174,9 @@ class DocumentRenderer {
         );
         if (job != null) jobs.add(job);
       } else if (e.type == 'extrude' && ExtrudeSpec.of(e).lit) {
-        // Side normals: smooth, so a modest resolution is plenty.
-        final box = local.inflate(4);
+        // Side normals: smooth, so a modest resolution is plenty. The
+        // stroke is part of the solid (see the extrusion's stamp).
+        final box = local.inflate(4 + (band == null ? 0 : strokeOut));
         final job = _job(
           layer: layer,
           effect: e,
@@ -1152,9 +1194,12 @@ class DocumentRenderer {
                   ),
                 ),
           ),
-          shapeKey: _bevelShape(layer, false),
+          shapeKey: _bevelShape(layer, band != null),
           computeKey: 'normals',
-          draw: shape,
+          draw: (c) {
+            shape(c);
+            band?.draw(c);
+          },
           compute: (_) => ExtrudeEngine.normals(),
           start: start,
           now: now,
@@ -1789,6 +1834,13 @@ class DocumentRenderer {
         c
           ..restore()
           ..restore();
+      } else if (x.materialFill case final f?) {
+        // A gradient / pattern laid over the layer, cut to its shape.
+        c.drawRect(
+          r,
+          f.applyTo(Paint(), layerLocalRect(layer))
+            ..blendMode = BlendMode.multiply,
+        );
       }
       // (A colour material is applied per copy by the vertex colours, so
       // it can change along the depth.)
@@ -1821,7 +1873,7 @@ class DocumentRenderer {
     final positions = <double>[], uvs = <double>[], colours = <int>[];
     void copy(Offset Function(Offset) at, double u, int grid) {
       final f = (1 - x.shade * u).clamp(0.0, 1.0);
-      final m = x.layerMaterial ? const Color(0xFFFFFFFF) : x.colorAt(u);
+      final m = x.colorAt(u);
       int ch(double v) => (v * f * 255).round().clamp(0, 255);
       final colour = 0xFF000000 | (ch(m.r) << 16) | (ch(m.g) << 8) | ch(m.b);
       Offset corner(int i, int j) =>
@@ -1956,6 +2008,13 @@ class DocumentRenderer {
         canvas.saveLayer(null, Paint());
         if (x.layerMaterial) {
           content(canvas);
+        } else if (x.materialFill case final f?) {
+          stamp.draw(canvas, Offset.zero);
+          canvas.drawRect(
+            r,
+            f.applyTo(Paint(), layerLocalRect(layer))
+              ..blendMode = BlendMode.srcIn,
+          );
         } else {
           stamp.draw(
             canvas,

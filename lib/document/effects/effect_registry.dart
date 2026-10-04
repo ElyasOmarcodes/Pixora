@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:ui';
 
 import '../model/blend.dart';
 import '../model/effect.dart';
+import '../model/fill.dart';
 import '../model/warp.dart';
 import '../render/color_matrix.dart';
 import '../render/filter_engine.dart';
@@ -53,10 +55,17 @@ class ShadowSpec {
     required this.blur,
     required this.color,
     this.blend = PixBlendMode.normal,
+    this.squash = 0,
   });
   final Offset offset;
   final double blur;
   final Color color;
+
+  /// 0..0.95: the shadow flattened onto the ground — squeezed upright
+  /// towards the layer's bottom edge, so it reads as a floor shadow under
+  /// a standing object (what designers fake in Photoshop by transforming
+  /// a copy of the shadow).
+  final double squash;
 
   /// How the shadow composites with what is beneath it (Photoshop's
   /// Blend Mode inside Drop Shadow; Multiply is the classic choice).
@@ -150,6 +159,7 @@ class ExtrudeSpec {
     this.color2 = const Color(0xFF000000),
     this.backMix = 0,
     this.layerMaterial = false,
+    this.materialFill,
     this.lightAngle = 120,
     this.altitude = 30,
     this.intensity = 0,
@@ -169,7 +179,10 @@ class ExtrudeSpec {
       shade: n('shade', 0.5).clamp(0.0, 1.0),
       color2: e.color('color2', const Color(0xFF000000)),
       backMix: n('backMix', 0).clamp(0.0, 100.0) / 100,
-      layerMaterial: n('material', 0) >= 1,
+      layerMaterial: n('material', 0).round() == 1,
+      materialFill: n('material', 0).round() == 2
+          ? _fillOf(e.string('matFill'))
+          : null,
       lightAngle: n('lightAngle', 120),
       altitude: n('altitude', 30).clamp(0.0, 90.0),
       // Older projects: flat sides, as before.
@@ -198,11 +211,35 @@ class ExtrudeSpec {
   final Color color2;
   final double backMix;
 
-  /// The side colour at fraction [u] of the depth (before shading).
-  Color colorAt(double u) => Color.lerp(color, color2, backMix * u)!;
+  /// The side colour at fraction [u] of the depth (before shading); with
+  /// a layer or gradient material, the tint over it (white = none).
+  Color colorAt(double u) => Color.lerp(
+    layerMaterial || materialFill != null ? const Color(0xFFFFFFFF) : color,
+    color2,
+    backMix * u,
+  )!;
 
   /// Sides carry the layer's own pixels instead of [color].
   final bool layerMaterial;
+
+  /// Sides carry this gradient / pattern, laid over the layer (each side
+  /// takes the colour at its edge, so a many-stop gradient becomes the
+  /// streaky reflections of polished metal).
+  final PixFill? materialFill;
+
+  static final Map<String, PixFill> _fills = {};
+  static PixFill? _fillOf(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final hit = _fills[raw];
+    if (hit != null) return hit;
+    try {
+      final f = PixFill.fromJson(jsonDecode(raw));
+      if (_fills.length > 32) _fills.clear();
+      return _fills[raw] = f;
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// Light direction (degrees, Photoshop convention) and height.
   final double lightAngle;
@@ -507,8 +544,10 @@ class EffectRegistry {
             defaultValue: 0,
             step: 1,
           ),
+          EffectParam.number('squash', min: 0, max: 95, defaultValue: 0),
         ],
         shadow: (e) => ShadowSpec(
+          squash: e.number('squash', 0).clamp(0.0, 95.0) / 100,
           offset: Offset(e.number('dx', 12), e.number('dy', 12)),
           blur: e.number('blur', 16),
           color: e
@@ -1212,7 +1251,7 @@ class EffectRegistry {
           EffectParam.number(
             'material',
             min: 0,
-            max: 1,
+            max: 2,
             defaultValue: 1,
             step: 1,
           ),
