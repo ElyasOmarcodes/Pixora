@@ -491,6 +491,11 @@ class DocumentRenderer {
     canvas.drawPicture(picture);
   }
 
+  /// The layer last found changing every frame, and whether the layer
+  /// being painted is drawn in draft quality.
+  static String? _hotLayer;
+  static bool _draft = false;
+
   /// Recent shader-blended results (see [_paintLayersBlended]).
   static final LinkedHashMap<_BlendKey, ui.Image> _blendCache = LinkedHashMap();
 
@@ -539,10 +544,15 @@ class DocumentRenderer {
       }
     }
 
+    // A layer changing every frame (a 3D slider, a turn) is drawn in draft
+    // quality until it rests, as Photoshop does while dragging.
+    final draft = cache != null && _hotLayer == layer.id;
+    _draft = draft;
     final plan = _plan(layer, hidden);
     canvas.save();
     props.transform.applyTo(canvas);
     plan.paint(canvas, blend: blend, opacity: props.opacity);
+    _draft = false;
     canvas.restore();
     plan.dispose();
   }
@@ -1483,7 +1493,11 @@ class DocumentRenderer {
     if (hit != null) return hit;
     // Changing every frame (a slider, a rotate gesture): a bitmap would be
     // stale by the next frame, so paint directly instead.
-    if (cache!.isHot((layer.id, bucket), key)) return null;
+    if (cache!.isHot((layer.id, bucket), key)) {
+      _hotLayer = layer.id;
+      return null;
+    }
+    if (_hotLayer == layer.id) _hotLayer = null;
 
     final rect = layerDocumentBounds(base).inflate(_effectSpill([base]) + 4);
     if (rect.isEmpty || !rect.isFinite) return null;
@@ -1695,7 +1709,10 @@ class DocumentRenderer {
       return Color.fromARGB(255, g, g, g);
     }
 
-    final lit = _Stamp._make(r, stamp._res, (c) {
+    // Draft (while the layer changes every frame): half the resolution
+    // and half the copies — about an eighth of the drawing.
+    final draft = _draft;
+    final lit = _Stamp._make(r, stamp._res * (draft ? 0.5 : 1), (c) {
       c.saveLayer(r, Paint());
       // Light. Until the normals are ready, sides get an even light.
       c.drawRect(
@@ -1801,17 +1818,76 @@ class DocumentRenderer {
         (x.backScale - 1).abs() * half * outPx +
         (x.twist * math.pi / 180).abs() * half * outPx;
 
-    // Darker towards the back, per copy (no offscreen layers needed).
-    Paint shaded(double u) {
-      final f = 1 - x.shade * u;
-      return Paint()
-        ..filterQuality = FilterQuality.medium
-        ..colorFilter = ColorFilter.matrix([
-          f, 0, 0, 0, 0, //
-          0, f, 0, 0, 0, //
-          0, 0, f, 0, 0, //
-          0, 0, 0, 1, 0, //
-        ]);
+    // All copies in one draw: each is a textured grid (two triangles for
+    // flat moves; a finer grid under perspective) of the lit sides, darkened
+    // by its vertex colour. Hundreds of separate filtered image draws — on
+    // phones each colour filter costs its own pass — made 3D heavy.
+    final tex = Size(lit.image.width.toDouble(), lit.image.height.toDouble());
+    final positions = <double>[], uvs = <double>[], colours = <int>[];
+    void copy(Offset Function(Offset) at, double u, int grid) {
+      final f = (1 - x.shade * u).clamp(0.0, 1.0);
+      final g = (f * 255).round();
+      final colour = 0xFF000000 | (g << 16) | (g << 8) | g;
+      Offset corner(int i, int j) =>
+          Offset(r.left + r.width * i / grid, r.top + r.height * j / grid);
+      for (var j = 0; j < grid; j++) {
+        for (var i = 0; i < grid; i++) {
+          final a = corner(i, j), b = corner(i + 1, j);
+          final c = corner(i + 1, j + 1), d = corner(i, j + 1);
+          for (final q in [a, b, c, a, c, d]) {
+            final pt = at(q);
+            positions
+              ..add(pt.dx)
+              ..add(pt.dy);
+            uvs
+              ..add((q.dx - r.left) / r.width * tex.width)
+              ..add((q.dy - r.top) / r.height * tex.height);
+            colours.add(colour);
+          }
+        }
+      }
+    }
+
+    // Taper and twist about the centre, at fraction [u] of the depth.
+    Offset tt(Offset p, double u) {
+      if (x.backScale == 1 && x.twist == 0) return p;
+      final k = 1 + (x.backScale - 1) * u;
+      final a = x.twist * math.pi / 180 * u;
+      final v = (p - center) * k;
+      return center +
+          Offset(
+            v.dx * math.cos(a) - v.dy * math.sin(a),
+            v.dx * math.sin(a) + v.dy * math.cos(a),
+          );
+    }
+
+    void flush() {
+      if (positions.isEmpty) return;
+      canvas.drawVertices(
+        ui.Vertices.raw(
+          ui.VertexMode.triangles,
+          Float32List.fromList(positions),
+          textureCoordinates: Float32List.fromList(uvs),
+          colors: Int32List.fromList(colours),
+        ),
+        BlendMode.modulate,
+        Paint()
+          ..shader = ImageShader(
+            lit.image,
+            TileMode.decal,
+            TileMode.decal,
+            Float64List.fromList([
+              1, 0, 0, 0, //
+              0, 1, 0, 0, //
+              0, 0, 1, 0, //
+              0, 0, 0, 1, //
+            ]),
+            filterQuality: FilterQuality.medium,
+          ),
+      );
+      positions.clear();
+      uvs.clear();
+      colours.clear();
     }
 
     if (solid) {
@@ -1824,26 +1900,27 @@ class DocumentRenderer {
       // slice is antialiased), capped: hundreds of full-layer draws per
       // frame made 3D + bevel heavy.
       final steps =
-          ((x.depth * pixelScale * math.max(side, 0.04) + shapeTravel) * 1.1)
+          ((x.depth * pixelScale * math.max(side, 0.04) + shapeTravel) *
+                  (draft ? 0.55 : 1.1))
               .ceil()
-              .clamp(2, 220);
+              .clamp(2, draft ? 110 : 220);
       final facing = az[2] >= 0;
       void slice(int i) {
         final u = i / steps;
         final m = _mul3(inv, t.homographyAt(-x.depth * u));
-        canvas
-          ..save()
-          ..transform(
-            Float64List.fromList([
-              m[0], m[3], 0, m[6], //
-              m[1], m[4], 0, m[7], //
-              0, 0, 1, 0, //
-              m[2], m[5], 0, m[8], //
-            ]),
-          );
-        taperTwist(u);
-        lit.draw(canvas, Offset.zero, shaded(u));
-        canvas.restore();
+        copy(
+          (p) {
+            final q = tt(p, u);
+            final w = m[6] * q.dx + m[7] * q.dy + m[8];
+            final k = w.abs() < 1e-9 ? 1e9 : 1 / w;
+            return Offset(
+              (m[0] * q.dx + m[1] * q.dy + m[2]) * k,
+              (m[3] * q.dx + m[4] * q.dy + m[5]) * k,
+            );
+          },
+          u,
+          6,
+        );
       }
 
       // Far to near.
@@ -1856,6 +1933,7 @@ class DocumentRenderer {
           slice(i);
         }
       }
+      flush();
       if (!facing) {
         // The back face, lit as a flat face pointing away.
         final g =
@@ -1907,17 +1985,13 @@ class DocumentRenderer {
     final dir = Offset(math.cos(x.angle), math.sin(x.angle));
     // About one copy per output pixel of travel (depth, taper, twist).
     final travel = x.depth * pixelScale + shapeTravel;
-    final steps = travel.ceil().clamp(1, 360);
+    final steps = (travel * (draft ? 0.5 : 1)).ceil().clamp(1, 1024);
     for (var i = steps; i >= 1; i--) {
       final u = i / steps;
       final o = toLocal(dir * (x.depth * u));
-      canvas
-        ..save()
-        ..translate(o.dx, o.dy);
-      taperTwist(u);
-      lit.draw(canvas, Offset.zero, shaded(u));
-      canvas.restore();
+      copy((p) => tt(p, u) + o, u, 1);
     }
+    flush();
     lit.dispose();
   }
 
