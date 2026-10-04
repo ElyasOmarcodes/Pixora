@@ -1789,14 +1789,9 @@ class DocumentRenderer {
         c
           ..restore()
           ..restore();
-      } else {
-        c.drawRect(
-          r,
-          Paint()
-            ..color = x.color
-            ..blendMode = BlendMode.multiply,
-        );
       }
+      // (A colour material is applied per copy by the vertex colours, so
+      // it can change along the depth.)
       stamp.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstIn);
       c.restore();
     });
@@ -1826,8 +1821,9 @@ class DocumentRenderer {
     final positions = <double>[], uvs = <double>[], colours = <int>[];
     void copy(Offset Function(Offset) at, double u, int grid) {
       final f = (1 - x.shade * u).clamp(0.0, 1.0);
-      final g = (f * 255).round();
-      final colour = 0xFF000000 | (g << 16) | (g << 8) | g;
+      final m = x.layerMaterial ? const Color(0xFFFFFFFF) : x.colorAt(u);
+      int ch(double v) => (v * f * 255).round().clamp(0, 255);
+      final colour = 0xFF000000 | (ch(m.r) << 16) | (ch(m.g) << 8) | ch(m.b);
       Offset corner(int i, int j) =>
           Offset(r.left + r.width * i / grid, r.top + r.height * j / grid);
       for (var j = 0; j < grid; j++) {
@@ -1964,7 +1960,8 @@ class DocumentRenderer {
           stamp.draw(
             canvas,
             Offset.zero,
-            Paint()..colorFilter = ColorFilter.mode(x.color, BlendMode.srcIn),
+            Paint()
+              ..colorFilter = ColorFilter.mode(x.colorAt(1), BlendMode.srcIn),
           );
         }
         final gv = (g * 255).round();

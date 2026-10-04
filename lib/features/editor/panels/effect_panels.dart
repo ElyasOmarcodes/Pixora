@@ -543,7 +543,11 @@ class Extrude3DPanel extends StatelessWidget {
               [l.color, l.layerTexture],
               icons: const [Icons.circle, Icons.texture_rounded],
             ),
-            if (!layerMaterial) const FxColor('color'),
+            if (!layerMaterial) ...[
+              FxColor('color', l.frontColor),
+              FxColor('color2', l.backColor),
+              FxSlider('backMix', l.backColorMix, format: pct),
+            ],
             FxSlider('shade', l.shading),
             FxLabel(l.light),
             FxCustom(

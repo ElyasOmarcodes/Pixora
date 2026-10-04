@@ -908,5 +908,8 @@
   "vSwoosh": "Trazo curvo",
   "vectorStroke": "Trazo",
   "vectorArrows": "Puntas de flecha",
-  "vectorPath": "Trazado"
+  "vectorPath": "Trazado",
+  "frontColor": "Color delantero",
+  "backColor": "Color trasero",
+  "backColorMix": "Hacia el color trasero"
 }

@@ -908,5 +908,8 @@
   "vSwoosh": "خط انسيابي",
   "vectorStroke": "الحد",
   "vectorArrows": "رؤوس الأسهم",
-  "vectorPath": "المسار"
+  "vectorPath": "المسار",
+  "frontColor": "لون الأمام",
+  "backColor": "لون الخلف",
+  "backColorMix": "التدرج إلى لون الخلف"
 }

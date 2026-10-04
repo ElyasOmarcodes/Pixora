@@ -908,5 +908,8 @@
   "vSwoosh": "سووش",
   "vectorStroke": "خط دور",
   "vectorArrows": "سر پیکان",
-  "vectorPath": "مسیر"
+  "vectorPath": "مسیر",
+  "frontColor": "رنگ جلو",
+  "backColor": "رنگ عقب",
+  "backColorMix": "تغییر به رنگ عقب"
 }

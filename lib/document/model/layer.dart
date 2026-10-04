@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ import 'fill.dart';
 import 'layer_stroke.dart';
 import 'layer_transform.dart';
 import 'mask.dart';
+import 'patterns.dart';
 import 'text_span_style.dart';
 
 part 'layer_icon.dart';
@@ -279,8 +281,27 @@ sealed class Layer {
     },
   ];
 
-  /// Project assets used by image-pattern fills.
-  Iterable<String> get fillAssets => [for (final f in fills) ?f.assetId];
+  /// Project assets used by image-pattern fills — the layer's own, and
+  /// those of its Color Fill overlays and bevel textures (which would
+  /// otherwise be left out of saved projects and never decoded).
+  Iterable<String> get fillAssets => [
+    for (final f in fills) ?f.assetId,
+    for (final e in props.effects) ...effectAssets(e),
+  ];
+
+  static Iterable<String> effectAssets(LayerEffect e) sync* {
+    final fill = e.type == 'colorFill' ? e.string('fill') : null;
+    if (fill != null && fill.isNotEmpty) {
+      try {
+        final id = PixFill.fromJson(jsonDecode(fill)).assetId;
+        if (id != null) yield id;
+      } catch (_) {}
+    }
+    final texture = e.type == 'bevel' ? e.string('texture') : null;
+    if (texture != null && Patterns.isAsset(texture)) {
+      yield Patterns.assetId(texture);
+    }
+  }
 
   /// Returns a deep copy with fresh ids (layer and effects).
   Layer cloneWithNewId({String? name}) => withProps(

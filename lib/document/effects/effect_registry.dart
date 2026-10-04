@@ -147,6 +147,8 @@ class ExtrudeSpec {
     required this.angle,
     required this.color,
     required this.shade,
+    this.color2 = const Color(0xFF000000),
+    this.backMix = 0,
     this.layerMaterial = false,
     this.lightAngle = 120,
     this.altitude = 30,
@@ -165,6 +167,8 @@ class ExtrudeSpec {
       angle: n('angle', 45) * 3.141592653589793 / 180,
       color: e.color('color', const Color(0xFF1E3A8A)),
       shade: n('shade', 0.5).clamp(0.0, 1.0),
+      color2: e.color('color2', const Color(0xFF000000)),
+      backMix: n('backMix', 0).clamp(0.0, 100.0) / 100,
       layerMaterial: n('material', 0) >= 1,
       lightAngle: n('lightAngle', 120),
       altitude: n('altitude', 30).clamp(0.0, 90.0),
@@ -187,6 +191,15 @@ class ExtrudeSpec {
 
   /// 0..1 darkening towards the back.
   final double shade;
+
+  /// Colour material: the sides turn from [color] at the front towards
+  /// [color2] at the back, by [backMix] (0..1) — gold to deep gold, pink
+  /// to magenta — instead of only darkening.
+  final Color color2;
+  final double backMix;
+
+  /// The side colour at fraction [u] of the depth (before shading).
+  Color colorAt(double u) => Color.lerp(color, color2, backMix * u)!;
 
   /// Sides carry the layer's own pixels instead of [color].
   final bool layerMaterial;
@@ -1205,6 +1218,8 @@ class EffectRegistry {
           ),
           EffectParam.color('color', defaultValue: Color(0xFF1E3A8A)),
           EffectParam.number('shade', min: 0, max: 1, defaultValue: 0.3),
+          EffectParam.color('color2', defaultValue: Color(0xFF000000)),
+          EffectParam.number('backMix', min: 0, max: 100, defaultValue: 0),
           EffectParam.number(
             'lightAngle',
             min: -180,

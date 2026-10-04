@@ -1027,5 +1027,8 @@
   "vSwoosh": "Swoosh",
   "vectorStroke": "Stroke",
   "vectorArrows": "Arrowheads",
-  "vectorPath": "Path"
+  "vectorPath": "Path",
+  "frontColor": "Front colour",
+  "backColor": "Back colour",
+  "backColorMix": "Towards back colour"
 }

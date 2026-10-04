@@ -908,5 +908,8 @@
   "vSwoosh": "Virgule",
   "vectorStroke": "Contour",
   "vectorArrows": "Pointes de flèche",
-  "vectorPath": "Tracé"
+  "vectorPath": "Tracé",
+  "frontColor": "Couleur avant",
+  "backColor": "Couleur arrière",
+  "backColorMix": "Vers la couleur arrière"
 }

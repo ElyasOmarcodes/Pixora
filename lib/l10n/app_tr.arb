@@ -908,5 +908,8 @@
   "vSwoosh": "Kavis",
   "vectorStroke": "Kontur",
   "vectorArrows": "Ok uçları",
-  "vectorPath": "Yol"
+  "vectorPath": "Yol",
+  "frontColor": "Ön renk",
+  "backColor": "Arka renk",
+  "backColorMix": "Arka renge geçiş"
 }

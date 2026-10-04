@@ -908,5 +908,8 @@
   "vSwoosh": "سووش",
   "vectorStroke": "لائن",
   "vectorArrows": "تیر کے سرے",
-  "vectorPath": "راستہ"
+  "vectorPath": "راستہ",
+  "frontColor": "سامنے کا رنگ",
+  "backColor": "پیچھے کا رنگ",
+  "backColorMix": "پیچھے کے رنگ کی طرف"
 }
