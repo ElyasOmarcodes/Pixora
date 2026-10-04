@@ -611,8 +611,12 @@ Future<void> showContourEditor(
   required void Function(ContourCurve? curve, {required bool live}) onChanged,
 }) => showModalBottomSheet<void>(
   context: context,
-  showDragHandle: true,
+  showDragHandle: false,
   isScrollControlled: true,
+  // No dimming: the design stays visible and previews every change.
+  barrierColor: Colors.transparent,
+  // The sheet's own swipe-to-close would take vertical point drags.
+  enableDrag: false,
   builder: (_) => _ContourEditor(initial: initial, onChanged: onChanged),
 );
 
@@ -652,7 +656,7 @@ class _ContourEditorState extends State<_ContourEditor> {
     final scheme = theme.colorScheme;
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -687,7 +691,8 @@ class _ContourEditorState extends State<_ContourEditor> {
                         setState(() => _pts = [..._pts]..removeAt(i));
                         _emit(live: false);
                       },
-                      onPanStart: (d) => _drag = _hit(d.localPosition, size),
+                      // The touch-down point (pan start comes after the drag slop).
+                      onPanDown: (d) => _drag = _hit(d.localPosition, size),
                       onPanUpdate: (d) {
                         final i = _drag;
                         if (i == null) return;
