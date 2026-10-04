@@ -913,5 +913,12 @@
   "backColor": "Color trasero",
   "backColorMix": "Hacia el color trasero",
   "floorShadow": "Sobre el suelo",
-  "materialGradient": "Degradado"
+  "materialGradient": "Degradado",
+  "contourEditor": "Editor de contornos",
+  "contourEditorHint": "Arrastra los puntos para dar forma a la curva. Toca para añadir y mantén pulsado para quitar.",
+  "contourPresets": "Ajustes preestablecidos",
+  "shapeBurst": "Explosión de forma",
+  "shapeBurstHint": "El degradado cruza el trazo siguiendo sus curvas (bordes metálicos)",
+  "useGlobalLight": "Usar luz global",
+  "useGlobalLightHint": "Una luz para todo el diseño: moverla aquí la mueve en todos los efectos"
 }

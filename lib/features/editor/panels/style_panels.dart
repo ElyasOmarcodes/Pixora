@@ -302,6 +302,16 @@ class StrokePanel extends StatelessWidget {
             set(visible(s.copyWith(fill: f)), live: live);
           },
         ),
+        if (s.fill.isGradient)
+          SwitchListTile.adaptive(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+            secondary: const Icon(Icons.blur_circular_rounded),
+            title: Text(l.shapeBurst),
+            subtitle: Text(l.shapeBurstHint),
+            value: s.burst,
+            onChanged: (v) => set(visible(s.copyWith(burst: v))),
+          ),
         PixSlider(
           label: l.opacity,
           value: s.opacity,

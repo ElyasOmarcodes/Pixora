@@ -406,6 +406,7 @@ class ShadowPanel extends StatelessWidget {
               type: 'innerShadow',
               title: l.innerShadow,
               controls: [
+                FxToggle('global', l.useGlobalLight),
                 FxBlend(l.blendMode),
                 FxSlider('distance', l.distance),
                 FxSlider('angle', l.angle, format: fxDegrees),
@@ -422,6 +423,7 @@ class ShadowPanel extends StatelessWidget {
               type: 'shadow',
               title: l.dropShadow,
               controls: [
+                FxToggle('global', l.useGlobalLight),
                 FxBlend(l.blendMode),
                 FxSlider('dx', l.offsetX),
                 FxSlider('dy', l.offsetY),
@@ -588,6 +590,7 @@ class Extrude3DPanel extends StatelessWidget {
             FxSlider('backMix', l.backColorMix, format: pct),
             FxSlider('shade', l.shading),
             FxLabel(l.light),
+            FxToggle('global', l.useGlobalLight),
             FxCustom(
               (valueOf, set) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),

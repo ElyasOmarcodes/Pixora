@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart' show Alignment;
 
 import '../core/utils/ids.dart';
+import '../document/effects/global_light.dart';
 import '../document/assets/asset_store.dart';
 import '../document/effects/effect_registry.dart';
 import '../document/model/document.dart';
@@ -134,7 +135,7 @@ class EditorController extends ChangeNotifier {
   }) {
     final base = _previewBase ?? HistoryEntry(_document, _selection, label);
     _previewBase = null;
-    final next = op(_document);
+    final next = GlobalLight.sync(_document, op(_document));
     final wanted = deselect
         ? const <String>[]
         : selectIds ?? (select != null ? [select] : _selection);
@@ -154,7 +155,7 @@ class EditorController extends ChangeNotifier {
   /// Live update without recording history (call [commit] when done).
   void preview(DocOp op) {
     _previewBase ??= HistoryEntry(_document, _selection, '');
-    _document = op(_document);
+    _document = GlobalLight.sync(_document, op(_document));
     _changed(committed: false);
   }
 
@@ -164,7 +165,7 @@ class EditorController extends ChangeNotifier {
   /// pile up.
   void previewFromStart(DocOp op) {
     _previewBase ??= HistoryEntry(_document, _selection, '');
-    _document = op(_previewBase!.document);
+    _document = GlobalLight.sync(_document, op(_previewBase!.document));
     _changed(committed: false);
   }
 

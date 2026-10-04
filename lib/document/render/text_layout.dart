@@ -396,22 +396,28 @@ class TextLayoutEntry {
 
   /// Builds a painter drawing the glyph outlines with a given paint.
   final TextPainter Function(Paint paint) _outlineMaker;
-  final Map<double, TextPainter> _outlines = {};
+  final Map<int, TextPainter> _outlines = {};
 
   /// Paints the glyph outlines, [width] wide and centred on the glyph
   /// edges, in opaque white — the vector source of a stroke style. Returns
   /// false for curved text (which has no flat outline).
-  bool paintOutline(Canvas canvas, double width) {
+  bool paintOutline(
+    Canvas canvas,
+    double width, [
+    Color color = const Color(0xFFFFFFFF),
+  ]) {
     if (_mesh != null) return false;
-    final p = _outlines[width] ??= _outlineMaker(
+    final key = Object.hash(width, color);
+    final p = _outlines[key] ??= _outlineMaker(
       Paint()
         ..style = ui.PaintingStyle.stroke
         ..strokeWidth = width
         ..strokeJoin = ui.StrokeJoin.round
         ..strokeCap = ui.StrokeCap.round
-        ..color = const Color(0xFFFFFFFF),
+        ..color = color,
     );
-    if (_outlines.length > 8) _outlines.remove(_outlines.keys.first);
+    // (Shape Burst strokes paint dozens of widths at once.)
+    if (_outlines.length > 64) _outlines.remove(_outlines.keys.first);
     canvas
       ..save()
       ..translate(-fill.width / 2, -fill.height / 2);

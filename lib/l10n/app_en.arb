@@ -1032,5 +1032,12 @@
   "backColor": "Back colour",
   "backColorMix": "Towards back colour",
   "floorShadow": "On the ground",
-  "materialGradient": "Gradient"
+  "materialGradient": "Gradient",
+  "contourEditor": "Contour Editor",
+  "contourEditorHint": "Drag points to shape the curve. Tap to add a point, long-press to remove it.",
+  "contourPresets": "Presets",
+  "shapeBurst": "Shape burst",
+  "shapeBurstHint": "The gradient runs across the stroke, following its curves (metal rims)",
+  "useGlobalLight": "Use global light",
+  "useGlobalLightHint": "One light for the whole design: moving it here moves it in every effect that uses it"
 }

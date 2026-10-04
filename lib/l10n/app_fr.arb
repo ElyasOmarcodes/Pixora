@@ -913,5 +913,12 @@
   "backColor": "Couleur arrière",
   "backColorMix": "Vers la couleur arrière",
   "floorShadow": "Au sol",
-  "materialGradient": "Dégradé"
+  "materialGradient": "Dégradé",
+  "contourEditor": "Éditeur de contour",
+  "contourEditorHint": "Faites glisser les points pour modeler la courbe. Touchez pour ajouter, appui long pour supprimer.",
+  "contourPresets": "Préréglages",
+  "shapeBurst": "Éclat de forme",
+  "shapeBurstHint": "Le dégradé traverse le contour en suivant ses courbes (bords métalliques)",
+  "useGlobalLight": "Utiliser l’éclairage global",
+  "useGlobalLightHint": "Un éclairage pour tout le design : le déplacer ici le déplace partout"
 }

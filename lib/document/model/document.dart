@@ -26,6 +26,8 @@ class PixDocument {
     this.dpi = 72,
     List<LayerEffect> backgroundEffects = const [],
     this.exportName,
+    this.lightAngle = 120,
+    this.lightAltitude = 30,
   }) : id = id ?? newId('doc'),
        layers = List.unmodifiable(layers),
        backgroundEffects = List.unmodifiable(backgroundEffects),
@@ -60,6 +62,12 @@ class PixDocument {
   final String? exportName;
 
   static const exportNameLayerPrefix = 'layer:';
+
+  /// Photoshop's Global Light: the one light (angle, altitude in degrees)
+  /// that every effect set to "Use global light" follows — bevels, drop
+  /// and inner shadows, 3D — so the whole design is lit consistently.
+  final double lightAngle;
+  final double lightAltitude;
 
   /// The file name (without extension) exports get now.
   String get exportFileName {
@@ -98,6 +106,8 @@ class PixDocument {
     List<LayerEffect>? backgroundEffects,
     String? exportName,
     bool clearExportName = false,
+    double? lightAngle,
+    double? lightAltitude,
   }) => PixDocument(
     id: id,
     name: name ?? this.name,
@@ -109,6 +119,8 @@ class PixDocument {
     dpi: dpi ?? this.dpi,
     backgroundEffects: backgroundEffects ?? this.backgroundEffects,
     exportName: clearExportName ? null : (exportName ?? this.exportName),
+    lightAngle: lightAngle ?? this.lightAngle,
+    lightAltitude: lightAltitude ?? this.lightAltitude,
   );
 
   // ---------------------------------------------------------------- queries
@@ -286,6 +298,8 @@ class PixDocument {
     if (backgroundEffects.isNotEmpty)
       'backgroundEffects': [for (final e in backgroundEffects) e.toJson()],
     if (exportName != null) 'exportName': exportName,
+    if (lightAngle != 120) 'lightAngle': lightAngle,
+    if (lightAltitude != 30) 'lightAltitude': lightAltitude,
   };
 
   static PixDocument fromJson(Json m) => PixDocument(
@@ -307,6 +321,8 @@ class PixDocument {
         if (e is Map) LayerEffect.fromJson(readMap(e)),
     ],
     exportName: m['exportName'] is String ? m['exportName'] as String : null,
+    lightAngle: readDouble(m['lightAngle'], 120),
+    lightAltitude: readDouble(m['lightAltitude'], 30).clamp(0, 90).toDouble(),
   );
 
   @override
@@ -320,6 +336,8 @@ class PixDocument {
       other.guides == guides &&
       other.dpi == dpi &&
       other.exportName == exportName &&
+      other.lightAngle == lightAngle &&
+      other.lightAltitude == lightAltitude &&
       listEquals(other.backgroundEffects, backgroundEffects) &&
       listEquals(other.layers, layers);
 

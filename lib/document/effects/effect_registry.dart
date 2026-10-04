@@ -531,6 +531,14 @@ class EffectRegistry {
         type: 'shadow',
         category: EffectCategory.style,
         params: const [
+          EffectParam.number(
+            'global',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
+
           EffectParam.number('dx', min: -200, max: 200, defaultValue: 12),
           EffectParam.number('dy', min: -200, max: 200, defaultValue: 12),
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 16),
@@ -648,6 +656,14 @@ class EffectRegistry {
         type: 'innerShadow',
         category: EffectCategory.style,
         params: const [
+          EffectParam.number(
+            'global',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
+
           EffectParam.number('distance', min: 0, max: 100, defaultValue: 8),
           EffectParam.number('angle', min: 0, max: 360, defaultValue: 45),
           EffectParam.number('blur', min: 0, max: 100, defaultValue: 10),
@@ -687,6 +703,14 @@ class EffectRegistry {
         type: 'bevel',
         category: EffectCategory.style,
         params: [
+          EffectParam.number(
+            'global',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
+
           EffectParam.number('v', min: 2, max: 2, defaultValue: 2, step: 1),
           EffectParam.number('style', min: 0, max: 4, defaultValue: 0, step: 1),
           EffectParam.number(
@@ -1244,6 +1268,14 @@ class EffectRegistry {
         type: 'extrude',
         category: EffectCategory.style,
         params: [
+          EffectParam.number(
+            'global',
+            min: 0,
+            max: 1,
+            defaultValue: 1,
+            step: 1,
+          ),
+
           EffectParam.number('v', min: 2, max: 2, defaultValue: 2, step: 1),
           EffectParam.number('depth', min: 1, max: 500, defaultValue: 40),
           EffectParam.number('angle', min: 0, max: 360, defaultValue: 45),

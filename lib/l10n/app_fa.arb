@@ -913,5 +913,12 @@
   "backColor": "رنگ عقب",
   "backColorMix": "تغییر به رنگ عقب",
   "floorShadow": "روی زمین",
-  "materialGradient": "گرادیان"
+  "materialGradient": "گرادیان",
+  "contourEditor": "ویرایشگر کانتور",
+  "contourEditorHint": "نقاط را بکشید تا منحنی شکل بگیرد. برای افزودن ضربه بزنید، برای حذف نگه دارید.",
+  "contourPresets": "پیش‌فرض‌ها",
+  "shapeBurst": "انفجار شکل",
+  "shapeBurstHint": "گرادیان در عرض خط و همراه منحنی‌ها (لبه‌های فلزی)",
+  "useGlobalLight": "استفاده از نور سراسری",
+  "useGlobalLightHint": "یک نور برای کل طرح: تغییر آن اینجا در همه جلوه‌ها اعمال می‌شود"
 }

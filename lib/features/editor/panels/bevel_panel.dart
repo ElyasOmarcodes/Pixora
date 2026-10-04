@@ -237,6 +237,15 @@ class _BevelPanelState extends State<BevelPanel> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SwitchListTile.adaptive(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+          secondary: const Icon(Icons.wb_sunny_outlined),
+          title: Text(l.useGlobalLight),
+          subtitle: Text(l.useGlobalLightHint),
+          value: (_fx?.number('global', 0) ?? 0) >= 1,
+          onChanged: (v) => _set({'global': v ? 1 : 0}),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
           child: Row(
@@ -277,7 +286,13 @@ class _BevelPanelState extends State<BevelPanel> {
           ),
         ),
         PanelLabel(l.glossContour),
-        ContourRow(value: p.gloss, onChanged: (c) => _set({'gloss': c.index})),
+        ContourRow(
+          value: p.gloss,
+          onChanged: (c) => _set({'gloss': c.index}),
+          curve: p.glossCurve,
+          onCurve: (c, {required live}) =>
+              _set({'glossCurve': c?.encode() ?? ''}, live: live),
+        ),
         SwitchListTile.adaptive(
           dense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 20),
@@ -349,6 +364,9 @@ class _BevelPanelState extends State<BevelPanel> {
           ContourRow(
             value: p.contour!,
             onChanged: (c) => _set({'contour': c.index}),
+            curve: p.contourCurve,
+            onCurve: (c, {required live}) =>
+                _set({'contourCurve': c?.encode() ?? ''}, live: live),
           ),
           _slider(
             'contourRange',
@@ -499,37 +517,85 @@ class _TextureSwatch extends CustomPainter {
 
 /// Contour presets as small curve thumbnails.
 class ContourRow extends StatelessWidget {
-  const ContourRow({super.key, required this.value, required this.onChanged});
+  const ContourRow({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    this.curve,
+    this.onCurve,
+  });
   final ContourPreset value;
   final ValueChanged<ContourPreset> onChanged;
+
+  /// A custom curve (shown first, selected when set) and where edits in
+  /// the Contour Editor go; null [onCurve] hides the custom tile.
+  final ContourCurve? curve;
+  final void Function(ContourCurve? curve, {required bool live})? onCurve;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    Widget tile({
+      required bool selected,
+      required VoidCallback onTap,
+      required double Function(double) f,
+      Widget? badge,
+    }) => GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        margin: const EdgeInsets.all(4),
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: scheme.onSurface.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? scheme.primary : Colors.transparent,
+            width: 2.5,
+          ),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CustomPaint(painter: _CurvePainter(f, scheme.onSurface)),
+            ?badge,
+          ],
+        ),
+      ),
+    );
     return SizedBox(
       height: 58,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
-          for (final c in ContourPreset.values)
-            GestureDetector(
-              onTap: () => onChanged(c),
-              child: Container(
-                width: 48,
-                height: 48,
-                margin: const EdgeInsets.all(4),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: scheme.onSurface.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: c == value ? scheme.primary : Colors.transparent,
-                    width: 2.5,
-                  ),
+          if (onCurve != null)
+            tile(
+              selected: curve != null,
+              f: (curve ?? ContourCurve.of(value)).apply,
+              badge: Align(
+                alignment: Alignment.bottomRight,
+                child: Icon(
+                  Icons.edit_rounded,
+                  size: 14,
+                  color: scheme.primary,
                 ),
-                child: CustomPaint(painter: _CurvePainter(c, scheme.onSurface)),
               ),
+              onTap: () => showContourEditor(
+                context,
+                initial: curve ?? ContourCurve.of(value),
+                onChanged: onCurve!,
+              ),
+            ),
+          for (final c in ContourPreset.values)
+            tile(
+              selected: curve == null && c == value,
+              f: c.apply,
+              onTap: () {
+                onChanged(c);
+                if (curve != null) onCurve?.call(null, live: false);
+              },
             ),
         ],
       ),
@@ -537,9 +603,209 @@ class ContourRow extends StatelessWidget {
   }
 }
 
+/// Photoshop's Contour Editor: drag points, tap empty space to add one,
+/// long-press a point to remove it; every change previews live.
+Future<void> showContourEditor(
+  BuildContext context, {
+  required ContourCurve initial,
+  required void Function(ContourCurve? curve, {required bool live}) onChanged,
+}) => showModalBottomSheet<void>(
+  context: context,
+  showDragHandle: true,
+  isScrollControlled: true,
+  builder: (_) => _ContourEditor(initial: initial, onChanged: onChanged),
+);
+
+class _ContourEditor extends StatefulWidget {
+  const _ContourEditor({required this.initial, required this.onChanged});
+  final ContourCurve initial;
+  final void Function(ContourCurve? curve, {required bool live}) onChanged;
+
+  @override
+  State<_ContourEditor> createState() => _ContourEditorState();
+}
+
+class _ContourEditorState extends State<_ContourEditor> {
+  late List<Offset> _pts = [...widget.initial.points];
+  int? _drag;
+
+  void _emit({required bool live}) =>
+      widget.onChanged(ContourCurve(_pts), live: live);
+
+  Offset _toUnit(Offset local, Size size) => Offset(
+    (local.dx / size.width).clamp(0.0, 1.0),
+    (1 - local.dy / size.height).clamp(0.0, 1.0),
+  );
+
+  int? _hit(Offset local, Size size) {
+    for (var i = 0; i < _pts.length; i++) {
+      final p = Offset(_pts[i].dx * size.width, (1 - _pts[i].dy) * size.height);
+      if ((p - local).distance < 22) return i;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(l.contourEditor, style: theme.textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(
+              l.contourEditorHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: SizedBox.square(
+                dimension: 260,
+                child: LayoutBuilder(
+                  builder: (context, box) {
+                    final size = box.biggest;
+                    return GestureDetector(
+                      onTapUp: (d) {
+                        if (_hit(d.localPosition, size) != null) return;
+                        setState(() {
+                          _pts = [..._pts, _toUnit(d.localPosition, size)]
+                            ..sort((a, b) => a.dx.compareTo(b.dx));
+                        });
+                        _emit(live: false);
+                      },
+                      onLongPressStart: (d) {
+                        final i = _hit(d.localPosition, size);
+                        if (i == null || _pts.length <= 2) return;
+                        setState(() => _pts = [..._pts]..removeAt(i));
+                        _emit(live: false);
+                      },
+                      onPanStart: (d) => _drag = _hit(d.localPosition, size),
+                      onPanUpdate: (d) {
+                        final i = _drag;
+                        if (i == null) return;
+                        var u = _toUnit(d.localPosition, size);
+                        // Points keep their order; the ends stay at the ends.
+                        final lo = i == 0 ? 0.0 : _pts[i - 1].dx + 0.01;
+                        final hi = i == _pts.length - 1
+                            ? 1.0
+                            : _pts[i + 1].dx - 0.01;
+                        if (i == 0) u = Offset(0, u.dy);
+                        if (i == _pts.length - 1) u = Offset(1, u.dy);
+                        u = Offset(u.dx.clamp(lo, hi), u.dy);
+                        setState(() => _pts = [..._pts]..[i] = u);
+                        _emit(live: true);
+                      },
+                      onPanEnd: (_) {
+                        if (_drag != null) _emit(live: false);
+                        _drag = null;
+                      },
+                      child: CustomPaint(
+                        painter: _ContourGraphPainter(
+                          ContourCurve(_pts),
+                          scheme.onSurface,
+                          scheme.primary,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(l.contourPresets, style: theme.textTheme.titleSmall),
+            ContourRow(
+              value: ContourPreset.linear,
+              curve: ContourCurve(_pts),
+              onChanged: (c) {
+                setState(() => _pts = [...ContourCurve.of(c).points]);
+                _emit(live: false);
+              },
+            ),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(
+                      () =>
+                          _pts = [for (final p in _pts) Offset(p.dx, 1 - p.dy)],
+                    );
+                    _emit(live: false);
+                  },
+                  icon: const Icon(Icons.flip_rounded),
+                  label: Text(l.invert),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l.done),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContourGraphPainter extends CustomPainter {
+  _ContourGraphPainter(this.curve, this.ink, this.accent);
+  final ContourCurve curve;
+  final Color ink, accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(r, const Radius.circular(12)),
+      Paint()..color = ink.withValues(alpha: 0.05),
+    );
+    final grid = Paint()
+      ..color = ink.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+    for (var i = 1; i < 4; i++) {
+      final x = size.width * i / 4, y = size.height * i / 4;
+      canvas
+        ..drawLine(Offset(x, 0), Offset(x, size.height), grid)
+        ..drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    final path = Path();
+    for (var i = 0; i <= 100; i++) {
+      final t = i / 100;
+      final p = Offset(t * size.width, (1 - curve.apply(t)) * size.height);
+      i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = ink,
+    );
+    for (final p in curve.points) {
+      final c = Offset(p.dx * size.width, (1 - p.dy) * size.height);
+      canvas
+        ..drawCircle(c, 9, Paint()..color = accent)
+        ..drawCircle(c, 5, Paint()..color = const Color(0xFFFFFFFF));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ContourGraphPainter old) =>
+      old.curve != curve || old.ink != ink || old.accent != accent;
+}
+
 class _CurvePainter extends CustomPainter {
   _CurvePainter(this.c, this.color);
-  final ContourPreset c;
+  final double Function(double) c;
   final Color color;
 
   @override
@@ -547,7 +813,7 @@ class _CurvePainter extends CustomPainter {
     final path = Path();
     for (var i = 0; i <= 40; i++) {
       final t = i / 40;
-      final p = Offset(t * size.width, (1 - c.apply(t)) * size.height);
+      final p = Offset(t * size.width, (1 - c(t)) * size.height);
       i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
     }
     final fill = Path.from(path)

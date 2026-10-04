@@ -913,5 +913,12 @@
   "backColor": "Arka renk",
   "backColorMix": "Arka renge geçiş",
   "floorShadow": "Zeminde",
-  "materialGradient": "Gradyan"
+  "materialGradient": "Gradyan",
+  "contourEditor": "Kontur Düzenleyici",
+  "contourEditorHint": "Eğriyi şekillendirmek için noktaları sürükleyin. Eklemek için dokunun, silmek için basılı tutun.",
+  "contourPresets": "Hazır ayarlar",
+  "shapeBurst": "Şekil patlaması",
+  "shapeBurstHint": "Gradyan konturu boyunca kıvrımları izler (metal kenarlar)",
+  "useGlobalLight": "Genel ışığı kullan",
+  "useGlobalLightHint": "Tüm tasarım için tek ışık: burada değiştirmek tüm efektlerde değiştirir"
 }

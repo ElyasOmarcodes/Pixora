@@ -913,5 +913,12 @@
   "backColor": "شاتنی رنګ",
   "backColorMix": "شاتني رنګ ته اوښتل",
   "floorShadow": "پر ځمکه (پرسپکټیو)",
-  "materialGradient": "ګرادیانټ"
+  "materialGradient": "ګرادیانټ",
+  "contourEditor": "د کانټور سمونګر",
+  "contourEditorHint": "ټکي کش کړئ څو منحني جوړه شي. د نوي ټکي لپاره ټک وهئ، د لرې کولو لپاره اوږد فشار ورکړئ.",
+  "contourPresets": "چمتو شوي",
+  "shapeBurst": "د شکل په اوږدو (Shape Burst)",
+  "shapeBurstHint": "ګرادیانټ د کرښې له دننه څنډې بهر ته ځي او ټولو ګولایونو سره ځي (فلزي څنډې)",
+  "useGlobalLight": "ټولګډه رڼا وکاروه",
+  "useGlobalLightHint": "د ټول ډیزاین لپاره یوه رڼا: دلته یې بدلول په ټولو هغو اغېزو کې بدلیږي چې دا کاروي"
 }

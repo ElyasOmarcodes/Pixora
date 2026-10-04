@@ -913,5 +913,12 @@
   "backColor": "پیچھے کا رنگ",
   "backColorMix": "پیچھے کے رنگ کی طرف",
   "floorShadow": "زمین پر",
-  "materialGradient": "گریڈینٹ"
+  "materialGradient": "گریڈینٹ",
+  "contourEditor": "کنٹور ایڈیٹر",
+  "contourEditorHint": "منحنی بنانے کے لیے نقطے کھینچیں۔ نیا نقطہ ٹیپ سے، ہٹانے کے لیے دیر تک دبائیں۔",
+  "contourPresets": "تیار شدہ",
+  "shapeBurst": "شکل کے ساتھ",
+  "shapeBurstHint": "گریڈینٹ لائن کی چوڑائی میں موڑوں کے ساتھ (دھاتی کنارے)",
+  "useGlobalLight": "عالمی روشنی استعمال کریں",
+  "useGlobalLightHint": "پورے ڈیزائن کے لیے ایک روشنی: یہاں بدلنے سے سب اثرات میں بدلتی ہے"
 }

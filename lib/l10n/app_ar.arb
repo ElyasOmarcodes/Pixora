@@ -913,5 +913,12 @@
   "backColor": "لون الخلف",
   "backColorMix": "التدرج إلى لون الخلف",
   "floorShadow": "على الأرض",
-  "materialGradient": "تدرج"
+  "materialGradient": "تدرج",
+  "contourEditor": "محرر المحيط",
+  "contourEditorHint": "اسحب النقاط لتشكيل المنحنى. انقر للإضافة واضغط مطولاً للحذف.",
+  "contourPresets": "الإعدادات المسبقة",
+  "shapeBurst": "انفجار الشكل",
+  "shapeBurstHint": "يمتد التدرج عبر الحد ويتبع منحنياته (حواف معدنية)",
+  "useGlobalLight": "استخدام الإضاءة العامة",
+  "useGlobalLightHint": "إضاءة واحدة للتصميم كله: تحريكها هنا يحركها في كل التأثيرات"
 }

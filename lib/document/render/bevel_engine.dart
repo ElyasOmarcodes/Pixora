@@ -5,6 +5,7 @@ import 'package:flutter/painting.dart';
 
 import '../model/blend.dart';
 import '../model/effect.dart';
+import '../effects/tone.dart';
 import 'mask_jobs.dart';
 import 'pixel_ops.dart';
 
@@ -64,6 +65,66 @@ enum ContourPreset {
   }
 }
 
+/// A custom contour drawn in the Contour Editor (Photoshop's editable
+/// contour curves): points in 0..1, joined by a smooth spline.
+@immutable
+class ContourCurve {
+  ContourCurve(List<Offset> points)
+    : points = List<Offset>.unmodifiable(
+        <Offset>[...points]..sort((a, b) => a.dx.compareTo(b.dx)),
+      ),
+      _table = _sample(points);
+
+  final List<Offset> points;
+  final Float64List _table;
+
+  /// Stored as "x,y;x,y;…" (0..1).
+  static ContourCurve? decode(String? s) {
+    if (s == null || s.isEmpty) return null;
+    final pts = <Offset>[];
+    for (final part in s.split(';')) {
+      final xy = part.split(',');
+      if (xy.length != 2) continue;
+      final x = double.tryParse(xy[0]), y = double.tryParse(xy[1]);
+      if (x == null || y == null) continue;
+      pts.add(Offset(x.clamp(0.0, 1.0), y.clamp(0.0, 1.0)));
+    }
+    return pts.length < 2 ? null : ContourCurve(pts);
+  }
+
+  String encode() => [
+    for (final p in points)
+      '${p.dx.toStringAsFixed(4)},${p.dy.toStringAsFixed(4)}',
+  ].join(';');
+
+  /// A preset as editable points.
+  factory ContourCurve.of(ContourPreset p) => ContourCurve([
+    for (var i = 0; i <= 8; i++) Offset(i / 8, p.apply(i / 8)),
+  ]);
+
+  static Float64List _sample(List<Offset> pts) {
+    final sorted = [...pts]..sort((a, b) => a.dx.compareTo(b.dx));
+    final s = ToneCurves.sample([
+      for (final p in sorted) Offset(p.dx * 255, p.dy * 255),
+    ]);
+    return Float64List.fromList([for (final v in s) (v / 255).clamp(0, 1)]);
+  }
+
+  double apply(double t) {
+    final x = t.clamp(0.0, 1.0) * 255;
+    final i = x.floor().clamp(0, 254);
+    final f = x - i;
+    return _table[i] * (1 - f) + _table[i + 1] * f;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContourCurve && listEquals(other.points, points);
+
+  @override
+  int get hashCode => Object.hashAll(points);
+}
+
 /// Every Bevel & Emboss setting, read from a `bevel` [LayerEffect].
 ///
 /// Older projects stored a simpler bevel (offset "depth" in pixels, a
@@ -80,6 +141,7 @@ class BevelParams {
     this.angle = 120,
     this.altitude = 30,
     this.gloss = ContourPreset.linear,
+    this.glossCurve,
     this.antiAlias = false,
     this.highlightMode = PixBlendMode.screen,
     this.highlight = const Color(0xFFFFFFFF),
@@ -88,6 +150,7 @@ class BevelParams {
     this.shadow = const Color(0xFF000000),
     this.shadowOpacity = 0.75,
     this.contour,
+    this.contourCurve,
     this.contourRange = 0.5,
     this.texture,
     this.textureScale = 1,
@@ -114,7 +177,12 @@ class BevelParams {
   /// Light altitude in degrees (90 = straight above).
   final double altitude;
   final ContourPreset gloss;
+
+  /// A custom gloss contour (overrides [gloss]).
+  final ContourCurve? glossCurve;
   final bool antiAlias;
+
+  double glossAt(double t) => glossCurve?.apply(t) ?? gloss.apply(t);
   final PixBlendMode highlightMode;
   final Color highlight;
   final double highlightOpacity;
@@ -124,6 +192,9 @@ class BevelParams {
 
   /// Profile of the bevel (Contour sub-section), null = off.
   final ContourPreset? contour;
+
+  /// A custom profile contour (overrides [contour] when it is on).
+  final ContourCurve? contourCurve;
   final double contourRange;
 
   /// Texture pattern id (Texture sub-section), null = off.
@@ -168,6 +239,7 @@ class BevelParams {
       angle: n('angle', 120),
       altitude: n('altitude', 30).clamp(0, 90).toDouble(),
       gloss: _enum(ContourPreset.values, n('gloss', 0)),
+      glossCurve: ContourCurve.decode(e.string('glossCurve')),
       antiAlias: n('antiAlias', 0) >= 1,
       highlightMode: _enum(PixBlendMode.values, n('highlightMode', 5)),
       highlight: e.color('highlight', const Color(0xFFFFFFFF)),
@@ -177,6 +249,9 @@ class BevelParams {
       shadowOpacity: n('shadowOpacity', 0.75).clamp(0.0, 1.0),
       contour: n('contourOn', 0) >= 1
           ? _enum(ContourPreset.values, n('contour', 0))
+          : null,
+      contourCurve: n('contourOn', 0) >= 1
+          ? ContourCurve.decode(e.string('contourCurve'))
           : null,
       contourRange: n('contourRange', 50).clamp(1, 100) / 100,
       texture: n('textureOn', 0) >= 1 ? e.string('texture', 'dots') : null,
@@ -198,6 +273,7 @@ class BevelParams {
     'angle': angle,
     'altitude': altitude,
     'gloss': gloss.index,
+    'glossCurve': glossCurve?.encode() ?? '',
     'antiAlias': antiAlias ? 1 : 0,
     'highlightMode': highlightMode.index,
     'highlight': highlight.toARGB32(),
@@ -207,6 +283,7 @@ class BevelParams {
     'shadowOpacity': shadowOpacity,
     'contourOn': contour == null ? 0 : 1,
     'contour': (contour ?? ContourPreset.linear).index,
+    'contourCurve': contourCurve?.encode() ?? '',
     'contourRange': contourRange * 100,
     'textureOn': texture == null ? 0 : 1,
     'texture': ?texture,
@@ -227,8 +304,10 @@ class BevelParams {
     angle,
     altitude,
     gloss,
+    glossCurve,
     antiAlias,
     contour,
+    contourCurve,
     contourRange,
     texture,
     textureScale,
@@ -255,6 +334,8 @@ class BevelParams {
       other.angle == angle &&
       other.altitude == altitude &&
       other.gloss == gloss &&
+      other.glossCurve == glossCurve &&
+      other.contourCurve == contourCurve &&
       other.antiAlias == antiAlias &&
       other.highlightMode == highlightMode &&
       other.highlight == highlight &&
@@ -401,10 +482,12 @@ abstract final class BevelEngine {
     // Contour (profile), over the range.
     final c = p.contour;
     if (c != null) {
+      final curve = p.contourCurve;
       final range = p.contourRange;
       for (var i = 0; i < n; i++) {
         final t = (height[i] / range).clamp(0.0, 1.0);
-        height[i] = c.apply(t) * range + (height[i] - range).clamp(0.0, 1.0);
+        final v = curve?.apply(t) ?? c.apply(t);
+        height[i] = v * range + (height[i] - range).clamp(0.0, 1.0);
       }
     }
 
@@ -429,20 +512,22 @@ abstract final class BevelEngine {
     final lz = math.sin(al);
     final flat = lz;
 
-    // Gloss contour as a lookup table (it runs twice per pixel).
+    // Gloss contour, Photoshop's way: the lighting as one brightness
+    // (0 = facing away, 1 = facing the light) runs through the contour,
+    // and the result against a flat face's brightness splits into
+    // highlight and shadow. So a Ring turns lit slopes dark and back —
+    // the bands of polished metal — instead of only dimming highlights.
     const lutSize = 1024;
     final lut = Float32List(lutSize + 1);
     for (var i = 0; i <= lutSize; i++) {
-      lut[i] = p.gloss.apply(i / lutSize);
+      lut[i] = p.glossAt(i / lutSize);
     }
-    final upScale = 1 / math.max(1e-4, 1 - flat);
-    final downScale = 2 / math.max(1e-4, flat + 1);
+    final flatL = (flat + 1) / 2;
+    final flatC = p.glossAt(flatL);
+    final upScale = 1 / math.max(0.05, 1 - flatC);
+    final downScale = 2 / math.max(0.05, flatC);
 
     var hl = Float32List(n), sh = Float32List(n);
-    if (lut[0] != 0) {
-      hl.fillRange(0, n, lut[0]);
-      sh.fillRange(0, n, lut[0]);
-    }
     for (var y = 0; y < h; y++) {
       final r0 = (y > 0 ? y - 1 : y) * w, r1 = (y < h - 1 ? y + 1 : y) * w;
       final dy = (y > 0 && y < h - 1) ? 0.5 : 1.0;
@@ -454,14 +539,14 @@ abstract final class BevelEngine {
         final gy = (z[r1 + x] - z[r0 + x]) * dy;
         if (gx == 0 && gy == 0) continue; // flat: neither lit nor shaded
         final s = (-gx * lx - gy * ly + lz) / math.sqrt(gx * gx + gy * gy + 1);
-        if (s > flat) {
-          var u = (s - flat) * upScale;
-          if (u > 1) u = 1;
-          hl[i] = lut[(u * lutSize).round()];
-        } else if (s < flat) {
-          var d = (flat - s) * downScale;
-          if (d > 1) d = 1;
-          sh[i] = lut[(d * lutSize).round()];
+        final v =
+            lut[((s + 1) * 0.5 * lutSize).round().clamp(0, lutSize)] - flatC;
+        if (v > 0) {
+          final u = v * upScale;
+          hl[i] = u > 1 ? 1 : u;
+        } else if (v < 0) {
+          final d = -v * downScale;
+          sh[i] = d > 1 ? 1 : d;
         }
       }
     }

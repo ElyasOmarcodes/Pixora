@@ -236,6 +236,23 @@ class PixFill {
           ? [for (var i = 0; i < colors.length; i++) i / (colors.length - 1)]
           : null);
 
+  /// The gradient's colour at [t] (0..1 along its stops); the colour of a
+  /// solid fill.
+  Color colorAt(double t) {
+    if (colors.length < 2) return primary;
+    final s = evenStops ?? const [0.0, 1.0];
+    final x = t.clamp(0.0, 1.0);
+    if (x <= s.first) return colors.first;
+    for (var i = 1; i < colors.length; i++) {
+      if (x <= s[i]) {
+        final span = s[i] - s[i - 1];
+        final f = span <= 0 ? 1.0 : (x - s[i - 1]) / span;
+        return Color.lerp(colors[i - 1], colors[i], f)!;
+      }
+    }
+    return colors.last;
+  }
+
   /// Applies this fill to [paint] for content occupying [bounds].
   Paint applyTo(Paint paint, Rect bounds) {
     if (isPattern) return _applyPattern(paint, bounds);

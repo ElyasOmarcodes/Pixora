@@ -1445,7 +1445,30 @@ class DocumentRenderer {
     final box = shapeStamp.rect.inflate(s.outside + 2);
     return _Stamp._make(box, shapeStamp._res, (c) {
       c.saveLayer(box, Paint());
-      outline!(c);
+      if (s.bursts) {
+        // Shape Burst: nested outlines, widest first, each in the
+        // gradient's colour at its distance across the band.
+        final n = (s.size * shapeStamp._res).clamp(2.0, 48.0).round();
+        final inward = s.position == StrokePosition.inside;
+        for (var k = n; k >= 1; k--) {
+          final f = k / n;
+          final w = width * f;
+          final p = _outlinePaint(w)
+            ..color = s.fill.colorAt(inward ? 1 - f : f);
+          switch (layer) {
+            case ShapeLayer l:
+              c.drawPath(buildShapePath(l), p);
+            case IconLayer l:
+              c.drawPath(iconPath(l), p);
+            case TextLayer l:
+              TextLayoutCache.instance.entry(l).paintOutline(c, w, p.color);
+            default:
+              break;
+          }
+        }
+      } else {
+        outline!(c);
+      }
       switch (s.position) {
         case StrokePosition.outside:
           shapeStamp.draw(
@@ -1458,11 +1481,13 @@ class DocumentRenderer {
         case StrokePosition.center:
           break;
       }
-      c.drawRect(
-        box,
-        s.fill.applyTo(Paint(), local.inflate(s.outside))
-          ..blendMode = BlendMode.srcIn,
-      );
+      if (!s.bursts) {
+        c.drawRect(
+          box,
+          s.fill.applyTo(Paint(), local.inflate(s.outside))
+            ..blendMode = BlendMode.srcIn,
+        );
+      }
       c.restore();
     });
   }
@@ -2887,6 +2912,11 @@ class _Stamp {
       c.drawRect(box, Paint()..color = const Color(0xFF000000));
       draw(c, Offset.zero, Paint()..colorFilter = _alphaToGray);
     });
+    if (s.bursts) {
+      final band = _burstBand(gray, s, box);
+      gray.dispose();
+      return band;
+    }
     final grown = _morph(gray, outR, grow: true);
     final shrunk = inR > 0 ? _morph(gray, inR, grow: false) : null;
     gray.dispose();
@@ -2909,6 +2939,56 @@ class _Stamp {
     });
     grown.dispose();
     shrunk?.dispose();
+    return band;
+  }
+
+  /// A Shape Burst band: rings grown (outside) or shrunk (inside) by
+  /// steps across the band, each in the gradient's colour there, widest
+  /// first — the band's colour follows the distance from the edge.
+  _Stamp _burstBand(_Stamp gray, LayerStroke s, Rect box) {
+    final res = _res;
+    final n = (s.size * res / 2).clamp(2.0, 12.0).round();
+    final rings = <(_Stamp, Color)>[];
+    for (var k = n; k >= 1; k--) {
+      final f = k / n;
+      if (s.outside > 0) {
+        rings.add((_morph(gray, s.outside * f, grow: true), s.fill.colorAt(f)));
+      } else {
+        // Inside: the shape minus a shrunk copy, deeper rings first.
+        final shrunk = _morph(gray, s.inside * f, grow: false);
+        final ring = _make(box, res, (c) {
+          c.saveLayer(box, Paint());
+          draw(c);
+          shrunk.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
+          c.restore();
+        });
+        shrunk.dispose();
+        rings.add((ring, s.fill.colorAt(1 - f)));
+      }
+    }
+    final band = _make(box, res, (c) {
+      c.saveLayer(box, Paint());
+      for (final (ring, color) in rings) {
+        ring.draw(
+          c,
+          Offset.zero,
+          Paint()..colorFilter = ColorFilter.mode(color, BlendMode.srcIn),
+        );
+      }
+      if (s.outside > 0) {
+        if (s.inside > 0) {
+          final shrunk = _morph(gray, s.inside, grow: false);
+          shrunk.draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
+          shrunk.dispose();
+        } else {
+          draw(c, Offset.zero, Paint()..blendMode = BlendMode.dstOut);
+        }
+      }
+      c.restore();
+    });
+    for (final (ring, _) in rings) {
+      ring.dispose();
+    }
     return band;
   }
 
